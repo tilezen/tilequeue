@@ -1,36 +1,36 @@
 from boto import connect_sqs
 from boto.sqs.message import RawMessage
-from tilequeue.tile import deserialize_tile
-from tilequeue.tile import serialize_tile
-from tilequeue.tile import TileMessage
+from tilequeue.tile import deserialize_coord
+from tilequeue.tile import serialize_coord
+from tilequeue.tile import CoordMessage
 
 class SqsQueue(object):
 
     def __init__(self, sqs_queue):
         self.sqs_queue = sqs_queue
 
-    def enqueue_tile(self, tile):
-        payload = serialize_tile(tile)
+    def enqueue(self, coord):
+        payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
         self.sqs_queue.write(message)
 
-    def enqueue_tiles(self, tiles):
+    def enqueue_batch(self, coords):
         # unclear if boto will handle submitting more than 10 at once
         # to be safe we do that here
-        if len(tiles) <= 10:
+        if len(coords) <= 10:
             messages = []
-            for i, tile in enumerate(tiles):
-                msg_tuple = (str(i), serialize_tile(tile), 0)
+            for i, coord in enumerate(coords):
+                msg_tuple = (str(i), serialize_coord(coord), 0)
                 messages.append(msg_tuple)
             self.sqs_queue.write_batch(messages)
         else:
-            self.enqueue_tiles(tiles[:10])
-            self.enqueue_tiles(tiles[10:])
+            self.enqueue_batch(coords[:10])
+            self.enqueue_batch(coords[10:])
 
-    def read_tiles(self, max_tiles=1, timeout_seconds=20):
-        tile_messages = []
-        messages = self.sqs_queue.get_messages(num_messages=max_tiles)
+    def read(self, max_to_read=1, timeout_seconds=20):
+        coord_messages = []
+        messages = self.sqs_queue.get_messages(num_messages=max_to_read)
         if not messages:
             message = self.sqs_queue.read(wait_time_seconds=timeout_seconds)
             if message is None:
@@ -38,13 +38,13 @@ class SqsQueue(object):
             messages = [message]
         for message in messages:
             data = message.get_body()
-            tile = deserialize_tile(data)
-            if tile is None:
+            coord = deserialize_coord(data)
+            if coord is None:
                 # log?
                 continue
-            tile_message = TileMessage(tile, message)
-            tile_messages.append(tile_message)
-        return tile_messages
+            coord_message = CoordMessage(coord, message)
+            coord_messages.append(coord_message)
+        return coord_messages
 
     def job_done(self, message):
         self.sqs_queue.delete_message(message)

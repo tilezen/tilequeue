@@ -1,39 +1,31 @@
-class Tile(object):
+from ModestMaps.Core import Coordinate
 
-    def __init__(self, zoom, col, row):
-        self.zoom = zoom
-        self.col = col
-        self.row = row
+class CoordMessage(object):
 
-    def __str__(self):
-        return '%s/%s/%s' % (self.zoom, self.col, self.row)
-
-class TileMessage(object):
-
-    def __init__(self, tile, message_handle):
-        self.tile = tile
+    def __init__(self, coord, message_handle):
+        self.coord = coord
         self.message_handle = message_handle
 
     def __str__(self):
         return 'Message %s: %s' % (str(self.message_handle),
-                                   str(self.tile))
+                                   str(self.coord))
 
-def parse_expired_tile_string(tile_string):
-    fields = tile_string.split('/')
+def parse_expired_coord_string(coord_string):
+    fields = coord_string.split('/')
     if len(fields) != 3:
         return None
     # z/x/y -> /zoom/col/row
     zoom, col, row = fields
-    tile = Tile(col=col, row=row, zoom=zoom)
-    return tile
+    coord = Coordinate(column=col, row=row, zoom=zoom)
+    return coord
 
-def serialize_tile(tile):
-    return '%s/%s/%s' % (tile.zoom, tile.col, tile.row)
+def serialize_coord(coord):
+    return '%s/%s/%s' % (coord.zoom, coord.column, coord.row)
 
-def deserialize_tile(tile_string):
-    fields = tile_string.split('/')
+def deserialize_coord(coord_string):
+    fields = coord_string.split('/')
     if len(fields) != 3:
         return None
-    zoom, col, row = fields
-    tile = Tile(zoom=zoom, col=col, row=row)
-    return tile
+    zoom, col, row = map(int, fields)
+    coord = Coordinate(zoom=zoom, column=col, row=row)
+    return coord

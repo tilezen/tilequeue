@@ -19,6 +19,8 @@ setup(name='tilequeue',
       zip_safe=False,
       install_requires=[
           'boto',
+          'modestmaps',
+          'TileStache',
       ],
       entry_points="""
       # -*- Entry points: -*-
