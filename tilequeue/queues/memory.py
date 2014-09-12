@@ -1,19 +1,19 @@
-from tilequeue.tile import TileJobMessage
+from tilequeue.tile import TileMessage
 
 class MemoryQueue(object):
 
     def __init__(self):
         self.q = []
 
-    def enqueue_tile_job(self, tile_job):
-        self.q.append(tile_job)
+    def enqueue_tile(self, tile):
+        self.q.append(tile)
 
-    def enqueue_tile_jobs(self, tile_jobs):
-        self.q.extend(tile_jobs)
+    def enqueue_tiles(self, tiles):
+        self.q.extend(tiles)
 
-    def read_tile_jobs(self, max_tile_jobs=1, timeout_seconds=None):
-        self.q, jobs = self.q[max_tile_jobs:], self.q[:max_tile_jobs]
-        return [TileJobMessage(tile_job, None) for tile_job in jobs]
+    def read_tiles(self, max_tiles=1, timeout_seconds=None):
+        self.q, tiles = self.q[max_tiles:], self.q[:max_tiles]
+        return [TileMessage(tile, None) for tile in tiles]
 
     def job_done(self, message):
         pass
