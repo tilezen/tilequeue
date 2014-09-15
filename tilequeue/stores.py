@@ -1,16 +1,16 @@
 # define locations to store the rendered data
 
-from boto.s3.bucket import Bucket as S3Bucket
-from boto.s3.connection import S3Connection
+from boto import connect_s3
+from boto.s3.bucket import Bucket
 from cStringIO import StringIO
 from TileStache.S3 import tile_key
 
 
 class S3(object):
 
-    def __init__(self, layer, bucket, access=None, secret=None, path='', reduced_redundancy=False):
-        self.layer = StubLayer(layer)
-        self.bucket = S3Bucket(S3Connection(access, secret), bucket)
+    def __init__(self, bucket, layer_name, path='', reduced_redundancy=False):
+        self.bucket = bucket
+        self.layer = StubLayer(layer_name)
         self.path = path
         self.reduced_redundancy = reduced_redundancy
 
@@ -22,11 +22,11 @@ class S3(object):
 
 class StubLayer(object):
 
-    def __init__(self, layer):
-        self.layer = layer
+    def __init__(self, layer_name):
+        self.layer_name = layer_name
 
     def name(self):
-        return self.layer
+        return self.layer_name
 
 class Memory(object):
 
@@ -62,3 +62,9 @@ class S3FileObj(object):
 
     def __exit__(self, type, value, traceback):
         self.close()
+
+
+def make_s3_store(bucket_name, aws_access_key_id=None, aws_secret_access_key=None, layer_name='all', path='', reduced_redundancy=False):
+    conn = connect_s3(aws_access_key_id, aws_secret_access_key)
+    bucket = Bucket(conn, bucket_name)
+    return S3(bucket, layer_name, path, reduced_redundancy)
