@@ -29,3 +29,19 @@ def deserialize_coord(coord_string):
     zoom, col, row = map(int, fields)
     coord = Coordinate(zoom=zoom, column=col, row=row)
     return coord
+
+def generate_parents(coord):
+    c = coord
+    while c.zoom > 0:
+        c = c.zoomTo(c.zoom-1).container()
+        yield c
+
+def explode_with_parents(coords):
+    s = set()
+    for coord in coords:
+        s.add(coord)
+        for parent in generate_parents(coord):
+            if parent in s:
+                break
+            s.add(parent)
+    return s
