@@ -1,8 +1,8 @@
 from boto import connect_sqs
 from boto.sqs.message import RawMessage
+from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
-from tilequeue.tile import CoordMessage
 
 class SqsQueue(object):
 
