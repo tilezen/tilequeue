@@ -10,15 +10,6 @@ class CoordMessage(object):
         return 'Message %s: %s' % (str(self.message_handle),
                                    str(self.coord))
 
-def parse_expired_coord_string(coord_string):
-    fields = coord_string.split('/')
-    if len(fields) != 3:
-        return None
-    # z/x/y -> /zoom/col/row
-    zoom, col, row = fields
-    coord = Coordinate(column=col, row=row, zoom=zoom)
-    return coord
-
 def serialize_coord(coord):
     return '%d/%d/%d' % (coord.zoom, coord.column, coord.row)
 
@@ -26,9 +17,18 @@ def deserialize_coord(coord_string):
     fields = coord_string.split('/')
     if len(fields) != 3:
         return None
-    zoom, col, row = map(int, fields)
-    coord = Coordinate(zoom=zoom, column=col, row=row)
+    # z/x/y -> /zoom/col/row
+    try:
+        zoom, col, row = map(int, fields)
+    except ValueError:
+        return None
+    coord = Coordinate(row=row, column=col, zoom=zoom)
     return coord
+
+def parse_expired_coord_string(coord_string):
+    # we use the same format in the queue as the expired tile list from
+    # osm2pgsql
+    return deserialize_coord(coord_string)
 
 def generate_parents(coord):
     c = coord
