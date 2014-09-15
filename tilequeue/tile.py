@@ -20,7 +20,7 @@ def parse_expired_coord_string(coord_string):
     return coord
 
 def serialize_coord(coord):
-    return '%s/%s/%s' % (coord.zoom, coord.column, coord.row)
+    return '%d/%d/%d' % (coord.zoom, coord.column, coord.row)
 
 def deserialize_coord(coord_string):
     fields = coord_string.split('/')
