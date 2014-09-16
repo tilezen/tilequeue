@@ -14,7 +14,7 @@ def add_aws_cred_options(arg_parser):
     arg_parser.add_argument('--aws_secret_access_key')
     return arg_parser
 
-def enqueue_arg_parser():
+def queue_write_parser():
     parser = argparse.ArgumentParser()
     parser = add_aws_cred_options(parser)
     parser.add_argument('--queue',
@@ -27,7 +27,7 @@ def enqueue_arg_parser():
                         )
     return parser
 
-def queue_processor_parser():
+def queue_read_parser():
     parser = argparse.ArgumentParser()
     parser = add_aws_cred_options(parser)
     parser.add_argument('--queue',
@@ -76,8 +76,10 @@ def assert_aws_config(args):
         assert 'AWS_SECRET_ACCESS_KEY' in os.environ, 'Missing AWS_SECRET_ACCESS_KEY config'
 
 
-def enqueue_process_main(argv_args):
-    parser = enqueue_arg_parser()
+def queue_write(argv_args=None):
+    if argv_args is None:
+        argv_args = sys.argv[1:]
+    parser = queue_write_parser()
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
@@ -117,8 +119,10 @@ def enqueue_process_main(argv_args):
 
     print 'Queuing ... Done'
 
-def queue_processor_main(argv_args):
-    parser = queue_processor_parser()
+def queue_read(argv_args=None):
+    if argv_args is None:
+        argv_args = sys.argv[1:]
+    parser = queue_read_parser()
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
@@ -156,5 +160,6 @@ def queue_processor_main(argv_args):
     print 'processed %d messages' % n_msgs
 
 if __name__ == '__main__':
-    #enqueue_process_main(sys.argv[1:])
-    queue_processor_main(sys.argv[1:])
+    #queue_read()
+    #queue_write()
+    pass

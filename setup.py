@@ -22,7 +22,10 @@ setup(name='tilequeue',
           'modestmaps',
           'TileStache',
       ],
-      entry_points="""
-      # -*- Entry points: -*-
-      """,
+      entry_points=dict(
+          console_scripts = [
+              'queue-write = tilequeue.commands:queue_write',
+              'queue-read = tilequeue.commands:queue_read'
+          ]
+      )
       )
