@@ -14,10 +14,10 @@ class S3(object):
         self.path = path
         self.reduced_redundancy = reduced_redundancy
 
-    def output_fp(self, coord, extension, mimetype):
-        key_name = tile_key(self.layer, coord, extension, self.path)
+    def output_fp(self, coord, format):
+        key_name = tile_key(self.layer, coord, format.extension, self.path)
         key = self.bucket.new_key(key_name)
-        return S3FileObj(key, mimetype, self.reduced_redundancy)
+        return S3FileObj(key, format.mimetype, self.reduced_redundancy)
 
 
 class StubLayer(object):
@@ -33,7 +33,7 @@ class Memory(object):
     def __init__(self):
         pass
 
-    def output_fp(self, coord, extension, mimetype):
+    def output_fp(self, coord, format):
         return StringIO()
 
 

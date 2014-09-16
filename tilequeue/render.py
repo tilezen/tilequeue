@@ -16,7 +16,7 @@ class RenderJob(object):
         out = StringIO()
         response = MultiResponse(
                 self.tilestache_config, self.layer_names, self.coord)
-        response.save(out, self.format)
+        response.save(out, self.format.name)
         return out.getvalue()
 
 
