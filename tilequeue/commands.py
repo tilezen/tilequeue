@@ -53,6 +53,10 @@ def queue_processor_parser():
                         default=False,
                         help='Store tile data in s3 with reduced redundancy.',
                         )
+    parser.add_argument('--s3-path',
+                        default='',
+                        help='Store tile data in s3 with this path prefix.',
+                        )
     parser.add_argument('--sqs-read-timeout',
                         type=int,
                         default=20,
@@ -132,7 +136,7 @@ def queue_processor_main(argv_args):
     tilestache_config = parseConfigfile(args.tilestache_config)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    store = make_s3_store(args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key, reduced_redundancy=args.s3_reduced_redundancy)
+    store = make_s3_store(args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key, path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
 
     n_msgs = 0
     while True:
