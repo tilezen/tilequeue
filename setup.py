@@ -22,6 +22,7 @@ setup(name='tilequeue',
           'modestmaps',
           'TileStache',
       ],
+      test_suite='tests',
       entry_points=dict(
           console_scripts = [
               'queue-write = tilequeue.commands:queue_write',
