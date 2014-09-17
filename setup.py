@@ -25,8 +25,8 @@ setup(name='tilequeue',
       test_suite='tests',
       entry_points=dict(
           console_scripts = [
-              'queue-write = tilequeue.commands:queue_write',
-              'queue-read = tilequeue.commands:queue_read'
+              'queue-write = tilequeue.command:queue_write',
+              'queue-read = tilequeue.command:queue_read'
           ]
       )
       )
