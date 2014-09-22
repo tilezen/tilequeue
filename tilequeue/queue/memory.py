@@ -20,3 +20,6 @@ class MemoryQueue(object):
 
     def jobs_done(self, messages):
         pass
+
+    def close(self):
+        pass

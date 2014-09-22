@@ -52,6 +52,9 @@ class SqsQueue(object):
     def jobs_done(self, messages):
         self.sqs_queue.delete_message_batch(messages)
 
+    def close(self):
+        pass
+
 def make_sqs_queue(queue_name, aws_access_key_id=None, aws_secret_access_key=None):
     # this doesn't actually create a queue in aws, it just creates a python
     # queue object
