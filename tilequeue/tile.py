@@ -1,4 +1,5 @@
 from ModestMaps.Core import Coordinate
+from math import pow
 
 class CoordMessage(object):
 
@@ -45,3 +46,10 @@ def explode_with_parents(coords):
                 break
             s.add(parent)
     return s
+
+def n_tiles_in_zoom(zoom):
+    assert zoom >= 0
+    n = 0
+    for i in xrange(zoom + 1):
+        n += pow(4, i)
+    return int(n)
