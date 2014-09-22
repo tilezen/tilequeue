@@ -19,7 +19,7 @@ setup(name='tilequeue',
       zip_safe=False,
       install_requires=[
           'boto',
-          'modestmaps',
+          'ModestMaps',
           'TileStache',
       ],
       test_suite='tests',
