@@ -1,26 +1,38 @@
+from functools import partial
+from itertools import ifilter
 from tilequeue.format import lookup_format_by_extension
+from tilequeue.metro_extract import city_bboxes
+from tilequeue.metro_extract import create_spatial_index
+from tilequeue.metro_extract import make_metro_extract_predicate
+from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
+from tilequeue.seed import seed_tiles
 from tilequeue.store import make_s3_store
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
 from TileStache import parseConfigfile
+from urllib2 import urlopen
 import argparse
 import os
 import sys
 
-def add_aws_cred_options(arg_parser):
-    arg_parser.add_argument('--aws_access_key_id')
-    arg_parser.add_argument('--aws_secret_access_key')
-    return arg_parser
+def add_aws_cred_options(parser):
+    parser.add_argument('--aws_access_key_id')
+    parser.add_argument('--aws_secret_access_key')
+    return parser
 
-def queue_write_parser():
-    parser = argparse.ArgumentParser()
-    parser = add_aws_cred_options(parser)
+def add_queue_options(parser):
     parser.add_argument('--queue',
                         required=True,
                         help='Name of aws sqs queue, should already exist.',
                         )
+    return parser
+
+def queue_write_parser():
+    parser = argparse.ArgumentParser()
+    parser = add_aws_cred_options(parser)
+    parser = add_queue_options(parser)
     parser.add_argument('--expired-tiles-file',
                         required=True,
                         help='Path to file containing list of expired tiles. Should be one per line, <zoom>/<column>/<row>',
@@ -30,10 +42,7 @@ def queue_write_parser():
 def queue_read_parser():
     parser = argparse.ArgumentParser()
     parser = add_aws_cred_options(parser)
-    parser.add_argument('--queue',
-                        required=True,
-                        help='Name of aws sqs queue, should already exist.',
-                        )
+    parser = add_queue_options(parser)
     parser.add_argument('--s3-bucket',
                         required=True,
                         help='Name of aws s3 bucket, should already exist.',
@@ -61,6 +70,28 @@ def queue_read_parser():
                         type=int,
                         default=20,
                         help='Read timeout in seconds when reading sqs messages.',
+                        )
+    return parser
+
+def queue_seed_parser():
+    parser = argparse.ArgumentParser()
+    parser = add_aws_cred_options(parser)
+    parser = add_queue_options(parser)
+    parser.add_argument('--until-zoom',
+                        type=int,
+                        default=10,
+                        choices=xrange(22),
+                        required=True,
+                        help='Zoom level to seed tiles until, inclusive.',
+                        )
+    parser.add_argument('--metro-extract-url',
+                        help='Url to metro extracts (or file://).',
+                        )
+    parser.add_argument('--filter-metro-zoom',
+                        type=int,
+                        default=11,
+                        choices=xrange(22),
+                        help='Zoom level to start filtering for metro extracts.',
                         )
     return parser
 
@@ -159,7 +190,42 @@ def queue_read(argv_args=None):
 
     print 'processed %d messages' % n_msgs
 
+def queue_seed(argv_args=None):
+    if argv_args is None:
+        argv_args = sys.argv[1:]
+    parser = queue_seed_parser()
+    args = parser.parse_args(argv_args)
+    assert_aws_config(args)
+
+    tile_generator = partial(seed_tiles, args.until_zoom)
+
+    if args.metro_extract_url:
+        assert args.filter_metro_zoom is not None, 'Need to specify --filter-metro-zoom if specifying metro extract url'
+        with urlopen(args.metro_extract_url) as fp:
+            # will raise a MetroExtractParseError on failure
+            metro_extracts = parse_metro_extract(fp)
+        bboxes = city_bboxes(metro_extracts)
+        spatial_index = create_spatial_index(bboxes)
+        predicate = make_metro_extract_predicate(spatial_index, args.filter_metro_zoom)
+        tile_generator = partial(ifilter, predicate, tile_generator)
+
+    queue = make_sqs_queue(
+            args.queue, args.aws_access_key_id, args.aws_secret_access_key)
+
+    # enqueue in batches of 10
+    batch = []
+    n_tiles = 0
+    for tile in tile_generator():
+        batch.append(tile)
+        n_tiles += 1
+        if len(batch) >= 10:
+            queue.enqueue_batch(batch)
+            batch = []
+
+    print 'Queued %d tiles' % n_tiles
+
 if __name__ == '__main__':
     #queue_read()
     #queue_write()
+    #queue_seed()
     pass

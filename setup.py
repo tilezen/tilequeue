@@ -21,12 +21,16 @@ setup(name='tilequeue',
           'boto',
           'ModestMaps',
           'TileStache',
+          'Shapely',
+          'Rtree',
       ],
       test_suite='tests',
       entry_points=dict(
           console_scripts = [
               'queue-write = tilequeue.command:queue_write',
-              'queue-read = tilequeue.command:queue_read'
+              'queue-read = tilequeue.command:queue_read',
+              'queue-seed = tilequeue.command:queue_seed',
+
           ]
       )
       )
