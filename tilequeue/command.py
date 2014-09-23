@@ -1,3 +1,4 @@
+from contextlib import closing
 from functools import partial
 from itertools import ifilter
 from tilequeue.format import lookup_format_by_extension
@@ -23,11 +24,32 @@ def add_aws_cred_options(parser):
     return parser
 
 def add_queue_options(parser):
-    parser.add_argument('--queue',
+    parser.add_argument('--queue-name',
                         required=True,
-                        help='Name of aws sqs queue, should already exist.',
+                        help='Name of the queue, should already exist.',
+                        )
+    parser.add_argument('--queue-type',
+                        default='sqs',
+                        choices=('sqs', 'mem', 'file'),
+                        help='Queue type, useful to change for testing.',
                         )
     return parser
+
+def make_queue(queue_type, queue_name, parser_args):
+    if queue_type == 'sqs':
+        return make_sqs_queue(
+            queue_name, parser_args.aws_access_key_id, parser_args.aws_secret_access_key)
+    elif queue_type == 'mem':
+        from tilequeue.queue import MemoryQueue
+        return MemoryQueue()
+    elif queue_type == 'file':
+        # only support file queues for writing
+        # useful for testing
+        from tilequeue.queue import OutputFileQueue
+        fp = open(queue_name, 'w')
+        return OutputFileQueue(fp)
+    else:
+        raise ValueError('Unknown queue type: %s' % queue_type)
 
 def queue_write_parser():
     parser = argparse.ArgumentParser()
@@ -79,18 +101,20 @@ def queue_seed_parser():
     parser = add_queue_options(parser)
     parser.add_argument('--until-zoom',
                         type=int,
-                        default=10,
+                        default=14,
                         choices=xrange(22),
                         required=True,
                         help='Zoom level to seed tiles until, inclusive.',
                         )
     parser.add_argument('--metro-extract-url',
                         help='Url to metro extracts (or file://).',
+                        required=True,
                         )
     parser.add_argument('--filter-metro-zoom',
                         type=int,
                         default=11,
                         choices=xrange(22),
+                        required=True,
                         help='Zoom level to start filtering for metro extracts.',
                         )
     return parser
@@ -116,8 +140,7 @@ def queue_write(argv_args=None):
 
     assert os.path.exists(args.expired_tiles_file), 'Invalid expired tiles path'
 
-    queue = make_sqs_queue(
-            args.queue, args.aws_access_key_id, args.aws_secret_access_key)
+    queue = make_queue(args.queue_type, args.queue_name, args)
 
     expired_tiles = []
     with open(args.expired_tiles_file) as f:
@@ -165,8 +188,7 @@ def queue_read(argv_args=None):
         assert format is not None, 'Unknown extension: %s' % extension
         formats.append(format)
 
-    queue = make_sqs_queue(
-            args.queue, args.aws_access_key_id, args.aws_secret_access_key)
+    queue = make_queue(args.queue_type, args.queue_name, args)
 
     tilestache_config = parseConfigfile(args.tilestache_config)
     job_creator = RenderJobCreator(tilestache_config, formats)
@@ -183,44 +205,46 @@ def queue_read(argv_args=None):
             jobs = job_creator.create(coord)
             for job in jobs:
                 result = job()
-                with store.output_fp(coord, job.format) as s:
+                with closing(store.output_fp(coord, job.format)) as s:
                     s.write(result)
             queue.job_done(msg.message_handle)
             n_msgs += 1
 
     print 'processed %d messages' % n_msgs
 
-def queue_seed(argv_args=None):
-    if argv_args is None:
-        argv_args = sys.argv[1:]
-    parser = queue_seed_parser()
-    args = parser.parse_args(argv_args)
-    assert_aws_config(args)
-
-    tile_generator = partial(seed_tiles, args.until_zoom)
-
-    if args.metro_extract_url:
-        assert args.filter_metro_zoom is not None, 'Need to specify --filter-metro-zoom if specifying metro extract url'
-        with urlopen(args.metro_extract_url) as fp:
-            # will raise a MetroExtractParseError on failure
-            metro_extracts = parse_metro_extract(fp)
-        bboxes = city_bboxes(metro_extracts)
-        spatial_index = create_spatial_index(bboxes)
-        predicate = make_metro_extract_predicate(spatial_index, args.filter_metro_zoom)
-        tile_generator = partial(ifilter, predicate, tile_generator)
-
-    queue = make_sqs_queue(
-            args.queue, args.aws_access_key_id, args.aws_secret_access_key)
-
+def queue_seed_process(tile_generator, queue):
     # enqueue in batches of 10
     batch = []
     n_tiles = 0
-    for tile in tile_generator():
+    for tile in tile_generator:
         batch.append(tile)
         n_tiles += 1
         if len(batch) >= 10:
             queue.enqueue_batch(batch)
             batch = []
+    if batch:
+        queue.enqueue_batch(batch)
+    return n_tiles
+
+def queue_seed(argv_args=None):
+    if argv_args is None:
+        argv_args = sys.argv[1:]
+    parser = queue_seed_parser()
+    args = parser.parse_args(argv_args)
+    if args.queue_type == 'sqs':
+        assert_aws_config(args)
+
+    with closing(urlopen(args.metro_extract_url)) as fp:
+        # will raise a MetroExtractParseError on failure
+        metro_extracts = parse_metro_extract(fp)
+    bboxes = city_bboxes(metro_extracts)
+    spatial_index = create_spatial_index(bboxes)
+    predicate = make_metro_extract_predicate(spatial_index, args.filter_metro_zoom)
+    tile_generator = ifilter(predicate, seed_tiles(0, args.until_zoom))
+
+    queue = make_queue(args.queue_type, args.queue_name, args)
+
+    n_tiles = queue_seed_process(tile_generator, queue)
 
     print 'Queued %d tiles' % n_tiles
 
