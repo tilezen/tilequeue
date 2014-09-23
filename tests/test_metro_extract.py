@@ -53,11 +53,11 @@ class TestMetroExtractParse(unittest.TestCase):
 
         self.assertEqual('region1', city1.region)
         self.assertEqual('city1', city1.city)
-        self.assertEqual((1, 1, 2, 2), city1.bbox.bounds)
+        self.assertEqual((1, 1, 2, 2), city1.bbox)
 
         self.assertEqual('region1', city2.region)
         self.assertEqual('city2', city2.city)
-        self.assertEqual((3, 3, 4, 4), city2.bbox.bounds)
+        self.assertEqual((3, 3, 4, 4), city2.bbox)
 
     def test_city_bboxes(self):
         from json import dumps
@@ -72,31 +72,8 @@ class TestMetroExtractParse(unittest.TestCase):
         bboxes = city_bboxes(results)
         self.assertEqual(2, len(bboxes))
         bbox1, bbox2 = bboxes
-        self.assertEqual((1, 1, 2, 2), bbox1.bounds)
-        self.assertEqual((3, 3, 4, 4), bbox2.bounds)
-
-
-class TestMetroExtractSpatialIndex(unittest.TestCase):
-
-    def _call_fut(self, spatial_index, bbox):
-        from tilequeue.metro_extract import bbox_in_metro_extract
-        return bbox_in_metro_extract(spatial_index, bbox)
-
-    def _instance(self, bounds):
-        from tilequeue.metro_extract import create_spatial_index
-        return create_spatial_index(bounds)
-
-    def test_missing_lookup(self):
-        from shapely.geometry import box
-        si = self._instance([box(1, 1, 3, 3)])
-        from tilequeue.metro_extract import bbox_in_metro_extract
-        self.failIf(bbox_in_metro_extract(si, box(4, 4, 4, 4)))
-
-    def test_valid_lookup(self):
-        from shapely.geometry import box
-        from tilequeue.metro_extract import bbox_in_metro_extract
-        si = self._instance([box(1, 1, 3, 3)])
-        self.failUnless(bbox_in_metro_extract(si, box(2, 2, 5, 5)))
+        self.assertEqual((1, 1, 2, 2), bbox1)
+        self.assertEqual((3, 3, 4, 4), bbox2)
 
 
 class TestMetroExtractCoordToBbox(unittest.TestCase):
@@ -108,38 +85,7 @@ class TestMetroExtractCoordToBbox(unittest.TestCase):
         bbox = coord_to_bbox(coord)
         exp_bounds = (-74.00390625, 40.69729900863674,
                       -73.98193359375, 40.713955826286046)
-        self.assertEqual(exp_bounds, bbox.bounds)
-
-
-class StubSpatialIndex(object):
-
-    def __init__(self, bbox):
-        self.bbox = bbox
-
-    def intersection(self, bounds):
-        from shapely.geometry import box
-        bbox = box(*bounds)
-        return [1] if self.bbox.intersects(bbox) else []
-
-
-class TestTileGenerationWithMetroExtractFilter(unittest.TestCase):
-
-    def test_spatial_filter(self):
-        from tilequeue.metro_extract import coord_to_bbox
-        from tilequeue.metro_extract import make_metro_extract_predicate
-        from tilequeue.seed import seed_tiles
-        from ModestMaps.Core import Coordinate
-        from itertools import ifilter
-        zoom = 1
-        coord = Coordinate(zoom=zoom, column=1, row=2)
-        bbox = coord_to_bbox(coord)
-        stub_spatial_index = StubSpatialIndex(bbox)
-        tile_generator = seed_tiles(zoom_start=zoom, zoom_until=zoom)
-        predicate = make_metro_extract_predicate(stub_spatial_index, zoom)
-        tiles = list(ifilter(predicate, tile_generator))
-
-        # expecting 2 tiles two match, because they match on the border
-        self.assertEqual(2, len(tiles))
+        self.assertEqual(exp_bounds, bbox)
 
 
 class TestTileGenerationFromMetroExtracts(unittest.TestCase):
@@ -158,31 +104,28 @@ class TestTileGenerationFromMetroExtracts(unittest.TestCase):
         self.assertEqual(1, len(tiles))
 
     def test_tiles_for_bbox_firsttile_two_zooms(self):
-        from shapely.geometry import box
         from tilequeue.metro_extract import tile_generator_for_bbox
-        bbox = box(-180, 0.1, -0.1, 85)
-        tile_generator = tile_generator_for_bbox(bbox, 1, 2)
+        bounds = (-180, 0.1, -0.1, 85)
+        tile_generator = tile_generator_for_bbox(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
         self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
 
     def test_tiles_for_bbox_lasttile_two_zooms(self):
-        from shapely.geometry import box
         from tilequeue.metro_extract import tile_generator_for_bbox
-        bbox = box(0.1, -85, 180, -0.1)
-        tile_generator = tile_generator_for_bbox(bbox, 1, 2)
+        bounds = (0.1, -85, 180, -0.1)
+        tile_generator = tile_generator_for_bbox(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
         self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
 
     def test_tiles_for_two_bboxes_two_zooms(self):
-        from shapely.geometry import box
         from tilequeue.metro_extract import tile_generator_for_bboxes
-        bbox1 = box(-180, 0.1, -0.1, 85)
-        bbox2 = box(0.1, -85, 180, -0.1)
-        tile_generator = tile_generator_for_bboxes((bbox1, bbox2), 1, 2)
+        bounds1 = (-180, 0.1, -0.1, 85)
+        bounds2 = (0.1, -85, 180, -0.1)
+        tile_generator = tile_generator_for_bboxes((bounds1, bounds2), 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(10, len(tiles))
         self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))

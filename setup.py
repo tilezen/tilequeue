@@ -21,8 +21,6 @@ setup(name='tilequeue',
           'boto',
           'ModestMaps',
           'TileStache',
-          'Shapely',
-          'Rtree',
       ],
       test_suite='tests',
       entry_points=dict(

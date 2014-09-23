@@ -1,8 +1,6 @@
 from itertools import chain
 from json import load
 from ModestMaps.Core import Coordinate
-from rtree import index
-from shapely.geometry import box
 import math
 
 
@@ -37,7 +35,7 @@ def parse_metro_extract(metro_extract_fp):
                 miny = float(city_json_bbox[u'bottom'])
                 maxx = float(city_json_bbox[u'right'])
                 maxy = float(city_json_bbox[u'top'])
-                city_bbox = box(minx, miny, maxx, maxy)
+                city_bbox = (minx, miny, maxx, maxy)
                 metro = MetroExtractCity(region_name, city_name, city_bbox)
                 metros.append(metro)
     except (KeyError, ValueError), e:
@@ -47,24 +45,6 @@ def parse_metro_extract(metro_extract_fp):
 
 def city_bboxes(metro_extract_cities):
     return [city.bbox for city in metro_extract_cities]
-
-
-def create_spatial_index(bboxes):
-    idx = index.Index()
-    for i, bbox in enumerate(bboxes):
-        idx.insert(i, bbox.bounds)
-    return idx
-
-
-def bbox_in_metro_extract(spatial_index, bbox):
-    for _ in spatial_index.intersection(bbox.bounds):
-        return True
-    return False
-
-
-def coord_in_metro_extract(spatial_index, coord):
-    bbox = coord_to_bbox(coord)
-    return bbox_in_metro_extract(spatial_index, bbox)
 
 
 # http://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
@@ -101,13 +81,12 @@ def coord_to_bbox(coord):
     maxx = min(180, maxx)
     maxy = min(90, maxy)
 
-    bbox = box(minx, miny, maxx, maxy)
+    bbox = (minx, miny, maxx, maxy)
     return bbox
 
 
 def bbox_to_coords(bbox, zoom):
-    bounds = bbox.bounds
-    minx, miny, maxx, maxy = bounds
+    minx, miny, maxx, maxy = bbox
     topleft_lng = minx
     topleft_lat = maxy
     bottomright_lat = miny
@@ -131,14 +110,6 @@ def bbox_to_coords(bbox, zoom):
     bottomrightcoord = Coordinate(
         row=bottomrighty, column=bottomrightx, zoom=zoom)
     return topleftcoord, bottomrightcoord
-
-
-def make_metro_extract_predicate(spatial_index, starting_zoom):
-    def predicate(coord):
-        if coord.zoom < starting_zoom:
-            return True
-        return coord_in_metro_extract(spatial_index, coord)
-    return predicate
 
 
 def tile_generator_for_bbox(bbox, zoom_start, zoom_until):
