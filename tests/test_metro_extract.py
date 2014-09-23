@@ -12,7 +12,7 @@ class TestMetroExtractParse(unittest.TestCase):
         fp = StringIO('{"foo": "bar"}')
         try:
             self._call_fut(fp)
-        except MetroExtractParseError, e:
+        except MetroExtractParseError:
             # expecting error to be raised
             pass
         else:
