@@ -1,6 +1,6 @@
-from ModestMaps.Core import Coordinate
 from itertools import chain
 from json import load
+from ModestMaps.Core import Coordinate
 from rtree import index
 from shapely.geometry import box
 import math

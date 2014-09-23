@@ -1,5 +1,5 @@
-from ModestMaps.Core import Coordinate
 from math import pow
+from ModestMaps.Core import Coordinate
 
 
 class CoordMessage(object):
