@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 from TileStache.Goodies.VecTiles.server import MultiResponse
 
+
 class RenderJob(object):
 
     # This isn't ideal, because it will execute the query for each format
@@ -15,7 +16,7 @@ class RenderJob(object):
     def __call__(self):
         out = StringIO()
         response = MultiResponse(
-                self.tilestache_config, self.layer_names, self.coord)
+            self.tilestache_config, self.layer_names, self.coord)
         response.save(out, self.format.name)
         return out.getvalue()
 

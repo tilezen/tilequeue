@@ -1,12 +1,9 @@
 from contextlib import closing
-from functools import partial
 from itertools import chain
-from itertools import ifilter
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bboxes
-from tilequeue.metro_extract import create_spatial_index
-from tilequeue.metro_extract import make_metro_extract_predicate
 from tilequeue.metro_extract import parse_metro_extract
+from tilequeue.metro_extract import tile_generator_for_bboxes
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.seed import seed_tiles
@@ -19,10 +16,12 @@ import argparse
 import os
 import sys
 
+
 def add_aws_cred_options(parser):
     parser.add_argument('--aws_access_key_id')
     parser.add_argument('--aws_secret_access_key')
     return parser
+
 
 def add_queue_options(parser):
     parser.add_argument('--queue-name',
@@ -36,10 +35,13 @@ def add_queue_options(parser):
                         )
     return parser
 
+
 def make_queue(queue_type, queue_name, parser_args):
     if queue_type == 'sqs':
         return make_sqs_queue(
-            queue_name, parser_args.aws_access_key_id, parser_args.aws_secret_access_key)
+            queue_name,
+            parser_args.aws_access_key_id, parser_args.aws_secret_access_key
+        )
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -52,15 +54,18 @@ def make_queue(queue_type, queue_name, parser_args):
     else:
         raise ValueError('Unknown queue type: %s' % queue_type)
 
+
 def queue_write_parser():
     parser = argparse.ArgumentParser()
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.add_argument('--expired-tiles-file',
                         required=True,
-                        help='Path to file containing list of expired tiles. Should be one per line, <zoom>/<column>/<row>',
+                        help='Path to file containing list of expired tiles. '
+                             'Should be one per line, <zoom>/<column>/<row>',
                         )
     return parser
+
 
 def queue_read_parser():
     parser = argparse.ArgumentParser()
@@ -92,9 +97,11 @@ def queue_read_parser():
     parser.add_argument('--sqs-read-timeout',
                         type=int,
                         default=20,
-                        help='Read timeout in seconds when reading sqs messages.',
+                        help='Read timeout in seconds when reading '
+                             'sqs messages.',
                         )
     return parser
+
 
 def queue_seed_parser():
     parser = argparse.ArgumentParser()
@@ -121,20 +128,24 @@ def queue_seed_parser():
                         default=11,
                         choices=xrange(22),
                         required=True,
-                        help='Zoom level to start filtering for metro extracts.',
+                        help='Zoom level to start filtering for '
+                             'metro extracts.',
                         )
     return parser
 
 
 def assert_aws_config(args):
     if (args.aws_access_key_id is not None or
-        args.aws_secret_access_key is not None):
+            args.aws_secret_access_key is not None):
         # assert that if either is specified, both are specified
-        assert (args.aws_access_key_id is not None and
-                args.aws_secret_access_key is not None), 'Must specify both aws key and secret'
+        assert ((args.aws_access_key_id is not None and
+                 args.aws_secret_access_key is not None),
+                'Must specify both aws key and secret')
     else:
-        assert 'AWS_ACCESS_KEY_ID' in os.environ, 'Missing AWS_ACCESS_KEY_ID config'
-        assert 'AWS_SECRET_ACCESS_KEY' in os.environ, 'Missing AWS_SECRET_ACCESS_KEY config'
+        assert ('AWS_ACCESS_KEY_ID' in os.environ,
+                'Missing AWS_ACCESS_KEY_ID config')
+        assert ('AWS_SECRET_ACCESS_KEY' in os.environ,
+                'Missing AWS_SECRET_ACCESS_KEY config')
 
 
 def queue_write(argv_args=None):
@@ -144,7 +155,8 @@ def queue_write(argv_args=None):
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
-    assert os.path.exists(args.expired_tiles_file), 'Invalid expired tiles path'
+    assert (os.path.exists(args.expired_tiles_file),
+            'Invalid expired tiles path')
 
     queue = make_queue(args.queue_type, args.queue_name, args)
 
@@ -163,7 +175,8 @@ def queue_write(argv_args=None):
     print 'Number of expired tiles: %d' % len(expired_tiles)
 
     exploded_coords = explode_with_parents(expired_tiles)
-    print 'Number of total expired tiles with all parents: %d' % len(exploded_coords)
+    print ('Number of total expired tiles with all parents: %d' %
+           len(exploded_coords))
 
     print 'Queuing ... '
 
@@ -179,6 +192,7 @@ def queue_write(argv_args=None):
 
     print 'Queuing ... Done'
 
+
 def queue_read(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -186,7 +200,8 @@ def queue_read(argv_args=None):
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
-    assert os.path.exists(args.tilestache_config), 'Invalid tilestache config path'
+    assert (os.path.exists(args.tilestache_config),
+            'Invalid tilestache config path')
 
     formats = []
     for extension in args.output_formats:
@@ -199,7 +214,9 @@ def queue_read(argv_args=None):
     tilestache_config = parseConfigfile(args.tilestache_config)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    store = make_s3_store(args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key, path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+    store = make_s3_store(
+        args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
+        path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
 
     n_msgs = 0
     while True:
@@ -218,6 +235,7 @@ def queue_read(argv_args=None):
 
     print 'processed %d messages' % n_msgs
 
+
 def queue_seed_process(tile_generator, queue):
     # enqueue in batches of 10
     batch = []
@@ -231,6 +249,7 @@ def queue_seed_process(tile_generator, queue):
     if batch:
         queue.enqueue_batch(batch)
     return n_tiles
+
 
 def queue_seed(argv_args=None):
     if argv_args is None:
@@ -249,7 +268,8 @@ def queue_seed(argv_args=None):
     assert args.filter_metro_zoom <= args.zoom_until
 
     unfiltered_tiles = seed_tiles(args.zoom_start, args.filter_metro_zoom - 1)
-    filtered_tiles = tile_generator_for_bboxes(bboxes, args.filter_metro_zoom, args.zoom_until)
+    filtered_tiles = tile_generator_for_bboxes(bboxes, args.filter_metro_zoom,
+                                               args.zoom_until)
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
     queue = make_queue(args.queue_type, args.queue_name, args)
@@ -259,7 +279,7 @@ def queue_seed(argv_args=None):
     print 'Queued %d tiles' % n_tiles
 
 if __name__ == '__main__':
-    #queue_read()
-    #queue_write()
-    #queue_seed()
+    # queue_read()
+    # queue_write()
+    # queue_seed()
     pass

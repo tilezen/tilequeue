@@ -1,5 +1,6 @@
 from tilequeue.tile import serialize_coord
 
+
 class OutputFileQueue(object):
 
     def __init__(self, fp):

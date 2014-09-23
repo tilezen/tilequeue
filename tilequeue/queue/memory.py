@@ -1,5 +1,6 @@
 from tilequeue.tile import CoordMessage
 
+
 class MemoryQueue(object):
 
     def __init__(self):

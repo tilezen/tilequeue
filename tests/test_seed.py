@@ -4,6 +4,7 @@ from ModestMaps.Core import Coordinate
 from operator import attrgetter
 import unittest
 
+
 class TestSeedTiles(unittest.TestCase):
 
     def _call_fut(self, zoom_until):

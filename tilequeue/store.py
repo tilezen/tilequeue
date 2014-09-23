@@ -28,6 +28,7 @@ class StubLayer(object):
     def name(self):
         return self.layer_name
 
+
 class Memory(object):
 
     def __init__(self):
@@ -51,11 +52,11 @@ class S3FileObj(object):
     def close(self):
         self.buffer.seek(0)
         self.key.set_contents_from_file(
-                self.buffer,
-                headers = self.headers,
-                policy = 'public-read',
-                reduced_redundancy = self.reduced_redundancy,
-                )
+            self.buffer,
+            headers=self.headers,
+            policy='public-read',
+            reduced_redundancy=self.reduced_redundancy,
+        )
 
     def __enter__(self):
         return self
@@ -64,7 +65,9 @@ class S3FileObj(object):
         self.close()
 
 
-def make_s3_store(bucket_name, aws_access_key_id=None, aws_secret_access_key=None, layer_name='all', path='', reduced_redundancy=False):
+def make_s3_store(bucket_name,
+                  aws_access_key_id=None, aws_secret_access_key=None,
+                  layer_name='all', path='', reduced_redundancy=False):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
     return S3(bucket, layer_name, path, reduced_redundancy)

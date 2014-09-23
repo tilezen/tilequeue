@@ -13,21 +13,23 @@ vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png')
 mapbox_format = OutputFormat('Mapbox', 'mapbox', 'image/png')
 
 extension_to_format = dict(
-        json = json_format,
-        topojson = topojson_format,
-        vtm = vtm_format,
-        mapbox = mapbox_format,
-        )
+    json=json_format,
+    topojson=topojson_format,
+    vtm=vtm_format,
+    mapbox=mapbox_format,
+)
 
 name_to_format = {
-        'JSON': 'json_format',
-        'OpenScienceMap': vtm_format,
-        'TopoJSON': topojson_format,
-        'Mapbox': mapbox_format,
-        }
+    'JSON': 'json_format',
+    'OpenScienceMap': vtm_format,
+    'TopoJSON': topojson_format,
+    'Mapbox': mapbox_format,
+}
+
 
 def lookup_format_by_extension(extension):
     return extension_to_format.get(extension)
+
 
 def lookup_format_by_name(name):
     return name_to_format.get(name)
