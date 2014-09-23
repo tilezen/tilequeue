@@ -126,8 +126,8 @@ def make_metro_extract_predicate(spatial_index, starting_zoom):
         return coord_in_metro_extract(spatial_index, coord)
     return predicate
 
-def tile_generator_for_bbox(bbox, start_zoom, end_zoom):
-    coords = bbox_to_coords(bbox, start_zoom)
+def tile_generator_for_bbox(bbox, zoom_start, zoom_until):
+    coords = bbox_to_coords(bbox, zoom_start)
     assert len(coords) in (1, 2)
     if len(coords) == 1:
         coord = coords[0]
@@ -143,22 +143,22 @@ def tile_generator_for_bbox(bbox, start_zoom, end_zoom):
         end_row = bottomrightcoord.row
 
     return tile_generator_for_range(
-        start_col, start_row, end_col, end_row, start_zoom, end_zoom)
+        start_col, start_row, end_col, end_row, zoom_start, zoom_until)
 
-def tile_generator_for_range(start_col, start_row, end_col, end_row, start_zoom, end_zoom):
+def tile_generator_for_range(start_col, start_row, end_col, end_row, zoom_start, zoom_until):
     zoom_multiplier = 1
     # all the "end" parameters are inclusive
     # bump them all up here to make them exclusive for range
     end_col += 1
     end_row += 1
-    end_zoom += 1
-    for zoom in xrange(start_zoom, end_zoom):
+    zoom_until += 1
+    for zoom in xrange(zoom_start, zoom_until):
         for col in xrange(start_col * zoom_multiplier, end_col * zoom_multiplier):
             for row in xrange(start_row * zoom_multiplier, end_row * zoom_multiplier):
                 yield Coordinate(row=row, column=col, zoom=zoom)
         zoom_multiplier *= 2
 
-def tile_generator_for_bboxes(bboxes, start_zoom, end_zoom):
+def tile_generator_for_bboxes(bboxes, zoom_start, zoom_until):
     return chain.from_iterable(
-        tile_generator_for_bbox(bbox, start_zoom, end_zoom)
+        tile_generator_for_bbox(bbox, zoom_start, zoom_until)
         for bbox in bboxes)

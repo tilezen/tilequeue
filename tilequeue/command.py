@@ -1,5 +1,6 @@
 from contextlib import closing
 from functools import partial
+from itertools import chain
 from itertools import ifilter
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bboxes
@@ -99,15 +100,20 @@ def queue_seed_parser():
     parser = argparse.ArgumentParser()
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
-    parser.add_argument('--until-zoom',
+    parser.add_argument('--zoom-start',
                         type=int,
-                        default=14,
+                        default=0,
+                        choices=xrange(22),
+                        help='Zoom level to start seeding tiles with.',
+                        )
+    parser.add_argument('--zoom-until',
+                        type=int,
                         choices=xrange(22),
                         required=True,
                         help='Zoom level to seed tiles until, inclusive.',
                         )
     parser.add_argument('--metro-extract-url',
-                        help='Url to metro extracts (or file://).',
+                        help='Url to metro extracts json (or file://).',
                         required=True,
                         )
     parser.add_argument('--filter-metro-zoom',
@@ -238,9 +244,13 @@ def queue_seed(argv_args=None):
         # will raise a MetroExtractParseError on failure
         metro_extracts = parse_metro_extract(fp)
     bboxes = city_bboxes(metro_extracts)
-    spatial_index = create_spatial_index(bboxes)
-    predicate = make_metro_extract_predicate(spatial_index, args.filter_metro_zoom)
-    tile_generator = ifilter(predicate, seed_tiles(0, args.until_zoom))
+
+    assert args.zoom_start <= (args.filter_metro_zoom - 1)
+    assert args.filter_metro_zoom <= args.zoom_until
+
+    unfiltered_tiles = seed_tiles(args.zoom_start, args.filter_metro_zoom - 1)
+    filtered_tiles = tile_generator_for_bboxes(bboxes, args.filter_metro_zoom, args.zoom_until)
+    tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
     queue = make_queue(args.queue_type, args.queue_name, args)
 

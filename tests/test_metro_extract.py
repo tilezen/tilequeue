@@ -131,7 +131,7 @@ class TestTileGenerationWithMetroExtractFilter(unittest.TestCase):
         coord = Coordinate(zoom=zoom, column=1, row=2)
         bbox = coord_to_bbox(coord)
         stub_spatial_index = StubSpatialIndex(bbox)
-        tile_generator = seed_tiles(start_zoom=zoom, until_zoom=zoom)
+        tile_generator = seed_tiles(zoom_start=zoom, zoom_until=zoom)
         predicate = make_metro_extract_predicate(stub_spatial_index, zoom)
         tiles = list(ifilter(predicate, tile_generator))
 
