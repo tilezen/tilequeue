@@ -1,3 +1,5 @@
+from ModestMaps.Core import Coordinate
+from itertools import chain
 from json import load
 from rtree import index
 from shapely.geometry import box
@@ -67,6 +69,14 @@ def num2deg(xtile, ytile, zoom):
     lat_deg = math.degrees(lat_rad)
     return (lat_deg, lon_deg)
 
+# from http://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Lon..2Flat._to_tile_numbers_2
+def deg2num(lat_deg, lon_deg, zoom):
+    lat_rad = math.radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = int((lon_deg + 180.0) / 360.0 * n)
+    ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
+    return (xtile, ytile)
+
 def coord_to_bbox(coord):
     topleft_lat, topleft_lng = num2deg(coord.column, coord.row, coord.zoom)
     bottomright_lat, bottomright_lng = num2deg(
@@ -84,9 +94,71 @@ def coord_to_bbox(coord):
     bbox = box(minx, miny, maxx, maxy)
     return bbox
 
+def bbox_to_coords(bbox, zoom):
+    bounds = bbox.bounds
+    minx, miny, maxx, maxy = bounds
+    topleft_lng = minx
+    topleft_lat = maxy
+    bottomright_lat = miny
+    bottomright_lng = maxx
+
+    topleftx, toplefty = deg2num(topleft_lat, topleft_lng, zoom)
+    bottomrightx, bottomrighty = deg2num(bottomright_lat, bottomright_lng, zoom)
+
+    # clamp max values
+    maxval = int(math.pow(2, zoom) - 1)
+    bottomrightx = min(maxval, bottomrightx)
+    bottomrighty = min(maxval, bottomrighty)
+
+    topleftcoord = Coordinate(row=toplefty, column=topleftx, zoom=zoom)
+    # check if one coordinate subsumes the whole bbox at this zoom
+    if topleftx == bottomrightx and toplefty == bottomrighty:
+        return [topleftcoord]
+
+    # we have two inclusive coordinates representing the range
+    bottomrightcoord = Coordinate(row=bottomrighty, column=bottomrightx, zoom=zoom)
+    return topleftcoord, bottomrightcoord
+
 def make_metro_extract_predicate(spatial_index, starting_zoom):
     def predicate(coord):
         if coord.zoom < starting_zoom:
             return True
         return coord_in_metro_extract(spatial_index, coord)
     return predicate
+
+def tile_generator_for_bbox(bbox, start_zoom, end_zoom):
+    coords = bbox_to_coords(bbox, start_zoom)
+    assert len(coords) in (1, 2)
+    if len(coords) == 1:
+        coord = coords[0]
+        start_col = coord.column
+        start_row = coord.row
+        end_col = start_col
+        end_row = start_row
+    else:
+        topleftcoord, bottomrightcoord = coords
+        start_col = topleftcoord.column
+        start_row = topleftcoord.row
+        end_col = bottomrightcoord.column
+        end_row = bottomrightcoord.row
+
+    return tile_generator_for_range(
+        start_col, start_row, end_col, end_row, start_zoom, end_zoom)
+
+def tile_generator_for_range(start_col, start_row, end_col, end_row, start_zoom, end_zoom):
+    zoom_multiplier = 1
+    # all the "end" parameters are inclusive
+    # bump them all up here to make them exclusive for range
+    end_col += 1
+    end_row += 1
+    end_zoom += 1
+    for zoom in xrange(start_zoom, end_zoom):
+        for col in xrange(start_col * zoom_multiplier, end_col * zoom_multiplier):
+            for row in xrange(start_row * zoom_multiplier, end_row * zoom_multiplier):
+                yield Coordinate(row=row, column=col, zoom=zoom)
+        zoom_multiplier *= 2
+
+def tile_generator_for_bboxes(bboxes, start_zoom, end_zoom):
+    return chain.from_iterable(
+        tile_generator_for_bbox(bbox, start_zoom, end_zoom)
+        for bbox in bboxes)

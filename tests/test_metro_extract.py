@@ -137,3 +137,49 @@ class TestTileGenerationWithMetroExtractFilter(unittest.TestCase):
 
         # expecting 2 tiles two match, because they match on the border
         self.assertEqual(2, len(tiles))
+
+class TestTileGenerationFromMetroExtracts(unittest.TestCase):
+
+    def _is_zoom(self, zoom):
+        return lambda coord: zoom == coord.zoom
+
+    def test_tiles_for_coord(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.metro_extract import coord_to_bbox
+        from tilequeue.metro_extract import tile_generator_for_bbox
+        coord = Coordinate(1, 1, 1)
+        bbox = coord_to_bbox(coord)
+        tile_generator = tile_generator_for_bbox(bbox, 1, 1)
+        tiles = list(tile_generator)
+        self.assertEqual(1, len(tiles))
+
+    def test_tiles_for_bbox_firsttile_two_zooms(self):
+        from shapely.geometry import box
+        from tilequeue.metro_extract import tile_generator_for_bbox
+        bbox = box(-180, 0.1, -0.1, 85)
+        tile_generator = tile_generator_for_bbox(bbox, 1, 2)
+        tiles = list(tile_generator)
+        self.assertEqual(5, len(tiles))
+        self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
+        self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
+
+    def test_tiles_for_bbox_lasttile_two_zooms(self):
+        from shapely.geometry import box
+        from tilequeue.metro_extract import tile_generator_for_bbox
+        bbox = box(0.1, -85, 180, -0.1)
+        tile_generator = tile_generator_for_bbox(bbox, 1, 2)
+        tiles = list(tile_generator)
+        self.assertEqual(5, len(tiles))
+        self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
+        self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
+
+    def test_tiles_for_two_bboxes_two_zooms(self):
+        from shapely.geometry import box
+        from tilequeue.metro_extract import tile_generator_for_bboxes
+        bbox1 = box(-180, 0.1, -0.1, 85)
+        bbox2 = box(0.1, -85, 180, -0.1)
+        tile_generator = tile_generator_for_bboxes((bbox1, bbox2), 1, 2)
+        tiles = list(tile_generator)
+        self.assertEqual(10, len(tiles))
+        self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))
+        self.assertEqual(8, len(filter(self._is_zoom(2), tiles)))
