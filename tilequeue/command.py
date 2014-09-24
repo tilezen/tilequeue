@@ -131,6 +131,14 @@ def queue_seed_parser():
                         help='Zoom level to start filtering for '
                              'metro extracts.',
                         )
+    parser.add_argument('--unique-tiles',
+                        default=False,
+                        action='store_true',
+                        help='Only generate unique tiles. The bounding boxes '
+                        'in metro extracts overlap, which will generate '
+                        'duplicate tiles for the overlaps. This flag ensures '
+                        'that the tiles will be unique.',
+                        )
     return parser
 
 
@@ -270,6 +278,11 @@ def queue_seed(argv_args=None):
     unfiltered_tiles = seed_tiles(args.zoom_start, args.filter_metro_zoom - 1)
     filtered_tiles = tile_generator_for_bboxes(bboxes, args.filter_metro_zoom,
                                                args.zoom_until)
+
+    # unique tiles will force storing a set in memory
+    if args.unique_tiles:
+        filtered_tiles = set(filtered_tiles)
+
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
     queue = make_queue(args.queue_type, args.queue_name, args)
