@@ -1,9 +1,9 @@
 from contextlib import closing
 from itertools import chain
 from tilequeue.format import lookup_format_by_extension
-from tilequeue.metro_extract import city_bboxes
+from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.metro_extract import tile_generator_for_bboxes
+from tilequeue.metro_extract import tile_generator_for_multiple_bounds
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.seed import seed_tiles
@@ -270,14 +270,14 @@ def queue_seed(argv_args=None):
     with closing(urlopen(args.metro_extract_url)) as fp:
         # will raise a MetroExtractParseError on failure
         metro_extracts = parse_metro_extract(fp)
-    bboxes = city_bboxes(metro_extracts)
+    multiple_bounds = city_bounds(metro_extracts)
 
     assert args.zoom_start <= (args.filter_metro_zoom - 1)
     assert args.filter_metro_zoom <= args.zoom_until
 
     unfiltered_tiles = seed_tiles(args.zoom_start, args.filter_metro_zoom - 1)
-    filtered_tiles = tile_generator_for_bboxes(bboxes, args.filter_metro_zoom,
-                                               args.zoom_until)
+    filtered_tiles = tile_generator_for_multiple_bounds(
+        multiple_bounds, args.filter_metro_zoom, args.zoom_until)
 
     # unique tiles will force storing a set in memory
     if args.unique_tiles:

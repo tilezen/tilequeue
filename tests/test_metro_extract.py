@@ -24,14 +24,14 @@ class TestMetroExtractParse(unittest.TestCase):
             regions=dict(
                 region1=dict(
                     cities=dict(
-                        city1=self._city_bbox(1, 1, 2, 2),
-                        city2=self._city_bbox(3, 3, 4, 4),
+                        city1=self._city_bounds(1, 1, 2, 2),
+                        city2=self._city_bounds(3, 3, 4, 4),
                     )
                 )
             )
         )
 
-    def _city_bbox(self, minx, miny, maxx, maxy):
+    def _city_bounds(self, minx, miny, maxx, maxy):
         return dict(
             bbox=dict(
                 left=str(minx),
@@ -53,13 +53,13 @@ class TestMetroExtractParse(unittest.TestCase):
 
         self.assertEqual('region1', city1.region)
         self.assertEqual('city1', city1.city)
-        self.assertEqual((1, 1, 2, 2), city1.bbox)
+        self.assertEqual((1, 1, 2, 2), city1.bounds)
 
         self.assertEqual('region1', city2.region)
         self.assertEqual('city2', city2.city)
-        self.assertEqual((3, 3, 4, 4), city2.bbox)
+        self.assertEqual((3, 3, 4, 4), city2.bounds)
 
-    def test_city_bboxes(self):
+    def test_city_bounds(self):
         from json import dumps
         stub = self._generate_stub()
         from cStringIO import StringIO
@@ -68,24 +68,24 @@ class TestMetroExtractParse(unittest.TestCase):
         self.assertEqual(2, len(results))
         results.sort(key=lambda x: x.city)
 
-        from tilequeue.metro_extract import city_bboxes
-        bboxes = city_bboxes(results)
-        self.assertEqual(2, len(bboxes))
-        bbox1, bbox2 = bboxes
-        self.assertEqual((1, 1, 2, 2), bbox1)
-        self.assertEqual((3, 3, 4, 4), bbox2)
+        from tilequeue.metro_extract import city_bounds
+        bounds = city_bounds(results)
+        self.assertEqual(2, len(bounds))
+        bounds1, bounds2 = bounds
+        self.assertEqual((1, 1, 2, 2), bounds1)
+        self.assertEqual((3, 3, 4, 4), bounds2)
 
 
-class TestMetroExtractCoordToBbox(unittest.TestCase):
+class TestMetroExtractCoordToBounds(unittest.TestCase):
 
     def test_convert_coord(self):
-        from tilequeue.metro_extract import coord_to_bbox
+        from tilequeue.metro_extract import coord_to_bounds
         from ModestMaps.Core import Coordinate
         coord = Coordinate(zoom=14, column=4824, row=6160)
-        bbox = coord_to_bbox(coord)
+        bounds = coord_to_bounds(coord)
         exp_bounds = (-74.00390625, 40.69729900863674,
                       -73.98193359375, 40.713955826286046)
-        self.assertEqual(exp_bounds, bbox)
+        self.assertEqual(exp_bounds, bounds)
 
 
 class TestTileGenerationFromMetroExtracts(unittest.TestCase):
@@ -95,37 +95,38 @@ class TestTileGenerationFromMetroExtracts(unittest.TestCase):
 
     def test_tiles_for_coord(self):
         from ModestMaps.Core import Coordinate
-        from tilequeue.metro_extract import coord_to_bbox
-        from tilequeue.metro_extract import tile_generator_for_bbox
+        from tilequeue.metro_extract import coord_to_bounds
+        from tilequeue.metro_extract import tile_generator_for_single_bounds
         coord = Coordinate(1, 1, 1)
-        bbox = coord_to_bbox(coord)
-        tile_generator = tile_generator_for_bbox(bbox, 1, 1)
+        bounds = coord_to_bounds(coord)
+        tile_generator = tile_generator_for_single_bounds(bounds, 1, 1)
         tiles = list(tile_generator)
         self.assertEqual(1, len(tiles))
 
-    def test_tiles_for_bbox_firsttile_two_zooms(self):
-        from tilequeue.metro_extract import tile_generator_for_bbox
+    def test_tiles_for_bounds_firsttile_two_zooms(self):
+        from tilequeue.metro_extract import tile_generator_for_single_bounds
         bounds = (-180, 0.1, -0.1, 85)
-        tile_generator = tile_generator_for_bbox(bounds, 1, 2)
+        tile_generator = tile_generator_for_single_bounds(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
         self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
 
-    def test_tiles_for_bbox_lasttile_two_zooms(self):
-        from tilequeue.metro_extract import tile_generator_for_bbox
+    def test_tiles_for_bounds_lasttile_two_zooms(self):
+        from tilequeue.metro_extract import tile_generator_for_single_bounds
         bounds = (0.1, -85, 180, -0.1)
-        tile_generator = tile_generator_for_bbox(bounds, 1, 2)
+        tile_generator = tile_generator_for_single_bounds(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
         self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
 
-    def test_tiles_for_two_bboxes_two_zooms(self):
-        from tilequeue.metro_extract import tile_generator_for_bboxes
+    def test_tiles_for_two_bounds_two_zooms(self):
+        from tilequeue.metro_extract import tile_generator_for_multiple_bounds
         bounds1 = (-180, 0.1, -0.1, 85)
         bounds2 = (0.1, -85, 180, -0.1)
-        tile_generator = tile_generator_for_bboxes((bounds1, bounds2), 1, 2)
+        tile_generator = tile_generator_for_multiple_bounds(
+            (bounds1, bounds2), 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(10, len(tiles))
         self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))

@@ -6,10 +6,10 @@ import math
 
 class MetroExtractCity(object):
 
-    def __init__(self, region, city, bbox):
+    def __init__(self, region, city, bounds):
         self.region = region
         self.city = city
-        self.bbox = bbox
+        self.bounds = bounds
 
 
 class MetroExtractParseError(Exception):
@@ -30,21 +30,21 @@ def parse_metro_extract(metro_extract_fp):
         for region_name, region_data in regions.iteritems():
             cities = region_data[u'cities']
             for city_name, city_data in cities.iteritems():
-                city_json_bbox = city_data[u'bbox']
-                minx = float(city_json_bbox[u'left'])
-                miny = float(city_json_bbox[u'bottom'])
-                maxx = float(city_json_bbox[u'right'])
-                maxy = float(city_json_bbox[u'top'])
-                city_bbox = (minx, miny, maxx, maxy)
-                metro = MetroExtractCity(region_name, city_name, city_bbox)
+                city_json_bounds = city_data[u'bbox']
+                minx = float(city_json_bounds[u'left'])
+                miny = float(city_json_bounds[u'bottom'])
+                maxx = float(city_json_bounds[u'right'])
+                maxy = float(city_json_bounds[u'top'])
+                city_bounds = (minx, miny, maxx, maxy)
+                metro = MetroExtractCity(region_name, city_name, city_bounds)
                 metros.append(metro)
     except (KeyError, ValueError), e:
         raise MetroExtractParseError(e)
     return metros
 
 
-def city_bboxes(metro_extract_cities):
-    return [city.bbox for city in metro_extract_cities]
+def city_bounds(metro_extract_cities):
+    return [city.bounds for city in metro_extract_cities]
 
 
 # http://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
@@ -67,7 +67,7 @@ def deg2num(lat_deg, lon_deg, zoom):
     return (xtile, ytile)
 
 
-def coord_to_bbox(coord):
+def coord_to_bounds(coord):
     topleft_lat, topleft_lng = num2deg(coord.column, coord.row, coord.zoom)
     bottomright_lat, bottomright_lng = num2deg(
         coord.column + 1, coord.row + 1, coord.zoom)
@@ -76,17 +76,17 @@ def coord_to_bbox(coord):
     maxx = bottomright_lng
     maxy = topleft_lat
 
-    # coord_to_bbox is used to calculate boxes that could be off the grid
+    # coord_to_bounds is used to calculate boxes that could be off the grid
     # clamp the max values in that scenario
     maxx = min(180, maxx)
     maxy = min(90, maxy)
 
-    bbox = (minx, miny, maxx, maxy)
-    return bbox
+    bounds = (minx, miny, maxx, maxy)
+    return bounds
 
 
-def bbox_to_coords(bbox, zoom):
-    minx, miny, maxx, maxy = bbox
+def bounds_to_coords(bounds, zoom):
+    minx, miny, maxx, maxy = bounds
     topleft_lng = minx
     topleft_lat = maxy
     bottomright_lat = miny
@@ -102,7 +102,7 @@ def bbox_to_coords(bbox, zoom):
     bottomrighty = min(maxval, bottomrighty)
 
     topleftcoord = Coordinate(row=toplefty, column=topleftx, zoom=zoom)
-    # check if one coordinate subsumes the whole bbox at this zoom
+    # check if one coordinate subsumes the whole bounds at this zoom
     if topleftx == bottomrightx and toplefty == bottomrighty:
         return [topleftcoord]
 
@@ -112,8 +112,8 @@ def bbox_to_coords(bbox, zoom):
     return topleftcoord, bottomrightcoord
 
 
-def tile_generator_for_bbox(bbox, zoom_start, zoom_until):
-    coords = bbox_to_coords(bbox, zoom_start)
+def tile_generator_for_single_bounds(bounds, zoom_start, zoom_until):
+    coords = bounds_to_coords(bounds, zoom_start)
     assert len(coords) in (1, 2)
     if len(coords) == 1:
         coord = coords[0]
@@ -151,7 +151,7 @@ def tile_generator_for_range(
         zoom_multiplier *= 2
 
 
-def tile_generator_for_bboxes(bboxes, zoom_start, zoom_until):
+def tile_generator_for_multiple_bounds(bounds, zoom_start, zoom_until):
     return chain.from_iterable(
-        tile_generator_for_bbox(bbox, zoom_start, zoom_until)
-        for bbox in bboxes)
+        tile_generator_for_single_bounds(bounds, zoom_start, zoom_until)
+        for bounds in bounds)
