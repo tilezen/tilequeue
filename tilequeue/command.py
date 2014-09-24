@@ -146,14 +146,14 @@ def assert_aws_config(args):
     if (args.aws_access_key_id is not None or
             args.aws_secret_access_key is not None):
         # assert that if either is specified, both are specified
-        assert ((args.aws_access_key_id is not None and
-                 args.aws_secret_access_key is not None),
-                'Must specify both aws key and secret')
+        assert (args.aws_access_key_id is not None and
+                args.aws_secret_access_key is not None), \
+            'Must specify both aws key and secret'
     else:
-        assert ('AWS_ACCESS_KEY_ID' in os.environ,
-                'Missing AWS_ACCESS_KEY_ID config')
-        assert ('AWS_SECRET_ACCESS_KEY' in os.environ,
-                'Missing AWS_SECRET_ACCESS_KEY config')
+        assert 'AWS_ACCESS_KEY_ID' in os.environ, \
+            'Missing AWS_ACCESS_KEY_ID config'
+        assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
+            'Missing AWS_SECRET_ACCESS_KEY config'
 
 
 def queue_write(argv_args=None):
@@ -163,8 +163,8 @@ def queue_write(argv_args=None):
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
-    assert (os.path.exists(args.expired_tiles_file),
-            'Invalid expired tiles path')
+    assert os.path.exists(args.expired_tiles_file), \
+        'Invalid expired tiles path'
 
     queue = make_queue(args.queue_type, args.queue_name, args)
 
@@ -208,8 +208,8 @@ def queue_read(argv_args=None):
     args = parser.parse_args(argv_args)
     assert_aws_config(args)
 
-    assert (os.path.exists(args.tilestache_config),
-            'Invalid tilestache config path')
+    assert os.path.exists(args.tilestache_config), \
+        'Invalid tilestache config path'
 
     formats = []
     for extension in args.output_formats:
