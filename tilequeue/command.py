@@ -259,6 +259,12 @@ def queue_seed_process(tile_generator, queue):
     return n_tiles
 
 
+def uniquify_generator(generator):
+    s = set(generator)
+    for tile in s:
+        yield tile
+
+
 def queue_seed(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -281,7 +287,7 @@ def queue_seed(argv_args=None):
 
     # unique tiles will force storing a set in memory
     if args.unique_tiles:
-        filtered_tiles = set(filtered_tiles)
+        filtered_tiles = uniquify_generator(filtered_tiles)
 
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
