@@ -27,8 +27,8 @@ class RenderJobCreator(object):
         self.tilestache_config = tilestache_config
         self.formats = formats
         layers = tilestache_config.layers
-        self.layer_names = [l for l in layers.keys()
-                            if l not in (u'all', u'_healthcheck', u',')]
+        all_layer = layers['all']
+        self.layer_names = all_layer.provider.names
 
     def create(self, coord):
         return [RenderJob(coord, format,
