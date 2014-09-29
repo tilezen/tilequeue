@@ -31,9 +31,6 @@ class StubLayer(object):
 
 class Memory(object):
 
-    def __init__(self):
-        pass
-
     def output_fp(self, coord, format):
         return StringIO()
 
