@@ -233,9 +233,8 @@ def queue_read(argv_args=None):
             coord = msg.coord
             jobs = job_creator.create(coord)
             for job in jobs:
-                result = job()
-                with closing(store.output_fp(coord, job.format)) as s:
-                    s.write(result)
+                with closing(store.output_fp(coord, job.format)) as store_fp:
+                    job(store_fp)
             queue.job_done(msg.message_handle)
             n_msgs += 1
 

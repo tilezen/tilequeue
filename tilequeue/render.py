@@ -1,4 +1,3 @@
-from cStringIO import StringIO
 from TileStache.Goodies.VecTiles.server import MultiResponse
 
 
@@ -13,12 +12,10 @@ class RenderJob(object):
         self.tilestache_config = tilestache_config
         self.layer_names = layer_names
 
-    def __call__(self):
-        out = StringIO()
+    def __call__(self, out):
         response = MultiResponse(
             self.tilestache_config, self.layer_names, self.coord)
         response.save(out, self.format.name)
-        return out.getvalue()
 
     def __repr__(self):
         return 'RenderJob(%s, %s)' % (self.coord, self.format)
