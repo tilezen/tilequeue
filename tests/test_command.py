@@ -12,7 +12,7 @@ class TestSeedProcess(unittest.TestCase):
         return MemoryQueue()
 
     def test_queue_seed_process(self):
-        from tilequeue.seed import seed_tiles
+        from tilequeue.tile import seed_tiles
         zoom = 3
         tile_generator = seed_tiles(0, zoom)
         queue = self._mem_queue()

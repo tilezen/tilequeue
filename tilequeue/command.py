@@ -5,10 +5,10 @@ from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
-from tilequeue.seed import seed_tiles
 from tilequeue.store import make_s3_store
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
+from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from TileStache import parseConfigfile
 from urllib2 import urlopen

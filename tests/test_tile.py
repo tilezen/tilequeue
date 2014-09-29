@@ -8,7 +8,7 @@ import unittest
 class TestSeedTiles(unittest.TestCase):
 
     def _call_fut(self, zoom_until):
-        from tilequeue.seed import seed_tiles
+        from tilequeue.tile import seed_tiles
         return list(seed_tiles(zoom_until=zoom_until))
 
     def _assert_tilelist(self, expected_tiles, actual_tiles):
