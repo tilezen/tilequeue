@@ -121,13 +121,11 @@ def queue_seed_parser():
                         )
     parser.add_argument('--metro-extract-url',
                         help='Url to metro extracts json (or file://).',
-                        required=True,
                         )
     parser.add_argument('--filter-metro-zoom',
                         type=int,
                         default=11,
                         choices=xrange(22),
-                        required=True,
                         help='Zoom level to start filtering for '
                              'metro extracts.',
                         )
@@ -273,21 +271,31 @@ def queue_seed(argv_args=None):
     if args.queue_type == 'sqs':
         assert_aws_config(args)
 
-    with closing(urlopen(args.metro_extract_url)) as fp:
-        # will raise a MetroExtractParseError on failure
-        metro_extracts = parse_metro_extract(fp)
-    multiple_bounds = city_bounds(metro_extracts)
+    if args.metro_extract_url:
+        assert args.filter_metro_zoom is not None, \
+            '--filter-metro-zoom is required when specifying a ' \
+            'metro extract url'
+        assert args.filter_metro_zoom <= args.zoom_until
+        with closing(urlopen(args.metro_extract_url)) as fp:
+            # will raise a MetroExtractParseError on failure
+            metro_extracts = parse_metro_extract(fp)
+        multiple_bounds = city_bounds(metro_extracts)
+        filtered_tiles = tile_generator_for_multiple_bounds(
+            multiple_bounds, args.filter_metro_zoom, args.zoom_until)
+        # unique tiles will force storing a set in memory
+        if args.unique_tiles:
+            filtered_tiles = uniquify_generator(filtered_tiles)
+        unfiltered_end_zoom = args.filter_metro_zoom - 1
+    else:
+        assert not args.filter_metro_zoom, \
+            '--metro-extract-url is required when specifying ' \
+            '--filter-metro-zoom'
+        filtered_tiles = ()
+        unfiltered_end_zoom = args.zoom_until
 
-    assert args.zoom_start <= (args.filter_metro_zoom - 1)
-    assert args.filter_metro_zoom <= args.zoom_until
+    assert args.zoom_start <= unfiltered_end_zoom
 
-    unfiltered_tiles = seed_tiles(args.zoom_start, args.filter_metro_zoom - 1)
-    filtered_tiles = tile_generator_for_multiple_bounds(
-        multiple_bounds, args.filter_metro_zoom, args.zoom_until)
-
-    # unique tiles will force storing a set in memory
-    if args.unique_tiles:
-        filtered_tiles = uniquify_generator(filtered_tiles)
+    unfiltered_tiles = seed_tiles(args.zoom_start, unfiltered_end_zoom)
 
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
