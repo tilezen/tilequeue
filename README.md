@@ -63,9 +63,13 @@ case:
 
 #### Typical command execution
 
+##### Write expired tiles to queue after osm diff is applied
+
     queue-write \
         --queue-name <name-of-aws-queue> \
         --expired-tiles-file <path/to/list/of/expired/tiles>
+
+##### Read tasks from queue, and save generated tiles to S3
 
     queue-read \
         --queue-name <name-of-aws-queue> \
@@ -73,9 +77,38 @@ case:
         --tilestache-config <path/to/tilestache/config> \
         --s3-reduced-redundancy
 
+By default, the output formats that will be generated are geojson and
+opensciencemap. The formats can instead be specified explicitly:
+
+    --output-formats json vtm mapbox
+
+Multiple `queue-read` tasks can be run in parallel. The SQS queue
+handles synchronization between the workers. All IO is blocking, and
+will consist of reading tasks from SQS, querying the database, and
+writing the results to S3. It's anticipated that the database would be
+the bottleneck, and in that case as many workers as the database can
+support should be run.
+
+##### Seeding the queue with initial tasks
+
     queue-seed \
         --queue-name <name-of-aws-queue> \
         --zoom-until 14 \
         --filter-metro-zoom 11 \
         --unique-tiles \
         --metro-extract-url https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
+
+This will:
+
+* default to starting with zoom level 0 (can be modified with
+  `--zoom-start <start-zoom>`)
+* for zoom levels 0 -> 10, all tiles will be seeded
+* for zoom levels 11 -> 14, only tiles within the metro extract bounds
+  will be seeded
+
+Note:
+
+* Zoom levels specified for start, filtering, and end are inclusive.
+* This only populates the queue with tasks; it does not perform the
+  work. Use `queue-read` to process the tasks on the queue
+  subsequently.
