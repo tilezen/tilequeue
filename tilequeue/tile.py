@@ -9,9 +9,8 @@ class CoordMessage(object):
         self.coord = coord
         self.message_handle = message_handle
 
-    def __str__(self):
-        return 'Message %s: %s' % (str(self.message_handle),
-                                   str(self.coord))
+    def __repr__(self):
+        return 'CoordMessage(%s, %s)' % (self.coord, self.message_handle)
 
 
 def serialize_coord(coord):

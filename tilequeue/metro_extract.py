@@ -8,14 +8,18 @@ class MetroExtractCity(object):
         self.city = city
         self.bounds = bounds
 
+    def __repr__(self):
+        return 'MetroExtractCity(%s, %s, %s)' % \
+            (self.region, self.city, self.bounds)
+
 
 class MetroExtractParseError(Exception):
 
     def __init__(self, cause):
         self.cause = cause
 
-    def __str__(self):
-        return 'MetroExtractParseError: %s: %s' % (
+    def __repr__(self):
+        return 'MetroExtractParseError(%s: %s)' % (
             self.cause.__class__.__name__, str(self.cause))
 
 

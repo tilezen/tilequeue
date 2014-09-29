@@ -5,6 +5,9 @@ class OutputFormat(object):
         self.extension = extension
         self.mimetype = mimetype
 
+    def __repr__(self):
+        return 'OutputFormat(%s, %s, %s)' % \
+            (self.name, self.extension, self.mimetype)
 
 json_format = OutputFormat('JSON', 'json', 'application/json')
 topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json')

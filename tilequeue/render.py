@@ -20,6 +20,9 @@ class RenderJob(object):
         response.save(out, self.format.name)
         return out.getvalue()
 
+    def __repr__(self):
+        return 'RenderJob(%s, %s)' % (self.coord, self.format)
+
 
 class RenderJobCreator(object):
 
