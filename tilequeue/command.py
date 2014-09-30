@@ -6,9 +6,11 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
+from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
+from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from TileStache import parseConfigfile
 from urllib2 import urlopen
@@ -33,6 +35,47 @@ def add_queue_options(parser):
                         choices=('sqs', 'mem', 'file'),
                         help='Queue type, useful to change for testing.',
                         )
+    parser.add_argument('--sqs-read-timeout',
+                        type=int,
+                        default=20,
+                        help='Read timeout in seconds when reading '
+                             'sqs messages.',
+                        )
+    return parser
+
+
+def add_s3_options(parser):
+    parser.add_argument('--s3-bucket',
+                        required=True,
+                        help='Name of aws s3 bucket, should already exist.',
+                        )
+    parser.add_argument('--s3-reduced-redundancy',
+                        action='store_true',
+                        default=False,
+                        help='Store tile data in s3 with reduced redundancy.',
+                        )
+    parser.add_argument('--s3-path',
+                        default='',
+                        help='Store tile data in s3 with this path prefix.',
+                        )
+    return parser
+
+
+def add_tilestache_config_options(parser):
+    parser.add_argument('--tilestache-config',
+                        required=True,
+                        help='Path to Tilestache config.',
+                        )
+    return parser
+
+
+def add_output_format_options(parser):
+    parser.add_argument('--output-formats',
+                        nargs='+',
+                        choices=('json', 'vtm', 'topojson', 'mapbox'),
+                        default=('json', 'vtm'),
+                        help='Output formats to produce for each tile.',
+                        )
     return parser
 
 
@@ -55,8 +98,7 @@ def make_queue(queue_type, queue_name, parser_args):
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
-def queue_write_parser():
-    parser = argparse.ArgumentParser()
+def tilequeue_parser_write(parser):
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.add_argument('--expired-tiles-file',
@@ -64,47 +106,38 @@ def queue_write_parser():
                         help='Path to file containing list of expired tiles. '
                              'Should be one per line, <zoom>/<column>/<row>',
                         )
+    parser.set_defaults(func=tilequeue_write)
     return parser
 
 
-def queue_read_parser():
-    parser = argparse.ArgumentParser()
+def tilequeue_parser_read(parser):
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
-    parser.add_argument('--s3-bucket',
-                        required=True,
-                        help='Name of aws s3 bucket, should already exist.',
-                        )
-    parser.add_argument('--tilestache-config',
-                        required=True,
-                        help='Path to Tilestache config.',
-                        )
-    parser.add_argument('--output-formats',
-                        nargs='+',
-                        choices=('json', 'vtm', 'topojson', 'mapbox'),
-                        default=('json', 'vtm'),
-                        help='Output formats to produce for each tile.',
-                        )
-    parser.add_argument('--s3-reduced-redundancy',
-                        action='store_true',
-                        default=False,
-                        help='Store tile data in s3 with reduced redundancy.',
-                        )
-    parser.add_argument('--s3-path',
-                        default='',
-                        help='Store tile data in s3 with this path prefix.',
-                        )
-    parser.add_argument('--sqs-read-timeout',
-                        type=int,
-                        default=20,
-                        help='Read timeout in seconds when reading '
-                             'sqs messages.',
-                        )
+    parser.set_defaults(func=tilequeue_read)
     return parser
 
 
-def queue_seed_parser():
-    parser = argparse.ArgumentParser()
+def tilequeue_read(args):
+    queue = make_queue(args.queue_type, args.queue_name, args)
+    msgs = queue.read(max_to_read=1, timeout_seconds=args.sqs_read_timeout)
+    if not msgs:
+        print 'No messages found on queue: %s' % args.queue_name
+    for msg in msgs:
+        coord = msg.coord
+        print 'Received tile: %s' % serialize_coord(coord)
+
+
+def tilequeue_parser_process(parser):
+    parser = add_aws_cred_options(parser)
+    parser = add_queue_options(parser)
+    parser = add_s3_options(parser)
+    parser = add_tilestache_config_options(parser)
+    parser = add_output_format_options(parser)
+    parser.set_defaults(func=tilequeue_process)
+    return parser
+
+
+def tilequeue_parser_seed(parser):
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.add_argument('--zoom-start',
@@ -137,6 +170,21 @@ def queue_seed_parser():
                         'duplicate tiles for the overlaps. This flag ensures '
                         'that the tiles will be unique.',
                         )
+    parser.set_defaults(func=tilequeue_seed)
+    return parser
+
+
+def tilequeue_parser_generate_tile(parser):
+    parser = add_aws_cred_options(parser)
+    parser = add_s3_options(parser)
+    parser = add_tilestache_config_options(parser)
+    parser = add_output_format_options(parser)
+    parser.add_argument('--tile',
+                        required=True,
+                        help='Tile coordinate used to generate a tile. Must '
+                        'be of the form: <zoom>/<column>/<row>',
+                        )
+    parser.set_defaults(func=tilequeue_generate_tile)
     return parser
 
 
@@ -154,11 +202,7 @@ def assert_aws_config(args):
             'Missing AWS_SECRET_ACCESS_KEY config'
 
 
-def queue_write(argv_args=None):
-    if argv_args is None:
-        argv_args = sys.argv[1:]
-    parser = queue_write_parser()
-    args = parser.parse_args(argv_args)
+def tilequeue_write(args):
     assert_aws_config(args)
 
     assert os.path.exists(args.expired_tiles_file), \
@@ -186,34 +230,37 @@ def queue_write(argv_args=None):
 
     print 'Queuing ... '
 
-    # sort in any way?
-
-    # zoom level strategy?
-    # only enqueue work for zooms > 10 if in metro extract area?
-
     # exploded_coords is a set, but enqueue_batch expects a list for slicing
     exploded_coords = list(exploded_coords)
-
-    queue.enqueue_batch(list(exploded_coords))
+    queue.enqueue_batch(exploded_coords)
 
     print 'Queuing ... Done'
+    print 'Queued %d tiles' % len(exploded_coords)
 
 
-def queue_read(argv_args=None):
-    if argv_args is None:
-        argv_args = sys.argv[1:]
-    parser = queue_read_parser()
-    args = parser.parse_args(argv_args)
+def lookup_formats(format_extensions):
+    formats = []
+    for extension in format_extensions:
+        format = lookup_format_by_extension(extension)
+        assert format is not None, 'Unknown extension: %s' % extension
+        formats.append(format)
+    return formats
+
+
+def process_jobs_for_coord(coord, job_creator, store):
+    jobs = job_creator.create(coord)
+    for job in jobs:
+        with closing(store.output_fp(coord, job.format)) as store_fp:
+            job(store_fp)
+
+
+def tilequeue_process(args):
     assert_aws_config(args)
 
     assert os.path.exists(args.tilestache_config), \
         'Invalid tilestache config path'
 
-    formats = []
-    for extension in args.output_formats:
-        format = lookup_format_by_extension(extension)
-        assert format is not None, 'Unknown extension: %s' % extension
-        formats.append(format)
+    formats = lookup_formats(args.output_formats)
 
     queue = make_queue(args.queue_type, args.queue_name, args)
 
@@ -231,17 +278,14 @@ def queue_read(argv_args=None):
             break
         for msg in msgs:
             coord = msg.coord
-            jobs = job_creator.create(coord)
-            for job in jobs:
-                with closing(store.output_fp(coord, job.format)) as store_fp:
-                    job(store_fp)
+            process_jobs_for_coord(coord, job_creator, store)
             queue.job_done(msg.message_handle)
             n_msgs += 1
 
     print 'processed %d messages' % n_msgs
 
 
-def queue_seed_process(tile_generator, queue):
+def tilequeue_seed_process(tile_generator, queue):
     # enqueue in batches of 10
     batch = []
     n_tiles = 0
@@ -262,11 +306,7 @@ def uniquify_generator(generator):
         yield tile
 
 
-def queue_seed(argv_args=None):
-    if argv_args is None:
-        argv_args = sys.argv[1:]
-    parser = queue_seed_parser()
-    args = parser.parse_args(argv_args)
+def tilequeue_seed(args):
     if args.queue_type == 'sqs':
         assert_aws_config(args)
 
@@ -300,12 +340,47 @@ def queue_seed(argv_args=None):
 
     queue = make_queue(args.queue_type, args.queue_name, args)
 
-    n_tiles = queue_seed_process(tile_generator, queue)
+    n_tiles = tilequeue_seed_process(tile_generator, queue)
 
     print 'Queued %d tiles' % n_tiles
 
-if __name__ == '__main__':
-    # queue_read()
-    # queue_write()
-    # queue_seed()
-    pass
+
+def tilequeue_generate_tile(args):
+    tile_str = args.tile
+
+    coord = deserialize_coord(tile_str)
+    assert coord is not None, 'Could not parse tile from %s' % tile_str
+
+    tilestache_config = parseConfigfile(args.tilestache_config)
+    formats = lookup_formats(args.output_formats)
+    job_creator = RenderJobCreator(tilestache_config, formats)
+
+    store = make_s3_store(
+        args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
+        path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+
+    process_jobs_for_coord(coord, job_creator, store)
+
+    print 'Generated tile for: %s' % tile_str
+
+
+def tilequeue_main(argv_args=None):
+    if argv_args is None:
+        argv_args = sys.argv[1:]
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+
+    parser_config = (
+        ('write', tilequeue_parser_write),
+        ('process', tilequeue_parser_process),
+        ('read', tilequeue_parser_read),
+        ('seed', tilequeue_parser_seed),
+        ('generate-tile', tilequeue_parser_generate_tile),
+    )
+    for parser_name, parser_func in parser_config:
+        subparser = subparsers.add_parser(parser_name)
+        parser_func(subparser)
+
+    args = parser.parse_args(argv_args)
+    args.func(args)

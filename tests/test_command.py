@@ -4,14 +4,14 @@ import unittest
 class TestSeedProcess(unittest.TestCase):
 
     def _call_fut(self, tile_generator, queue):
-        from tilequeue.command import queue_seed_process
-        return queue_seed_process(tile_generator, queue)
+        from tilequeue.command import tilequeue_seed_process
+        return tilequeue_seed_process(tile_generator, queue)
 
     def _mem_queue(self):
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
 
-    def test_queue_seed_process(self):
+    def test_tilequeue_seed_process(self):
         from tilequeue.tile import seed_tiles
         zoom = 3
         tile_generator = seed_tiles(0, zoom)
