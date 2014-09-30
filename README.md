@@ -8,7 +8,7 @@ generation.
 There are 3 operations:
 
 * Writing to the queue
-* Reading from the queue
+* Reading from the queue and processing tiles
 * Seeding the queue
 
 ### Writing to the queue
@@ -25,7 +25,7 @@ directly use it to populate a queue.
 The format of the tiles on the queue match the format of the expired
 tilelist.
 
-### Reading from the queue
+### Processing the queue
 
 This operation reads from the queue, renders the tile into several
 output formats, and stores these formats on S3.
@@ -65,13 +65,13 @@ case:
 
 ##### Write expired tiles to queue after osm diff is applied
 
-    queue-write \
+    tilequeue write \
         --queue-name <name-of-aws-queue> \
         --expired-tiles-file <path/to/list/of/expired/tiles>
 
 ##### Read tasks from queue, and save generated tiles to S3
 
-    queue-read \
+    tilequeue process \
         --queue-name <name-of-aws-queue> \
         --s3-bucket <name-of-s3-bucket> \
         --tilestache-config <path/to/tilestache/config> \
@@ -82,7 +82,7 @@ opensciencemap. The formats can instead be specified explicitly:
 
     --output-formats json vtm mapbox
 
-Multiple `queue-read` tasks can be run in parallel. The SQS queue
+Multiple `tilequeue process` tasks can be run in parallel. The SQS queue
 handles synchronization between the workers. All IO is blocking, and
 will consist of reading tasks from SQS, querying the database, and
 writing the results to S3. It's anticipated that the database would be
@@ -91,7 +91,7 @@ support should be run.
 
 ##### Seeding the queue with initial tasks
 
-    queue-seed \
+    tilequeue seed \
         --queue-name <name-of-aws-queue> \
         --zoom-until 14 \
         --filter-metro-zoom 11 \
@@ -110,5 +110,5 @@ Note:
 
 * Zoom levels specified for start, filtering, and end are inclusive.
 * This only populates the queue with tasks; it does not perform the
-  work. Use `queue-read` to process the tasks on the queue
+  work. Use `tilequeue process` to process the tasks on the queue
   subsequently.
