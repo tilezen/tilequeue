@@ -1,7 +1,6 @@
 # Tilequeue
 
-Queue operations to manage the processes surrounding offline tile
-generation.
+Queue operations to manage the processes surrounding tile rendering.
 
 ## Operations
 
