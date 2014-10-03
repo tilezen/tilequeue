@@ -133,6 +133,12 @@ def tilequeue_parser_process(parser):
     parser = add_s3_options(parser)
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
+    parser.add_argument('--daemon',
+                        action='store_true',
+                        default=False,
+                        help='Enable daemon mode, which will continue to poll '
+                             'for messages',
+                        )
     parser.set_defaults(func=tilequeue_process)
     return parser
 
@@ -274,12 +280,15 @@ def tilequeue_process(args):
     n_msgs = 0
     while True:
         msgs = queue.read(max_to_read=1, timeout_seconds=args.sqs_read_timeout)
-        if not msgs:
+        if not msgs and not args.daemon:
             break
         for msg in msgs:
             coord = msg.coord
+            coord_str = serialize_coord(coord)
+            print 'processing %s ...' % coord_str
             process_jobs_for_coord(coord, job_creator, store)
             queue.job_done(msg.message_handle)
+            print 'processing %s ... done' % coord_str
             n_msgs += 1
 
     print 'processed %d messages' % n_msgs

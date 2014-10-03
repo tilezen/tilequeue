@@ -72,10 +72,14 @@ case:
 ##### Read tasks from queue, and save generated tiles to S3
 
     tilequeue process \
+        --daemon
         --queue-name <name-of-aws-queue> \
         --s3-bucket <name-of-s3-bucket> \
-        --tilestache-config <path/to/tilestache/config> \
-        --s3-reduced-redundancy
+        --s3-reduced-redundancy \
+        --tilestache-config <path/to/tilestache/config>
+
+The `--daemon` flag will cause the command to loop on polling the
+queue. Otherwise, the command will exit once the queue becomes empty.
 
 By default, the output formats that will be generated are geojson and
 opensciencemap. The formats can instead be specified explicitly:
