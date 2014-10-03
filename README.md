@@ -75,6 +75,7 @@ case:
         --daemon
         --queue-name <name-of-aws-queue> \
         --s3-bucket <name-of-s3-bucket> \
+        --s3-path osm \
         --s3-reduced-redundancy \
         --tilestache-config <path/to/tilestache/config>
 
@@ -127,4 +128,5 @@ pipeline is working correctly.
            --tile <zoom>/<column>/<row> \
            --tilestache-config <path/to/tilestache/config> \
            --s3-bucket <name-of-s3-bucket> \
+           --s3-path osm \
            --s3-reduced-redundancy
