@@ -4,11 +4,12 @@ Queue operations to manage the processes surrounding tile rendering.
 
 ## Operations
 
-There are 3 operations:
+There are several operations:
 
 * Writing to the queue
 * Reading from the queue and processing tiles
 * Seeding the queue
+* Generate a single tile
 
 ### Writing to the queue
 
@@ -111,3 +112,15 @@ Note:
 * This only populates the queue with tasks; it does not perform the
   work. Use `tilequeue process` to process the tasks on the queue
   subsequently.
+
+##### Generate a single tile
+
+Given a coordinate on the command line, generate a tile and save it to
+S3. This can be useful to test that the processing part of the
+pipeline is working correctly.
+
+     tilequeue generate-tile \
+           --tile <zoom>/<column>/<row> \
+           --tilestache-config <path/to/tilestache/config> \
+           --s3-bucket <name-of-s3-bucket> \
+           --s3-reduced-redundancy
