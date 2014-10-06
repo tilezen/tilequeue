@@ -43,6 +43,10 @@ metro extract areas.
     pip install --allow-external PIL --allow-unverified PIL git+https://github.com/mapzen/TileStache@integration-1
     python setup.py develop
 
+## Running tests
+
+    python setup.py test
+
 ## Execution
 
 All 3 operations support reading the aws key and secret either from
@@ -120,13 +124,20 @@ Note:
 
 ##### Generate a single tile
 
-Given a coordinate on the command line, generate a tile and save it to
-S3. This can be useful to test that the processing part of the
+Given a coordinate on the command line, generate a tile. This can be useful to test that the processing part of the
 pipeline is working correctly.
 
      tilequeue generate-tile \
            --tile <zoom>/<column>/<row> \
            --tilestache-config <path/to/tilestache/config> \
+           --output-formats topojson \
+
+And if want it uploaded to s3 simply add extra options
+
+     tilequeue generate-tile \
+           --tile <zoom>/<column>/<row> \
+           --tilestache-config <path/to/tilestache/config> \
+           --output-formats topojson \
            --s3-bucket <name-of-s3-bucket> \
            --s3-path osm \
            --s3-reduced-redundancy

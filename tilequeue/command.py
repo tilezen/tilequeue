@@ -6,6 +6,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
+from tilequeue.store import make_tile_file_store
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
@@ -46,7 +47,8 @@ def add_queue_options(parser):
 
 def add_s3_options(parser):
     parser.add_argument('--s3-bucket',
-                        required=True,
+                        default='',
+                        required=False,
                         help='Name of aws s3 bucket, should already exist.',
                         )
     parser.add_argument('--s3-reduced-redundancy',
@@ -207,7 +209,6 @@ def assert_aws_config(args):
         assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
             'Missing AWS_SECRET_ACCESS_KEY config'
 
-
 def tilequeue_write(args):
     assert_aws_config(args)
 
@@ -364,13 +365,18 @@ def tilequeue_generate_tile(args):
     formats = lookup_formats(args.output_formats)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    store = make_s3_store(
-        args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
-        path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+    if not args.s3_bucket:
+        store = make_tile_file_store(sys.stdout)
+    else:
+        store = make_s3_store(
+            args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
+            path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
 
     process_jobs_for_coord(coord, job_creator, store)
 
+    sys.stdout = open("/dev/stdout", "w")
     print 'Generated tile for: %s' % tile_str
+
 
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
