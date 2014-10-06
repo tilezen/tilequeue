@@ -363,12 +363,17 @@ def tilequeue_generate_tile(args):
 
     print 'Generated tile for: %s' % tile_str
 
+class TileArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        sys.stderr.write('error: %s\n' % message)
+        self.print_help()
+        sys.exit(2)
 
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
 
-    parser = argparse.ArgumentParser()
+    parser = TileArgumentParser()
     subparsers = parser.add_subparsers()
 
     parser_config = (
