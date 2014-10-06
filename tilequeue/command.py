@@ -47,7 +47,8 @@ def add_queue_options(parser):
 
 def add_s3_options(parser):
     parser.add_argument('--s3-bucket',
-                        required=True,
+                        default='',
+                        required=False,
                         help='Name of aws s3 bucket, should already exist.',
                         )
     parser.add_argument('--s3-reduced-redundancy',
@@ -181,21 +182,9 @@ def tilequeue_parser_seed(parser):
     return parser
 
 
-def tilequeue_parser_generate_tile_s3(parser):
+def tilequeue_parser_generate_tile(parser):
     parser = add_aws_cred_options(parser)
     parser = add_s3_options(parser)
-    parser = add_tilestache_config_options(parser)
-    parser = add_output_format_options(parser)
-    parser.add_argument('--tile',
-                        required=True,
-                        help='Tile coordinate used to generate a tile. Must '
-                        'be of the form: <zoom>/<column>/<row>',
-                        )
-    parser.set_defaults(func=tilequeue_generate_tile)
-    return parser
-
-
-def tilequeue_parser_generate_tile(parser):
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
     parser.add_argument('--tile',
@@ -376,12 +365,12 @@ def tilequeue_generate_tile(args):
     formats = lookup_formats(args.output_formats)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    if 's3_bucket' in args:
+    if not args.s3_bucket:
+        store = make_tile_file_store(sys.stdout)
+    else:
         store = make_s3_store(
             args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
             path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
-    else:
-        store = make_tile_file_store(sys.stdout)
 
     process_jobs_for_coord(coord, job_creator, store)
 
@@ -408,7 +397,6 @@ def tilequeue_main(argv_args=None):
         ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
-        ('generate-tile-s3', tilequeue_parser_generate_tile_s3),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

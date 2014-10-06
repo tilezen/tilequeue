@@ -130,14 +130,14 @@ pipeline is working correctly.
      tilequeue generate-tile \
            --tile <zoom>/<column>/<row> \
            --tilestache-config <path/to/tilestache/config> \
-           --output-formats topojson
+           --output-formats topojson \
 
-Or you have it upload to s3 as well
+And if want it uploaded to s3 simply add extra options
 
-     tilequeue generate-tile-s3 \
+     tilequeue generate-tile \
            --tile <zoom>/<column>/<row> \
            --tilestache-config <path/to/tilestache/config> \
-           --output-formats topojson
+           --output-formats topojson \
            --s3-bucket <name-of-s3-bucket> \
            --s3-path osm \
            --s3-reduced-redundancy
