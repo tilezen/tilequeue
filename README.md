@@ -43,6 +43,10 @@ metro extract areas.
     pip install --allow-external PIL --allow-unverified PIL git+https://github.com/mapzen/TileStache@integration-1
     python setup.py develop
 
+## Running tests
+
+    python setup.py test
+
 ## Execution
 
 All 3 operations support reading the aws key and secret either from
