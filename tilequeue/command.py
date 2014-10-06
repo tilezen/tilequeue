@@ -381,11 +381,13 @@ def tilequeue_generate_tile(args):
             args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
             path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
     else:
-        store = make_tile_file_store()
+        store = make_tile_file_store(sys.stdout)
 
     process_jobs_for_coord(coord, job_creator, store)
 
+    sys.stdout = open("/dev/stdout", "w")
     print 'Generated tile for: %s' % tile_str
+
 
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):

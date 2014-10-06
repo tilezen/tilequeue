@@ -4,6 +4,7 @@ from boto import connect_s3
 from boto.s3.bucket import Bucket
 from cStringIO import StringIO
 from TileStache.S3 import tile_key
+import sys
 
 
 class S3(object):
@@ -29,32 +30,20 @@ class StubLayer(object):
         return self.layer_name
 
 
-class TileStdOut(object):
-    def __init__(self, key):
-        self.key = key
-        self.buffer = StringIO()
+class TileFile(object):
 
-    def write(self, *args):
-        self.buffer.write(*args)
-
-    def close(self):
-        print self.buffer.getvalue()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()
-
-
-class TileOut(object):
+    def __init__(self, fp):
+        self.fp = fp
 
     def output_fp(self, coord, format):
-        return TileStdOut(coord)
+        return self.fp
 
 
-def make_tile_file_store():
-    return TileOut()
+def make_tile_file_store(fp=None):
+    if fp is None:
+        fp = sys.stdout
+    return TileFile(fp)
+
 
 class Memory(object):
 
