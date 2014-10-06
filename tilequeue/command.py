@@ -1,5 +1,6 @@
 from contextlib import closing
 from itertools import chain
+from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
@@ -20,6 +21,11 @@ import os
 import sys
 
 
+def add_config_options(parser):
+    parser.add_argument('--config')
+    return parser
+
+
 def add_aws_cred_options(parser):
     parser.add_argument('--aws_access_key_id')
     parser.add_argument('--aws_secret_access_key')
@@ -28,7 +34,6 @@ def add_aws_cred_options(parser):
 
 def add_queue_options(parser):
     parser.add_argument('--queue-name',
-                        required=True,
                         help='Name of the queue, should already exist.',
                         )
     parser.add_argument('--queue-type',
@@ -47,8 +52,6 @@ def add_queue_options(parser):
 
 def add_s3_options(parser):
     parser.add_argument('--s3-bucket',
-                        default='',
-                        required=False,
                         help='Name of aws s3 bucket, should already exist.',
                         )
     parser.add_argument('--s3-reduced-redundancy',
@@ -65,7 +68,6 @@ def add_s3_options(parser):
 
 def add_tilestache_config_options(parser):
     parser.add_argument('--tilestache-config',
-                        required=True,
                         help='Path to Tilestache config.',
                         )
     return parser
@@ -81,12 +83,10 @@ def add_output_format_options(parser):
     return parser
 
 
-def make_queue(queue_type, queue_name, parser_args):
+def make_queue(queue_type, queue_name, cfg):
     if queue_type == 'sqs':
         return make_sqs_queue(
-            queue_name,
-            parser_args.aws_access_key_id, parser_args.aws_secret_access_key
-        )
+            queue_name, cfg.aws_access_key_id, cfg.aws_secret_access_key)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -101,10 +101,10 @@ def make_queue(queue_type, queue_name, parser_args):
 
 
 def tilequeue_parser_write(parser):
+    parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.add_argument('--expired-tiles-file',
-                        required=True,
                         help='Path to file containing list of expired tiles. '
                              'Should be one per line, <zoom>/<column>/<row>',
                         )
@@ -113,23 +113,26 @@ def tilequeue_parser_write(parser):
 
 
 def tilequeue_parser_read(parser):
+    parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.set_defaults(func=tilequeue_read)
     return parser
 
 
-def tilequeue_read(args):
-    queue = make_queue(args.queue_type, args.queue_name, args)
-    msgs = queue.read(max_to_read=1, timeout_seconds=args.sqs_read_timeout)
+def tilequeue_read(cfg):
+    assert cfg.queue_name, 'Missing queue name'
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
     if not msgs:
-        print 'No messages found on queue: %s' % args.queue_name
+        print 'No messages found on queue: %s' % cfg.queue_name
     for msg in msgs:
         coord = msg.coord
         print 'Received tile: %s' % serialize_coord(coord)
 
 
 def tilequeue_parser_process(parser):
+    parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser = add_s3_options(parser)
@@ -146,18 +149,19 @@ def tilequeue_parser_process(parser):
 
 
 def tilequeue_parser_seed(parser):
+    parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser.add_argument('--zoom-start',
                         type=int,
                         default=0,
-                        choices=xrange(22),
+                        choices=xrange(21),
                         help='Zoom level to start seeding tiles with.',
                         )
     parser.add_argument('--zoom-until',
                         type=int,
-                        choices=xrange(22),
-                        required=True,
+                        default=0,
+                        choices=xrange(21),
                         help='Zoom level to seed tiles until, inclusive.',
                         )
     parser.add_argument('--metro-extract-url',
@@ -165,8 +169,8 @@ def tilequeue_parser_seed(parser):
                         )
     parser.add_argument('--filter-metro-zoom',
                         type=int,
-                        default=11,
-                        choices=xrange(22),
+                        default=0,
+                        choices=xrange(21),
                         help='Zoom level to start filtering for '
                              'metro extracts.',
                         )
@@ -183,12 +187,12 @@ def tilequeue_parser_seed(parser):
 
 
 def tilequeue_parser_generate_tile(parser):
+    parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_s3_options(parser)
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
     parser.add_argument('--tile',
-                        required=True,
                         help='Tile coordinate used to generate a tile. Must '
                         'be of the form: <zoom>/<column>/<row>',
                         )
@@ -196,29 +200,27 @@ def tilequeue_parser_generate_tile(parser):
     return parser
 
 
-def assert_aws_config(args):
-    if (args.aws_access_key_id is not None or
-            args.aws_secret_access_key is not None):
+def assert_aws_config(cfg):
+    if (cfg.aws_access_key_id is not None or
+            cfg.aws_secret_access_key is not None):
         # assert that if either is specified, both are specified
-        assert (args.aws_access_key_id is not None and
-                args.aws_secret_access_key is not None), \
+        assert (cfg.aws_access_key_id is not None and
+                cfg.aws_secret_access_key is not None), \
             'Must specify both aws key and secret'
-    else:
-        assert 'AWS_ACCESS_KEY_ID' in os.environ, \
-            'Missing AWS_ACCESS_KEY_ID config'
-        assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
-            'Missing AWS_SECRET_ACCESS_KEY config'
 
-def tilequeue_write(args):
-    assert_aws_config(args)
 
-    assert os.path.exists(args.expired_tiles_file), \
+def tilequeue_write(cfg):
+
+    assert_aws_config(cfg)
+
+    assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
 
-    queue = make_queue(args.queue_type, args.queue_name, args)
+    assert cfg.queue_name, 'Missing queue name'
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
     expired_tiles = []
-    with open(args.expired_tiles_file) as f:
+    with open(cfg.expired_tiles_file) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -261,27 +263,27 @@ def process_jobs_for_coord(coord, job_creator, store):
             job(store_fp)
 
 
-def tilequeue_process(args):
-    assert_aws_config(args)
+def tilequeue_process(cfg):
+    assert_aws_config(cfg)
 
-    assert os.path.exists(args.tilestache_config), \
+    assert os.path.exists(cfg.tilestache_config), \
         'Invalid tilestache config path'
 
-    formats = lookup_formats(args.output_formats)
+    formats = lookup_formats(cfg.output_formats)
 
-    queue = make_queue(args.queue_type, args.queue_name, args)
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
-    tilestache_config = parseConfigfile(args.tilestache_config)
+    tilestache_config = parseConfigfile(cfg.tilestache_config)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
     store = make_s3_store(
-        args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
-        path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+        cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
+        path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
 
     n_msgs = 0
     while True:
-        msgs = queue.read(max_to_read=1, timeout_seconds=args.sqs_read_timeout)
-        if not msgs and not args.daemon:
+        msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
+        if not msgs and not cfg.daemon:
             break
         for msg in msgs:
             coord = msg.coord
@@ -316,61 +318,61 @@ def uniquify_generator(generator):
         yield tile
 
 
-def tilequeue_seed(args):
-    if args.queue_type == 'sqs':
-        assert_aws_config(args)
+def tilequeue_seed(cfg):
+    if cfg.queue_type == 'sqs':
+        assert_aws_config(cfg)
 
-    if args.metro_extract_url:
-        assert args.filter_metro_zoom is not None, \
+    if cfg.metro_extract_url:
+        assert cfg.filter_metro_zoom is not None, \
             '--filter-metro-zoom is required when specifying a ' \
             'metro extract url'
-        assert args.filter_metro_zoom <= args.zoom_until
-        with closing(urlopen(args.metro_extract_url)) as fp:
+        assert cfg.filter_metro_zoom <= cfg.zoom_until
+        with closing(urlopen(cfg.metro_extract_url)) as fp:
             # will raise a MetroExtractParseError on failure
             metro_extracts = parse_metro_extract(fp)
         multiple_bounds = city_bounds(metro_extracts)
         filtered_tiles = tile_generator_for_multiple_bounds(
-            multiple_bounds, args.filter_metro_zoom, args.zoom_until)
+            multiple_bounds, cfg.filter_metro_zoom, cfg.zoom_until)
         # unique tiles will force storing a set in memory
-        if args.unique_tiles:
+        if cfg.unique_tiles:
             filtered_tiles = uniquify_generator(filtered_tiles)
-        unfiltered_end_zoom = args.filter_metro_zoom - 1
+        unfiltered_end_zoom = cfg.filter_metro_zoom - 1
     else:
-        assert not args.filter_metro_zoom, \
+        assert not cfg.filter_metro_zoom, \
             '--metro-extract-url is required when specifying ' \
             '--filter-metro-zoom'
         filtered_tiles = ()
-        unfiltered_end_zoom = args.zoom_until
+        unfiltered_end_zoom = cfg.zoom_until
 
-    assert args.zoom_start <= unfiltered_end_zoom
+    assert cfg.zoom_start <= unfiltered_end_zoom
 
-    unfiltered_tiles = seed_tiles(args.zoom_start, unfiltered_end_zoom)
+    unfiltered_tiles = seed_tiles(cfg.zoom_start, unfiltered_end_zoom)
 
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
-    queue = make_queue(args.queue_type, args.queue_name, args)
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
     n_tiles = tilequeue_seed_process(tile_generator, queue)
 
     print 'Queued %d tiles' % n_tiles
 
 
-def tilequeue_generate_tile(args):
-    tile_str = args.tile
+def tilequeue_generate_tile(cfg):
+    tile_str = cfg.tile
 
     coord = deserialize_coord(tile_str)
     assert coord is not None, 'Could not parse tile from %s' % tile_str
 
-    tilestache_config = parseConfigfile(args.tilestache_config)
-    formats = lookup_formats(args.output_formats)
+    tilestache_config = parseConfigfile(cfg.tilestache_config)
+    formats = lookup_formats(cfg.output_formats)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    if not args.s3_bucket:
-        store = make_tile_file_store(sys.stdout)
-    else:
+    if cfg.s3_bucket:
         store = make_s3_store(
-            args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
-            path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+            cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
+            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
+    else:
+        store = make_tile_file_store(sys.stdout)
 
     process_jobs_for_coord(coord, job_creator, store)
 
@@ -383,6 +385,7 @@ class TileArgumentParser(argparse.ArgumentParser):
         sys.stderr.write('error: %s\n' % message)
         self.print_help()
         sys.exit(2)
+
 
 def tilequeue_main(argv_args=None):
     if argv_args is None:
@@ -403,4 +406,5 @@ def tilequeue_main(argv_args=None):
         parser_func(subparser)
 
     args = parser.parse_args(argv_args)
-    args.func(args)
+    cfg = make_config_from_argparse(args)
+    args.func(cfg)

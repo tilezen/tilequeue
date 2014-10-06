@@ -21,6 +21,7 @@ setup(name='tilequeue',
           'boto',
           'ModestMaps',
           'TileStache',
+          'PyYAML',
       ],
       test_suite='tests',
       entry_points=dict(

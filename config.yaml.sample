@@ -1,0 +1,23 @@
+aws:
+  sqs:
+    name: <queue name>
+    timeout-seconds: 20
+  s3:
+    bucket: <name-of-bucket>
+    path: osm
+    reduced-redundancy: true
+  credentials:
+    aws_access_key_id = <aws_access_key_id>
+    aws_secret_access_key = <aws_secret_access_key>
+tiles:
+  metro-extract:
+    url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
+    zoom-filter: 11
+  unique: true
+  zoom-start: 0
+  zoom-until: 20
+  daemon: false
+  expired: <path/to/expired/tiles/file>
+tilestache:
+  config: <path/to/config/file>
+  formats: [json, vtm]
