@@ -1,3 +1,5 @@
+[![Circle CI](https://circleci.com/gh/mapzen/tilequeue/tree/master.png?style=badge)](https://circleci.com/gh/mapzen/tilequeue/tree/master)
+
 # Tilequeue
 
 Queue operations to manage the processes surrounding tile rendering.
