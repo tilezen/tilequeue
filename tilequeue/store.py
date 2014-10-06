@@ -29,6 +29,33 @@ class StubLayer(object):
         return self.layer_name
 
 
+class TileStdOut(object):
+    def __init__(self, key):
+        self.key = key
+        self.buffer = StringIO()
+
+    def write(self, *args):
+        self.buffer.write(*args)
+
+    def close(self):
+        print self.buffer.getvalue()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+
+class TileOut(object):
+
+    def output_fp(self, coord, format):
+        return TileStdOut(coord)
+
+
+def make_tile_file_store():
+    return TileOut()
+
 class Memory(object):
 
     def output_fp(self, coord, format):

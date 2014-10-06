@@ -120,13 +120,20 @@ Note:
 
 ##### Generate a single tile
 
-Given a coordinate on the command line, generate a tile and save it to
-S3. This can be useful to test that the processing part of the
+Given a coordinate on the command line, generate a tile. This can be useful to test that the processing part of the
 pipeline is working correctly.
 
      tilequeue generate-tile \
            --tile <zoom>/<column>/<row> \
            --tilestache-config <path/to/tilestache/config> \
+           --output-formats topojson
+
+Or you have it upload to s3 as well
+
+     tilequeue generate-tile-s3 \
+           --tile <zoom>/<column>/<row> \
+           --tilestache-config <path/to/tilestache/config> \
+           --output-formats topojson
            --s3-bucket <name-of-s3-bucket> \
            --s3-path osm \
            --s3-reduced-redundancy

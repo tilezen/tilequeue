@@ -6,6 +6,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import make_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
+from tilequeue.store import make_tile_file_store
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
@@ -180,9 +181,21 @@ def tilequeue_parser_seed(parser):
     return parser
 
 
-def tilequeue_parser_generate_tile(parser):
+def tilequeue_parser_generate_tile_s3(parser):
     parser = add_aws_cred_options(parser)
     parser = add_s3_options(parser)
+    parser = add_tilestache_config_options(parser)
+    parser = add_output_format_options(parser)
+    parser.add_argument('--tile',
+                        required=True,
+                        help='Tile coordinate used to generate a tile. Must '
+                        'be of the form: <zoom>/<column>/<row>',
+                        )
+    parser.set_defaults(func=tilequeue_generate_tile)
+    return parser
+
+
+def tilequeue_parser_generate_tile(parser):
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
     parser.add_argument('--tile',
@@ -206,7 +219,6 @@ def assert_aws_config(args):
             'Missing AWS_ACCESS_KEY_ID config'
         assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
             'Missing AWS_SECRET_ACCESS_KEY config'
-
 
 def tilequeue_write(args):
     assert_aws_config(args)
@@ -364,9 +376,12 @@ def tilequeue_generate_tile(args):
     formats = lookup_formats(args.output_formats)
     job_creator = RenderJobCreator(tilestache_config, formats)
 
-    store = make_s3_store(
-        args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
-        path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+    if 's3_bucket' in args:
+        store = make_s3_store(
+            args.s3_bucket, args.aws_access_key_id, args.aws_secret_access_key,
+            path=args.s3_path, reduced_redundancy=args.s3_reduced_redundancy)
+    else:
+        store = make_tile_file_store()
 
     process_jobs_for_coord(coord, job_creator, store)
 
@@ -391,6 +406,7 @@ def tilequeue_main(argv_args=None):
         ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
+        ('generate-tile-s3', tilequeue_parser_generate_tile_s3),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
