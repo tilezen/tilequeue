@@ -113,6 +113,7 @@ def tilequeue_parser_write(parser):
     parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
+    parser = add_logging_options(parser)
     parser.add_argument('--expired-tiles-file',
                         help='Path to file containing list of expired tiles. '
                              'Should be one per line, <zoom>/<column>/<row>',
@@ -125,19 +126,21 @@ def tilequeue_parser_read(parser):
     parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
+    parser = add_logging_options(parser)
     parser.set_defaults(func=tilequeue_read)
     return parser
 
 
 def tilequeue_read(cfg):
     assert cfg.queue_name, 'Missing queue name'
+    logger = make_logger(cfg, 'read')
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
     if not msgs:
-        print 'No messages found on queue: %s' % cfg.queue_name
+        logger.info('No messages found on queue: %s' % cfg.queue_name)
     for msg in msgs:
         coord = msg.coord
-        print 'Received tile: %s' % serialize_coord(coord)
+        logger.info('Received tile: %s' % serialize_coord(coord))
 
 
 def tilequeue_parser_process(parser):
@@ -162,6 +165,7 @@ def tilequeue_parser_seed(parser):
     parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
+    parser = add_logging_options(parser)
     parser.add_argument('--zoom-start',
                         type=int,
                         default=0,
@@ -202,6 +206,7 @@ def tilequeue_parser_generate_tile(parser):
     parser = add_s3_options(parser)
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
+    parser = add_logging_options(parser)
     parser.add_argument('--tile',
                         help='Tile coordinate used to generate a tile. Must '
                         'be of the form: <zoom>/<column>/<row>',
@@ -241,20 +246,22 @@ def tilequeue_write(cfg):
                 continue
             expired_tiles.append(coord)
 
-    print 'Number of expired tiles: %d' % len(expired_tiles)
+    logger = make_logger(cfg, 'write')
+
+    logger.info('Number of expired tiles: %d' % len(expired_tiles))
 
     exploded_coords = explode_with_parents(expired_tiles)
-    print ('Number of total expired tiles with all parents: %d' %
-           len(exploded_coords))
+    logger.info('Number of total expired tiles with all parents: %d' %
+                len(exploded_coords))
 
-    print 'Queuing ... '
+    logger.info('Queuing ... ')
 
     # exploded_coords is a set, but enqueue_batch expects a list for slicing
     exploded_coords = list(exploded_coords)
     queue.enqueue_batch(exploded_coords)
 
-    print 'Queuing ... Done'
-    print 'Queued %d tiles' % len(exploded_coords)
+    logger.info('Queuing ... Done')
+    logger.info('Queued %d tiles' % len(exploded_coords))
 
 
 def lookup_formats(format_extensions):
@@ -298,6 +305,11 @@ def tilequeue_process(cfg):
     store = make_s3_store(
         cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
         path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
+
+    if cfg.daemon:
+        logger.info('Starting tilequeue processing in daemon mode')
+    else:
+        logger.info('Starting tilequeue processing, not in daemon mode')
 
     n_msgs = 0
     while True:
@@ -371,12 +383,17 @@ def tilequeue_seed(cfg):
 
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
+    logger = make_logger(cfg, 'seed')
+
+    logger.info('Beginning to enqueue seed tiles')
+
     n_tiles = tilequeue_seed_process(tile_generator, queue)
 
-    print 'Queued %d tiles' % n_tiles
+    logger.info('Queued %d tiles' % n_tiles)
 
 
 def tilequeue_generate_tile(cfg):
+    assert cfg.tile, 'Missing tile coordinate'
     tile_str = cfg.tile
 
     coord = deserialize_coord(tile_str)
@@ -396,7 +413,8 @@ def tilequeue_generate_tile(cfg):
     process_jobs_for_coord(coord, job_creator, store)
 
     sys.stdout = open("/dev/stdout", "w")
-    print 'Generated tile for: %s' % tile_str
+    logger = make_logger(cfg, 'generate_tile')
+    logger.info('Generated tile for: %s' % tile_str)
 
 
 class TileArgumentParser(argparse.ArgumentParser):

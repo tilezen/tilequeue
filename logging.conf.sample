@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process
+keys=root,process,seed,write,read,generate_tile
 
 [handlers]
 keys=consoleHandler
@@ -15,6 +15,30 @@ handlers=consoleHandler
 level=INFO
 handlers=consoleHandler
 qualName=process
+propagate=0
+
+[logger_seed]
+level=INFO
+handlers=consoleHandler
+qualName=seed
+propagate=0
+
+[logger_write]
+level=INFO
+handlers=consoleHandler
+qualName=write
+propagate=0
+
+[logger_read]
+level=INFO
+handlers=consoleHandler
+qualName=read
+propagate=0
+
+[logger_generate_tile]
+level=INFO
+handlers=consoleHandler
+qualName=generate_tile
 propagate=0
 
 [handler_consoleHandler]
