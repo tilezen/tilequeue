@@ -102,10 +102,11 @@ def merge_cfg(dest, source):
     return dest
 
 
-def make_config_from_argparse(args):
+def make_config_from_argparse(args, opencfg=open):
+    # opencfg for testing
     cfg = default_yml_config()
     if args.config is not None:
-        with open(args.config) as config_fp:
+        with opencfg(args.config) as config_fp:
             yml_data = load(config_fp.read())
             cfg = merge_cfg(cfg, yml_data)
     return CliConfiguration(args, cfg)

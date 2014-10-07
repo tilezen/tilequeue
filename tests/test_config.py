@@ -37,3 +37,51 @@ class TestConfigMerge(unittest.TestCase):
         self.assertEqual(
             dict(foo=dict(bar='baz')),
             self._call_fut(dest, src))
+
+
+class TestCliConfiguration(unittest.TestCase):
+
+    def _call_fut(self, args, config_dict):
+        from tilequeue.config import make_config_from_argparse
+        from yaml import dump
+        raw_yaml = dump(config_dict)
+        return make_config_from_argparse(
+            args,
+            opencfg=self._fp(raw_yaml))
+
+    def _fp(self, raw_yaml):
+        # stub out a file object that has __enter__, __exit__ methods
+        from StringIO import StringIO
+        from contextlib import closing
+        return lambda filename: closing(StringIO(raw_yaml))
+
+    def _args(self, data):
+        # create an object with data as the attributes
+        return type('mock-args', (object,), data)
+
+    def _assert_cfg(self, cfg, to_check):
+        # cfg is the config object to validate
+        # to_check is a dict of key, values to check in cfg
+        for k, v in to_check.items():
+            cfg_val = getattr(cfg, k)
+            self.assertEqual(v, cfg_val)
+
+    def test_no_config(self):
+        cfg = self._call_fut(
+            self._args(dict(config=None)), {})
+        # just assert some of the defaults are set
+        self._assert_cfg(cfg,
+                         dict(s3_path='osm',
+                              output_formats=('json', 'vtm'),
+                              zoom_start=0,
+                              zoom_until=0))
+
+    def test_config_osm_path_modified(self):
+        cfg = self._call_fut(
+            self._args(dict(config='config')),
+            dict(aws=dict(s3=dict(path='custompath'))))
+        self._assert_cfg(cfg,
+                         dict(s3_path='custompath',
+                              output_formats=('json', 'vtm'),
+                              zoom_start=0,
+                              zoom_until=0))
