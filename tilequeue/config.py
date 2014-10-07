@@ -45,6 +45,7 @@ class CliConfiguration(object):
                                            'tiles metro-extract url')
         self.daemon = self._cfg('daemon', 'tiles daemon', False)
         self.tile = getattr(self.args, 'tile', None)
+        self.logconfig = self._cfg('logconfig', 'logging config')
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -88,7 +89,10 @@ def default_yml_config():
         'tilestache': {
             'config': None,
             'formats': ('json', 'vtm'),
-        }
+        },
+        'logging': {
+            'config': None
+        },
     }
 
 

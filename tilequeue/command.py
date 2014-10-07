@@ -17,6 +17,8 @@ from tilequeue.tile import tile_generator_for_multiple_bounds
 from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
+import logging
+import logging.config
 import os
 import sys
 
@@ -83,6 +85,13 @@ def add_output_format_options(parser):
     return parser
 
 
+def add_logging_options(parser):
+    parser.add_argument('--logconfig',
+                        help='Path to python logging config file.',
+                        )
+    return parser
+
+
 def make_queue(queue_type, queue_name, cfg):
     if queue_type == 'sqs':
         return make_sqs_queue(
@@ -138,6 +147,7 @@ def tilequeue_parser_process(parser):
     parser = add_s3_options(parser)
     parser = add_tilestache_config_options(parser)
     parser = add_output_format_options(parser)
+    parser = add_logging_options(parser)
     parser.add_argument('--daemon',
                         action='store_true',
                         default=False,
@@ -263,8 +273,17 @@ def process_jobs_for_coord(coord, job_creator, store):
             job(store_fp)
 
 
+def make_logger(cfg, logger_name):
+    if hasattr(cfg, 'logconfig'):
+        logging.config.fileConfig(cfg.logconfig)
+    logger = logging.getLogger(logger_name)
+    return logger
+
+
 def tilequeue_process(cfg):
     assert_aws_config(cfg)
+
+    logger = make_logger(cfg, 'process')
 
     assert os.path.exists(cfg.tilestache_config), \
         'Invalid tilestache config path'
@@ -288,13 +307,13 @@ def tilequeue_process(cfg):
         for msg in msgs:
             coord = msg.coord
             coord_str = serialize_coord(coord)
-            print 'processing %s ...' % coord_str
+            logger.info('processing %s ...' % coord_str)
             process_jobs_for_coord(coord, job_creator, store)
             queue.job_done(msg.message_handle)
-            print 'processing %s ... done' % coord_str
+            logger.info('processing %s ... done' % coord_str)
             n_msgs += 1
 
-    print 'processed %d messages' % n_msgs
+    logger.info('processed %d messages' % n_msgs)
 
 
 def tilequeue_seed_process(tile_generator, queue):

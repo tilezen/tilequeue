@@ -1,0 +1,27 @@
+[loggers]
+keys=root,process
+
+[handlers]
+keys=consoleHandler
+
+[formatters]
+keys=simpleFormatter
+
+[logger_root]
+level=WARNING
+handlers=consoleHandler
+
+[logger_process]
+level=INFO
+handlers=consoleHandler
+qualName=process
+propagate=0
+
+[handler_consoleHandler]
+class=StreamHandler
+formatter=simpleFormatter
+args=(sys.stdout,)
+
+[formatter_simpleFormatter]
+format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+datefmt=

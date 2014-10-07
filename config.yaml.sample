@@ -21,3 +21,7 @@ tiles:
 tilestache:
   config: <path/to/config/file>
   formats: [json, vtm]
+logging:
+  # logging.conf on this page:
+  # https://docs.python.org/2/howto/logging.html#logging-basic-tutorial
+  config: <path/to/logging/config>
