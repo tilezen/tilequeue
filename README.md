@@ -41,8 +41,10 @@ metro extract areas.
 
 ## Installation
 
-    pip install Shapely protobuf
-    pip install --allow-external PIL --allow-unverified PIL git+https://github.com/mapzen/TileStache@integration-1
+Optionally, create a virtualenv and activate it.
+
+    pip install Shapely protobuf Pillow
+    pip install git+https://github.com/mapzen/TileStache@integration-1
     python setup.py develop
 
 ## Running tests
