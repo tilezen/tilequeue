@@ -34,6 +34,7 @@ setup(name='tilequeue',
           'ModestMaps',
           'TileStache',
           'PyYAML',
+          'redis',
       ],
       test_suite='tests',
       entry_points=dict(

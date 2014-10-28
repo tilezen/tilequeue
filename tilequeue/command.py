@@ -224,6 +224,105 @@ def assert_aws_config(cfg):
             'Must specify both aws key and secret'
 
 
+def add_redis_options(parser):
+    parser.add_argument('--redis-host',
+                        default='localhost',
+                        help='Redis host',
+                        )
+    parser.add_argument('--redis-port',
+                        type=int,
+                        default=6379,
+                        help='Redis port',
+                        )
+    parser.add_argument('--redis-db',
+                        type=int,
+                        default=0,
+                        help='Redis db',
+                        )
+    parser.add_argument('--redis-cache-set-key',
+                        help='Redis key name of cache coordinates',
+                        )
+    parser.add_argument('--redis-diff-set-key',
+                        help='Redis key name of diff coordinates',
+                        )
+    return parser
+
+
+def tilequeue_parser_cache_index_diffs_load(parser):
+    parser = add_config_options(parser)
+    parser = add_redis_options(parser)
+    parser.set_defaults(func=tilequeue_cache_index_diffs_load)
+    return parser
+
+
+def tilequeue_parser_cache_index_diffs_intersect(parser):
+    parser = add_config_options(parser)
+    parser = add_redis_options(parser)
+    parser.set_defaults(func=tilequeue_cache_index_diffs_intersect)
+    return parser
+
+
+def tilequeue_parser_cache_index_diffs_remove(parser):
+    parser = add_config_options(parser)
+    parser = add_redis_options(parser)
+    parser.set_defaults(func=tilequeue_cache_index_diffs_remove)
+    return parser
+
+
+def assert_redis_config(cfg):
+    assert cfg.redis_host, 'Missing redis host'
+    assert cfg.redis_port, 'Missing redis port'
+    assert cfg.redis_cache_set_key, 'Missing redis cache set key name'
+    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
+
+
+def create_coords_generator_from_tiles_file(fp, logger=None):
+    for line in fp:
+        line = line.strip()
+        if not line:
+            continue
+        coord = parse_expired_coord_string(line)
+        if coord is None:
+            if logger is not None:
+                logger.warning('Could not parse coordinate from line: ' % line)
+            continue
+        yield coord
+
+
+def make_redis_cache_index(cfg):
+    assert_redis_config(cfg)
+    from redis import StrictRedis
+    from tilequeue.cache import RedisCacheIndex
+    redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
+    redis_cache_index = RedisCacheIndex(redis_client, cfg.redis_cache_set_key)
+    return redis_cache_index
+
+
+def tilequeue_cache_index_diffs_load(cfg):
+    assert cfg.expired_tiles_file, 'Missing expired tiles file'
+    assert os.path.exists(cfg.expired_tiles_file), \
+        'Invalid expired tiles path'
+    redis_cache_index = make_redis_cache_index(cfg)
+    with open(cfg.expired_tiles_file) as fp:
+        expired_tiles = create_coords_generator_from_tiles_file(fp)
+        exploded_coords = explode_with_parents(expired_tiles)
+
+    redis_cache_index.write_coords_redis_protocol(
+        sys.stdout, cfg.redis_diff_set_key, exploded_coords)
+
+
+def tilequeue_cache_index_diffs_intersect(cfg):
+    redis_cache_index = make_redis_cache_index(cfg)
+    coords = redis_cache_index.find_intersection(cfg.redis_diff_set_key)
+    for coord in coords:
+        print serialize_coord(coord)
+
+
+def tilequeue_cache_index_diffs_remove(cfg):
+    redis_cache_index = make_redis_cache_index(cfg)
+    redis_cache_index.remove_key(cfg.redis_diff_set_key)
+
+
 def tilequeue_write(cfg):
 
     assert_aws_config(cfg)
@@ -234,25 +333,13 @@ def tilequeue_write(cfg):
     assert cfg.queue_name, 'Missing queue name'
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
-    expired_tiles = []
-    with open(cfg.expired_tiles_file) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            coord = parse_expired_coord_string(line)
-            if coord is None:
-                print 'Could not parse coordinate from line: ' % line
-                continue
-            expired_tiles.append(coord)
-
     logger = make_logger(cfg, 'write')
 
-    logger.info('Number of expired tiles: %d' % len(expired_tiles))
-
-    exploded_coords = explode_with_parents(expired_tiles)
-    logger.info('Number of total expired tiles with all parents: %d' %
-                len(exploded_coords))
+    with open(cfg.expired_tiles_file) as fp:
+        expired_tiles = create_coords_generator_from_tiles_file(fp, logger)
+        exploded_coords = explode_with_parents(expired_tiles)
+        logger.info('Number of total expired tiles with all parents: %d' %
+                    len(exploded_coords))
 
     logger.info('Queuing ... ')
 
@@ -437,6 +524,10 @@ def tilequeue_main(argv_args=None):
         ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
+        ('cache-index-diffs-load', tilequeue_parser_cache_index_diffs_load),
+        ('cache-index-diffs-intersect',
+         tilequeue_parser_cache_index_diffs_intersect),
+        ('cache-index-diffs-remove', tilequeue_parser_cache_index_diffs_remove),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

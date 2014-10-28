@@ -46,6 +46,13 @@ class CliConfiguration(object):
         self.daemon = self._cfg('daemon', 'tiles daemon', False)
         self.tile = getattr(self.args, 'tile', None)
         self.logconfig = self._cfg('logconfig', 'logging config')
+        self.redis_host = self._cfg('redis_host', 'redis host')
+        self.redis_port = self._cfg('redis_port', 'redis port')
+        self.redis_db = self._cfg('redis_db', 'redis db', 0)
+        self.redis_cache_set_key = self._cfg('redis_cache_set_key',
+                                             'redis cache-set-key')
+        self.redis_diff_set_key = self._cfg('redis_diff_set_key',
+                                            'redis diff-set-key')
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -92,6 +99,13 @@ def default_yml_config():
         },
         'logging': {
             'config': None
+        },
+        'redis': {
+            'host': 'localhost',
+            'port': 6379,
+            'db': 0,
+            'cache-set-key': 'tilestache.cache',
+            'diff-set-key': None,
         },
     }
 
