@@ -161,11 +161,7 @@ def tilequeue_parser_process(parser):
     return parser
 
 
-def tilequeue_parser_seed(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
+def add_seed_options(parser):
     parser.add_argument('--zoom-start',
                         type=int,
                         default=0,
@@ -196,6 +192,15 @@ def tilequeue_parser_seed(parser):
                         'duplicate tiles for the overlaps. This flag ensures '
                         'that the tiles will be unique.',
                         )
+    return parser
+
+
+def tilequeue_parser_seed(parser):
+    parser = add_config_options(parser)
+    parser = add_aws_cred_options(parser)
+    parser = add_queue_options(parser)
+    parser = add_logging_options(parser)
+    parser = add_seed_options(parser)
     parser.set_defaults(func=tilequeue_seed)
     return parser
 
@@ -267,6 +272,22 @@ def tilequeue_parser_cache_index_diffs_remove(parser):
     parser = add_redis_options(parser)
     parser.set_defaults(func=tilequeue_cache_index_diffs_remove)
     return parser
+
+
+def tilequeue_parser_cache_index_seed(parser):
+    parser = add_config_options(parser)
+    parser = add_redis_options(parser)
+    parser = add_seed_options(parser)
+    parser.set_defaults(func=tilequeue_cache_index_seed)
+    return parser
+
+
+def tilequeue_cache_index_seed(cfg):
+    tile_generator = make_seed_tile_generator(cfg)
+    redis_cache_index = make_redis_cache_index(cfg)
+    out = sys.stdout
+    redis_cache_index.write_coords_redis_protocol(
+        out, cfg.redis_cache_set_key, tile_generator)
 
 
 def assert_redis_config(cfg):
@@ -436,10 +457,7 @@ def uniquify_generator(generator):
         yield tile
 
 
-def tilequeue_seed(cfg):
-    if cfg.queue_type == 'sqs':
-        assert_aws_config(cfg)
-
+def make_seed_tile_generator(cfg):
     if cfg.metro_extract_url:
         assert cfg.filter_metro_zoom is not None, \
             '--filter-metro-zoom is required when specifying a ' \
@@ -468,10 +486,17 @@ def tilequeue_seed(cfg):
 
     tile_generator = chain(unfiltered_tiles, filtered_tiles)
 
+    return tile_generator
+
+
+def tilequeue_seed(cfg):
+    if cfg.queue_type == 'sqs':
+        assert_aws_config(cfg)
+
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    tile_generator = make_seed_tile_generator(cfg)
 
     logger = make_logger(cfg, 'seed')
-
     logger.info('Beginning to enqueue seed tiles')
 
     n_tiles = tilequeue_seed_process(tile_generator, queue)
@@ -528,6 +553,7 @@ def tilequeue_main(argv_args=None):
         ('cache-index-diffs-intersect',
          tilequeue_parser_cache_index_diffs_intersect),
         ('cache-index-diffs-remove', tilequeue_parser_cache_index_diffs_remove),
+        ('cache-index-seed', tilequeue_parser_cache_index_seed),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

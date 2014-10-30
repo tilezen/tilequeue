@@ -11,12 +11,12 @@ class RedisCacheIndex(object):
         redis_coord_value = serialize_coord_to_redis_value(coord)
         self.redis_client.sadd(self.cache_set_key, redis_coord_value)
 
-    def write_coords_redis_protocol(self, out, diff_set_key, diff_coords):
-        # diff_coords is expected to be a generated of coord objects
+    def write_coords_redis_protocol(self, out, set_key, coords):
+        # coords is expected to be an iterable of coord objects
         # this is meant to be called with out sent to stdout and then piped to
         # redis-cli --pipe
-        key_len = len(diff_set_key)
-        for coord in diff_coords:
+        key_len = len(set_key)
+        for coord in coords:
             redis_value = serialize_coord_to_redis_value(coord)
 
             # http://redis.io/topics/protocol
@@ -32,7 +32,7 @@ class RedisCacheIndex(object):
                 '$%(val_len)d\r\n%(val)s\r\n' % dict(
                     key_len=key_len,
                     val_len=val_len,
-                    key=diff_set_key,
+                    key=set_key,
                     val=redis_value,
                 )
             )
