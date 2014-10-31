@@ -25,3 +25,9 @@ logging:
   # logging.conf on this page:
   # https://docs.python.org/2/howto/logging.html#logging-basic-tutorial
   config: <path/to/logging/config>
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  cache-set-key: tilestache.cache
+  diff-set-key: tilestache.difflist
