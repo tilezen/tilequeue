@@ -44,14 +44,15 @@ def generate_parents(coord):
 
 
 def explode_with_parents(coords):
-    s = set()
+    coords_at_parent_zoom = set()
     for coord in coords:
-        s.add(coord)
-        for parent in generate_parents(coord):
-            if parent in s:
-                break
-            s.add(parent)
-    return s
+        yield coord
+        if coord.zoom == 0:
+            return
+        parent_coord = coord.zoomTo(coord.zoom - 1).container()
+        coords_at_parent_zoom.add(parent_coord)
+    for coord in explode_with_parents(coords_at_parent_zoom):
+        yield coord
 
 
 def n_tiles_in_zoom(zoom):

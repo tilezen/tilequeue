@@ -97,3 +97,36 @@ class TestTileGeneration(unittest.TestCase):
         self.assertEqual(10, len(tiles))
         self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(8, len(filter(self._is_zoom(2), tiles)))
+
+
+class TestTileParentGeneration(unittest.TestCase):
+
+    def _call_fut(self, coords):
+        from tilequeue.tile import explode_with_parents
+        return explode_with_parents(coords)
+
+    def test_top_tile(self):
+        from ModestMaps.Core import Coordinate
+        coords = [Coordinate(0, 0, 0)]
+        parents = list(self._call_fut(coords))
+        self.assertEqual(coords, list(parents))
+
+    def test_multiple(self):
+        from ModestMaps.Core import Coordinate
+        coords = [
+            Coordinate(1, 1, 2),
+            Coordinate(3, 2, 2),
+            Coordinate(2, 3, 2),
+        ]
+        parents = list(self._call_fut(coords))
+        parents.sort()
+        print parents
+        exp = [
+            Coordinate(0, 0, 0),
+            Coordinate(0, 0, 1),
+            Coordinate(1, 1, 1),
+            Coordinate(1, 1, 2),
+            Coordinate(2, 3, 2),
+            Coordinate(3, 2, 2),
+        ]
+        self.assertEqual(exp, parents)
