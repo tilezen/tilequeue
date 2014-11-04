@@ -120,7 +120,6 @@ class TestTileParentGeneration(unittest.TestCase):
         ]
         parents = list(self._call_fut(coords))
         parents.sort()
-        print parents
         exp = [
             Coordinate(0, 0, 0),
             Coordinate(0, 0, 1),
