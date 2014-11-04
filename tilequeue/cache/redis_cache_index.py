@@ -66,7 +66,7 @@ class RedisCacheIndex(object):
 # This is how the data is encoded into a 64 bit integer:
 # 9 bits unused | 25 bits column | 25 bits row | 5 bits zoom
 zoom_mask = int('1' * 5, 2)
-row_mask = int(('1' * 5), 2)
+row_mask = int(('1' * 25), 2)
 col_mask = row_mask
 row_offset = 5
 col_offset = 25 + 5

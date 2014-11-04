@@ -29,3 +29,13 @@ class RedisSerializeTest(unittest.TestCase):
                 coord,
                 deserialize_redis_value_to_coord(
                     serialize_coord_to_redis_value(coord)))
+
+    def test_serialized_examples(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.cache import deserialize_redis_value_to_coord
+        coord = Coordinate(zoom=20, column=1002463, row=312816)
+        self.assertEquals(
+            coord,
+            deserialize_redis_value_to_coord(
+                serialize_coord_to_redis_value(coord)))
