@@ -435,7 +435,7 @@ def process_jobs_for_coord(coord, job_creator, store):
 
 
 def make_logger(cfg, logger_name):
-    if hasattr(cfg, 'logconfig'):
+    if getattr(cfg, 'logconfig') is not None:
         logging.config.fileConfig(cfg.logconfig)
     logger = logging.getLogger(logger_name)
     return logger
