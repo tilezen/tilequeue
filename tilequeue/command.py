@@ -10,6 +10,7 @@ from tilequeue.store import make_s3_store
 from tilequeue.store import make_tile_file_store
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_with_parents
+from tilequeue.tile import explode_with_parents_non_unique
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
@@ -109,15 +110,20 @@ def make_queue(queue_type, queue_name, cfg):
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
+def add_expired_tiles_options(parser):
+    parser.add_argument('--expired-tiles-file',
+                        help='Path to file containing list of expired tiles. '
+                             'Should be one per line, <zoom>/<column>/<row>',
+                        )
+    return parser
+
+
 def tilequeue_parser_write(parser):
     parser = add_config_options(parser)
     parser = add_aws_cred_options(parser)
     parser = add_queue_options(parser)
     parser = add_logging_options(parser)
-    parser.add_argument('--expired-tiles-file',
-                        help='Path to file containing list of expired tiles. '
-                             'Should be one per line, <zoom>/<column>/<row>',
-                        )
+    parser = add_expired_tiles_options(parser)
     parser.set_defaults(func=tilequeue_write)
     return parser
 
@@ -282,12 +288,52 @@ def tilequeue_parser_cache_index_seed(parser):
     return parser
 
 
+def tilequeue_parser_cache_index_tiles(parser):
+    parser = add_config_options(parser)
+    parser = add_redis_options(parser)
+    parser.set_defaults(func=tilequeue_cache_index_tiles)
+    return parser
+
+
+def tilequeue_parser_explode(parser):
+    parser = add_config_options(parser)
+    parser = add_expired_tiles_options(parser)
+    parser.add_argument('--explode-until',
+                        type=int,
+                        help='Generate tiles up until a particular zoom',
+                        )
+    parser.set_defaults(func=tilequeue_explode)
+    return parser
+
+
+def tilequeue_explode(cfg):
+    assert cfg.expired_tiles_file, 'Missing expired tiles file'
+    assert os.path.exists(cfg.expired_tiles_file), \
+        'Invalid expired tiles path'
+    with open(cfg.expired_tiles_file) as fp:
+        expired_tiles = create_coords_generator_from_tiles_file(fp)
+        exploded_coords = explode_with_parents_non_unique(
+            expired_tiles, until=cfg.explode_until)
+        for coord in exploded_coords:
+            coord_str = serialize_coord(coord)
+            print coord_str
+
+
 def tilequeue_cache_index_seed(cfg):
     tile_generator = make_seed_tile_generator(cfg)
     redis_cache_index = make_redis_cache_index(cfg)
     out = sys.stdout
     redis_cache_index.write_coords_redis_protocol(
         out, cfg.redis_cache_set_key, tile_generator)
+
+
+def tilequeue_cache_index_tiles(cfg):
+    redis_cache_index = make_redis_cache_index(cfg)
+    out = sys.stdout
+    coords = redis_cache_index.cache_coords()
+    for coord in coords:
+        coord_str = serialize_coord(coord)
+        out.write(coord_str + '\n')
 
 
 def assert_redis_config(cfg):
@@ -326,10 +372,10 @@ def tilequeue_cache_index_diffs_load(cfg):
     redis_cache_index = make_redis_cache_index(cfg)
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
-        exploded_coords = explode_with_parents(expired_tiles)
-
-    redis_cache_index.write_coords_redis_protocol(
-        sys.stdout, cfg.redis_diff_set_key, exploded_coords)
+        #exploded_coords = explode_with_parents(expired_tiles)
+        exploded_coords = explode_with_parents_non_unique(expired_tiles)
+        redis_cache_index.write_coords_redis_protocol(
+            sys.stdout, cfg.redis_diff_set_key, exploded_coords)
 
 
 def tilequeue_cache_index_diffs_intersect(cfg):
@@ -549,11 +595,14 @@ def tilequeue_main(argv_args=None):
         ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
+        ('explode', tilequeue_parser_explode),
         ('cache-index-diffs-load', tilequeue_parser_cache_index_diffs_load),
         ('cache-index-diffs-intersect',
          tilequeue_parser_cache_index_diffs_intersect),
-        ('cache-index-diffs-remove', tilequeue_parser_cache_index_diffs_remove),
+        ('cache-index-diffs-remove',
+         tilequeue_parser_cache_index_diffs_remove),
         ('cache-index-seed', tilequeue_parser_cache_index_seed),
+        ('cache-index-tiles', tilequeue_parser_cache_index_tiles),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

@@ -43,16 +43,23 @@ def generate_parents(coord):
         yield c
 
 
-def explode_with_parents(coords):
+def explode_with_parents(coords, until=0):
     coords_at_parent_zoom = set()
     for coord in coords:
         yield coord
-        if coord.zoom == 0:
-            return
-        parent_coord = coord.zoomTo(coord.zoom - 1).container()
-        coords_at_parent_zoom.add(parent_coord)
-    for coord in explode_with_parents(coords_at_parent_zoom):
-        yield coord
+        if coord.zoom > until:
+            parent_coord = coord.zoomTo(coord.zoom - 1).container()
+            coords_at_parent_zoom.add(parent_coord)
+    if coords_at_parent_zoom:
+        for coord in explode_with_parents(coords_at_parent_zoom, until):
+            yield coord
+
+
+def explode_with_parents_non_unique(coords, until=0):
+    for coord in coords:
+        while coord.zoom >= until:
+            yield coord
+            coord = coord.zoomTo(coord.zoom - 1).container()
 
 
 def n_tiles_in_zoom(zoom):

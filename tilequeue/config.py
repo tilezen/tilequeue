@@ -53,6 +53,8 @@ class CliConfiguration(object):
                                              'redis cache-set-key')
         self.redis_diff_set_key = self._cfg('redis_diff_set_key',
                                             'redis diff-set-key')
+        self.explode_until = self._cfg('explode_until',
+                                       'tiles explode-until')
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -90,6 +92,7 @@ def default_yml_config():
             'unique': False,
             'zoom-start': 0,
             'zoom-until': 0,
+            'explode-until': 0,
             'daemon': False,
             'expired': None,
         },
