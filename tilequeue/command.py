@@ -41,7 +41,7 @@ def add_queue_options(parser):
                         )
     parser.add_argument('--queue-type',
                         default='sqs',
-                        choices=('sqs', 'mem', 'file'),
+                        choices=('sqs', 'mem', 'file', 'stdout'),
                         help='Queue type, useful to change for testing.',
                         )
     parser.add_argument('--sqs-read-timeout',
@@ -106,6 +106,10 @@ def make_queue(queue_type, queue_name, cfg):
         from tilequeue.queue import OutputFileQueue
         fp = open(queue_name, 'w')
         return OutputFileQueue(fp)
+    elif queue_type == 'stdout':
+        # only support writing
+        from tilequeue.queue import OutputFileQueue
+        return OutputFileQueue(sys.stdout)
     else:
         raise ValueError('Unknown queue type: %s' % queue_type)
 
