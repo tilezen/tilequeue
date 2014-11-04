@@ -16,6 +16,7 @@ tiles:
   unique: true
   zoom-start: 0
   zoom-until: 20
+  explode-until: 0
   daemon: false
   expired: <path/to/expired/tiles/file>
 tilestache:
