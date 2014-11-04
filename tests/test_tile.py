@@ -129,3 +129,47 @@ class TestTileParentGeneration(unittest.TestCase):
             Coordinate(3, 2, 2),
         ]
         self.assertEqual(exp, parents)
+
+
+class TestTileSerializedParentGeneration(unittest.TestCase):
+
+    def _call_fut(self, serialized_coords, until=0):
+        from tilequeue.tile import explode_serialized_coords
+        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.cache import deserialize_redis_value_to_coord
+        return explode_serialized_coords(
+            serialized_coords, until,
+            serialize_coord_to_redis_value, deserialize_redis_value_to_coord)
+
+    def test_top_tile(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.command import deserialize_coords
+        from tilequeue.command import serialize_coords
+        coords = [Coordinate(0, 0, 0)]
+        serialized_coords = serialize_coords(coords)
+        serialized_parents = list(self._call_fut(serialized_coords))
+        deserialized_coords = deserialize_coords(serialized_parents)
+        self.assertEqual(coords, list(deserialized_coords))
+
+    def test_multiple(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.command import deserialize_coords
+        from tilequeue.command import serialize_coords
+        coords = [
+            Coordinate(1, 1, 2),
+            Coordinate(3, 2, 2),
+            Coordinate(2, 3, 2),
+        ]
+        serialized_coords = serialize_coords(coords)
+        serialized_parents = self._call_fut(serialized_coords)
+        deserialized_coords = list(deserialize_coords(serialized_parents))
+        deserialized_coords.sort()
+        exp = [
+            Coordinate(0, 0, 0),
+            Coordinate(0, 0, 1),
+            Coordinate(1, 1, 1),
+            Coordinate(1, 1, 2),
+            Coordinate(2, 3, 2),
+            Coordinate(3, 2, 2),
+        ]
+        self.assertEqual(exp, deserialized_coords)

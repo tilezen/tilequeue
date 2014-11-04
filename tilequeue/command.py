@@ -1,5 +1,8 @@
 from contextlib import closing
 from itertools import chain
+from tilequeue.cache import deserialize_redis_value_to_coord
+from tilequeue.cache import RedisCacheIndex
+from tilequeue.cache import serialize_coord_to_redis_value
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
@@ -9,6 +12,7 @@ from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
 from tilequeue.store import make_tile_file_store
 from tilequeue.tile import deserialize_coord
+from tilequeue.tile import explode_serialized_coords
 from tilequeue.tile import explode_with_parents
 from tilequeue.tile import explode_with_parents_non_unique
 from tilequeue.tile import parse_expired_coord_string
@@ -310,17 +314,43 @@ def tilequeue_parser_explode(parser):
     return parser
 
 
+def serialize_coords(coords):
+    for coord in coords:
+        serialized_coord = serialize_coord_to_redis_value(coord)
+        yield serialized_coord
+
+
+def deserialize_coords(serialized_coords):
+    for serialized_coord in serialized_coords:
+        coord = deserialize_redis_value_to_coord(serialized_coord)
+        yield coord
+
+
 def tilequeue_explode(cfg):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
-        exploded_coords = explode_with_parents_non_unique(
-            expired_tiles, until=cfg.explode_until)
-        for coord in exploded_coords:
+
+        # using serialized values in memory,
+        # but need to pay for serialize/deserialize time
+        serialized_coords = serialize_coords(expired_tiles)
+        exploded_coords = explode_serialized_coords(
+            serialized_coords, cfg.explode_until,
+            serialize_fn=serialize_coord_to_redis_value,
+            deserialize_fn=deserialize_redis_value_to_coord)
+        for serialized_coord in exploded_coords:
+            coord = deserialize_redis_value_to_coord(serialized_coord)
             coord_str = serialize_coord(coord)
             print coord_str
+
+        # use direct coords
+        # exploded_coords = explode_with_parents(
+        #     expired_tiles, cfg.explode_until)
+        # for coord in exploded_coords:
+        #     coord_str = serialize_coord(coord)
+        #     print coord_str
 
 
 def tilequeue_cache_index_seed(cfg):
@@ -363,7 +393,6 @@ def create_coords_generator_from_tiles_file(fp, logger=None):
 def make_redis_cache_index(cfg):
     assert_redis_config(cfg)
     from redis import StrictRedis
-    from tilequeue.cache import RedisCacheIndex
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
     redis_cache_index = RedisCacheIndex(redis_client, cfg.redis_cache_set_key)
     return redis_cache_index
