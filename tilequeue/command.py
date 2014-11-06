@@ -374,7 +374,6 @@ def assert_redis_config(cfg):
     assert cfg.redis_host, 'Missing redis host'
     assert cfg.redis_port, 'Missing redis port'
     assert cfg.redis_cache_set_key, 'Missing redis cache set key name'
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
@@ -402,6 +401,7 @@ def tilequeue_cache_index_diffs_load(cfg):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
+    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
     redis_cache_index = make_redis_cache_index(cfg)
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
@@ -412,6 +412,7 @@ def tilequeue_cache_index_diffs_load(cfg):
 
 
 def tilequeue_cache_index_diffs_intersect(cfg):
+    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
     redis_cache_index = make_redis_cache_index(cfg)
     coords = redis_cache_index.find_intersection(cfg.redis_diff_set_key)
     for coord in coords:
@@ -419,6 +420,7 @@ def tilequeue_cache_index_diffs_intersect(cfg):
 
 
 def tilequeue_cache_index_diffs_remove(cfg):
+    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
     redis_cache_index = make_redis_cache_index(cfg)
     redis_cache_index.remove_key(cfg.redis_diff_set_key)
 
