@@ -440,17 +440,13 @@ def tilequeue_write(cfg):
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp, logger)
         exploded_coords = explode_with_parents(expired_tiles)
-        logger.info('Number of total expired tiles with all parents: %d' %
-                    len(exploded_coords))
 
-    logger.info('Queuing ... ')
+        logger.info('Queuing ... ')
 
-    # exploded_coords is a set, but enqueue_batch expects a list for slicing
-    exploded_coords = list(exploded_coords)
-    queue.enqueue_batch(exploded_coords)
+        n_coords = queue.enqueue_batch(exploded_coords)
 
-    logger.info('Queuing ... Done')
-    logger.info('Queued %d tiles' % len(exploded_coords))
+        logger.info('Queuing ... Done')
+        logger.info('Queued %d tiles' % n_coords)
 
 
 def lookup_formats(format_extensions):
@@ -517,21 +513,6 @@ def tilequeue_process(cfg):
     logger.info('processed %d messages' % n_msgs)
 
 
-def tilequeue_seed_process(tile_generator, queue):
-    # enqueue in batches of 10
-    batch = []
-    n_tiles = 0
-    for tile in tile_generator:
-        batch.append(tile)
-        n_tiles += 1
-        if len(batch) >= 10:
-            queue.enqueue_batch(batch)
-            batch = []
-    if batch:
-        queue.enqueue_batch(batch)
-    return n_tiles
-
-
 def uniquify_generator(generator):
     s = set(generator)
     for tile in s:
@@ -580,7 +561,7 @@ def tilequeue_seed(cfg):
     logger = make_logger(cfg, 'seed')
     logger.info('Beginning to enqueue seed tiles')
 
-    n_tiles = tilequeue_seed_process(tile_generator, queue)
+    n_tiles = queue.enqueue_batch(tile_generator)
 
     logger.info('Queued %d tiles' % n_tiles)
 

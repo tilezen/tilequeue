@@ -16,18 +16,24 @@ class SqsQueue(object):
         message.set_body(payload)
         self.sqs_queue.write(message)
 
+    def _write_batch(self, coords):
+        assert len(coords) <= 10
+        msg_tuples = [(str(i), serialize_coord(coord), 0)
+                      for i, coord in enumerate(coords)]
+        self.sqs_queue.write_batch(msg_tuples)
+
     def enqueue_batch(self, coords):
         # unclear if boto will handle submitting more than 10 at once
         # to be safe we do that here
-        if len(coords) <= 10:
-            messages = []
-            for i, coord in enumerate(coords):
-                msg_tuple = (str(i), serialize_coord(coord), 0)
-                messages.append(msg_tuple)
-            self.sqs_queue.write_batch(messages)
-        else:
-            self.enqueue_batch(coords[:10])
-            self.enqueue_batch(coords[10:])
+        buffer = []
+        for i, coord in enumerate(coords):
+            buffer.append(coord)
+            if len(buffer) == 10:
+                self._write_batch(buffer)
+                del buffer[:]
+        if buffer:
+            self._write_batch(buffer)
+        return i + 1
 
     def read(self, max_to_read=1, timeout_seconds=20):
         coord_messages = []
