@@ -245,17 +245,14 @@ def assert_aws_config(cfg):
 
 def add_redis_options(parser):
     parser.add_argument('--redis-host',
-                        default='localhost',
                         help='Redis host',
                         )
     parser.add_argument('--redis-port',
                         type=int,
-                        default=6379,
                         help='Redis port',
                         )
     parser.add_argument('--redis-db',
                         type=int,
-                        default=0,
                         help='Redis db',
                         )
     parser.add_argument('--redis-cache-set-key',

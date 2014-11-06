@@ -48,7 +48,7 @@ class CliConfiguration(object):
         self.logconfig = self._cfg('logconfig', 'logging config')
         self.redis_host = self._cfg('redis_host', 'redis host')
         self.redis_port = self._cfg('redis_port', 'redis port')
-        self.redis_db = self._cfg('redis_db', 'redis db', 0)
+        self.redis_db = self._cfg('redis_db', 'redis db')
         self.redis_cache_set_key = self._cfg('redis_cache_set_key',
                                              'redis cache-set-key')
         self.redis_diff_set_key = self._cfg('redis_diff_set_key',
