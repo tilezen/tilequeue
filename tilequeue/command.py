@@ -402,7 +402,7 @@ def tilequeue_cache_index_diffs_load(cfg):
     redis_cache_index = make_redis_cache_index(cfg)
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
-        #exploded_coords = explode_with_parents(expired_tiles)
+        # exploded_coords = explode_with_parents(expired_tiles)
         exploded_coords = explode_with_parents_non_unique(expired_tiles)
         redis_cache_index.write_coords_redis_protocol(
             sys.stdout, cfg.redis_diff_set_key, exploded_coords)
