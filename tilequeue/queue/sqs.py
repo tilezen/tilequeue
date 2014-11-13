@@ -23,8 +23,6 @@ class SqsQueue(object):
         self.sqs_queue.write_batch(msg_tuples)
 
     def enqueue_batch(self, coords):
-        # unclear if boto will handle submitting more than 10 at once
-        # to be safe we do that here
         buffer = []
         n = 0
         for coord in coords:
