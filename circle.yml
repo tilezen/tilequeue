@@ -4,8 +4,8 @@ machine:
 
 dependencies:
   pre:
-    - pip install Shapely protobuf
-    - pip install --allow-external PIL --allow-unverified PIL git+https://github.com/mapzen/TileStache@integration-1
+    - pip install Shapely protobuf Pillow
+    - pip install git+https://github.com/mapzen/TileStache@integration-1
     - python setup.py develop
 
 test:
