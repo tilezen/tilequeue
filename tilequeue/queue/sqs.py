@@ -26,14 +26,16 @@ class SqsQueue(object):
         # unclear if boto will handle submitting more than 10 at once
         # to be safe we do that here
         buffer = []
-        for i, coord in enumerate(coords):
+        n = 0
+        for coord in coords:
             buffer.append(coord)
             if len(buffer) == 10:
                 self._write_batch(buffer)
                 del buffer[:]
+            n += 1
         if buffer:
             self._write_batch(buffer)
-        return i + 1
+        return n
 
     def read(self, max_to_read=1, timeout_seconds=20):
         coord_messages = []

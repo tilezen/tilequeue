@@ -11,9 +11,11 @@ class OutputFileQueue(object):
         self.fp.write(payload + '\n')
 
     def enqueue_batch(self, coords):
-        for i, coord in enumerate(coords):
+        n = 0
+        for coord in coords:
             self.enqueue(coord)
-        return i + 1
+            n += 1
+        return n
 
     def read(self, max_to_read=1, timeout_seconds=20):
         raise NotImplementedError

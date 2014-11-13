@@ -10,9 +10,11 @@ class MemoryQueue(object):
         self.q.append(coord)
 
     def enqueue_batch(self, coords):
-        for i, coord in enumerate(coords):
+        n = 0
+        for coord in coords:
             self.enqueue(coord)
-        return i + 1
+            n += 1
+        return n
 
     def read(self, max_to_read=1, timeout_seconds=None):
         self.q, coords = self.q[max_to_read:], self.q[:max_to_read]
