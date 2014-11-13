@@ -14,7 +14,6 @@ from tilequeue.store import make_tile_file_store
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_serialized_coords
 from tilequeue.tile import explode_with_parents
-from tilequeue.tile import explode_with_parents_non_unique
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
@@ -402,8 +401,7 @@ def tilequeue_cache_index_diffs_load(cfg):
     redis_cache_index = make_redis_cache_index(cfg)
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
-        # exploded_coords = explode_with_parents(expired_tiles)
-        exploded_coords = explode_with_parents_non_unique(expired_tiles)
+        exploded_coords = explode_with_parents(expired_tiles)
         redis_cache_index.write_coords_redis_protocol(
             sys.stdout, cfg.redis_diff_set_key, exploded_coords)
 
