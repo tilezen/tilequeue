@@ -393,6 +393,12 @@ def make_redis_cache_index(cfg):
     return redis_cache_index
 
 
+def deserialized_coords(serialized_coords):
+    for serialized_coord in serialized_coords:
+        coord = deserialize_redis_value_to_coord(serialized_coord)
+        yield coord
+
+
 def tilequeue_cache_index_diffs_load(cfg):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
@@ -401,7 +407,12 @@ def tilequeue_cache_index_diffs_load(cfg):
     redis_cache_index = make_redis_cache_index(cfg)
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
-        exploded_coords = explode_with_parents(expired_tiles)
+        serialized_coords = serialize_coords(expired_tiles)
+        exploded_serialized_coords = explode_serialized_coords(
+            serialized_coords, cfg.explode_until,
+            serialize_fn=serialize_coord_to_redis_value,
+            deserialize_fn=deserialize_redis_value_to_coord)
+        exploded_coords = deserialized_coords(exploded_serialized_coords)
         redis_cache_index.write_coords_redis_protocol(
             sys.stdout, cfg.redis_diff_set_key, exploded_coords)
 
