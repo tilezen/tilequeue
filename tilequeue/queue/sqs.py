@@ -101,6 +101,6 @@ def make_sqs_queue(queue_name, cfg=None):
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    from Redis import StrictRedis
+    from redis import StrictRedis
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
     return SqsQueue(queue, redis_client)
