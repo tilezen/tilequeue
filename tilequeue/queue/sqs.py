@@ -7,14 +7,18 @@ from tilequeue.tile import serialize_coord
 
 class SqsQueue(object):
 
-    def __init__(self, sqs_queue):
+    def __init__(self, sqs_queue, redis_client):
         self.sqs_queue = sqs_queue
+        self.redis_client = redis_client
+        self.inflight_key = "tilequeue.in-flight"
 
     def enqueue(self, coord):
         payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
-        self.sqs_queue.write(message)
+        if self._inflight(coord):
+            self._add_to_flight(coord)
+            self.sqs_queue.write(message)
 
     def _write_batch(self, coords):
         assert len(coords) <= 10
@@ -22,11 +26,21 @@ class SqsQueue(object):
                       for i, coord in enumerate(coords)]
         self.sqs_queue.write_batch(msg_tuples)
 
+    def _inflight(self, coord):
+        return self.redis_client.sismember(self.inflight_key,
+                                           serialize_coord(coord))
+
+    def _add_to_flight(self, coord):
+        self.redis_client.sadd(self.inflight_key,
+                               serialize_coord(coord))
+
     def enqueue_batch(self, coords):
         buffer = []
         n = 0
         for coord in coords:
-            buffer.append(coord)
+            if self._inflight(coord):
+                self._add_to_flight(coord)
+                buffer.append(coord)
             if len(buffer) == 10:
                 self._write_batch(buffer)
                 del buffer[:]
@@ -54,9 +68,14 @@ class SqsQueue(object):
         return coord_messages
 
     def job_done(self, message):
+        self.redis_client.srem(self.inflight_key, message.get_body())
         self.sqs_queue.delete_message(message)
 
     def jobs_done(self, messages):
+        payloads = []
+        for message in messages:
+            payloads.append(message.get_body())
+        self.redis_client.srem(self.inflight_key, *payloads)
         self.sqs_queue.delete_message_batch(messages)
 
     def clear(self):
@@ -73,13 +92,14 @@ class SqsQueue(object):
         pass
 
 
-def make_sqs_queue(queue_name,
-                   aws_access_key_id=None, aws_secret_access_key=None):
+def make_sqs_queue(queue_name, cfg=None):
     # this doesn't actually create a queue in aws, it just creates a python
     # queue object
-    conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
+    conn = connect_sqs(cfg.aws_access_key_id, cfg.aws_secret_access_key)
     queue = conn.get_queue(queue_name)
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    return SqsQueue(queue)
+    from Redis import StrictRedis
+    redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
+    return SqsQueue(queue, redis_client)

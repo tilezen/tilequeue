@@ -35,6 +35,7 @@ setup(name='tilequeue',
           'TileStache',
           'PyYAML',
           'redis',
+          'mock'
       ],
       test_suite='tests',
       entry_points=dict(
