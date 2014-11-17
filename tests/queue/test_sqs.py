@@ -38,7 +38,7 @@ class TestQueue(unittest.TestCase):
         coords = [Coordinate(row=1, column=1, zoom=1),
                   Coordinate(row=2, column=2, zoom=2)]
         mock = MagicMock()
-        mock.side_effect = [True, True]
+        mock.side_effect = [False, False]
         self.mockRedis.sismember = mock
         self.sqs.enqueue_batch(coords)
         self.assertEqual(2, len(self.message_tuples))
@@ -49,26 +49,27 @@ class TestQueue(unittest.TestCase):
         coords = [Coordinate(row=1, column=1, zoom=1),
                   Coordinate(row=2, column=2, zoom=2)]
         mock = MagicMock()
-        mock.side_effect = [False, True]
+        mock.side_effect = [True, False]
         self.mockRedis.sismember = mock
         self.sqs.enqueue_batch(coords)
         self.assertEqual(1, len(self.message_tuples))
         self.assertEqual(self.message_tuples[0][1], "2/2/2")
 
     def test_enqueue_should_write_message_to_queue(self):
-        self.mockRedis.sismember = MagicMock(return_value=True)
+        self.mockRedis.sismember = MagicMock(return_value=False)
         coord = Coordinate(row=1, column=1, zoom=1)
         self.sqs.enqueue(coord)
         self.assertIsNotNone(self.message)
         self.assertEqual("1/1/1", self.message.get_body())
 
     def test_enqueue_should_not_write_message_to_queue(self):
-        self.mockRedis.sismember = MagicMock(return_value=False)
+        self.mockRedis.sismember = MagicMock(return_value=True)
         coord = Coordinate(row=1, column=1, zoom=1)
         self.sqs.enqueue(coord)
         self.assertEqual(None, self.message)
 
     def test_enqueue_adds_tile_as_in_flight(self):
+        self.mockRedis.sismember = MagicMock(return_value=False)
         mock = MagicMock()
         self.mockRedis.sadd = mock
         coord = Coordinate(row=1, column=1, zoom=1)
@@ -80,7 +81,8 @@ class TestQueue(unittest.TestCase):
         coords = [Coordinate(row=1, column=1, zoom=1),
                   Coordinate(row=2, column=2, zoom=2)]
         mock = MagicMock()
-        mock.side_effect = [True, True]
+        mock.side_effect = [False, False]
+        self.mockRedis.sismember = mock
         self.mockRedis.sadd = self.fake_sadd
         self.sqs.enqueue_batch(coords)
         self.assertEqual(self.key_name, self.sqs.inflight_key)

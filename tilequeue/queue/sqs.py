@@ -16,7 +16,7 @@ class SqsQueue(object):
         payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
-        if self._inflight(coord):
+        if not self._inflight(coord):
             self._add_to_flight(coord)
             self.sqs_queue.write(message)
 
@@ -38,7 +38,7 @@ class SqsQueue(object):
         buffer = []
         n = 0
         for coord in coords:
-            if self._inflight(coord):
+            if not self._inflight(coord):
                 self._add_to_flight(coord)
                 buffer.append(coord)
             if len(buffer) == 10:
