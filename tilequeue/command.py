@@ -99,8 +99,7 @@ def add_logging_options(parser):
 
 def make_queue(queue_type, queue_name, cfg):
     if queue_type == 'sqs':
-        return make_sqs_queue(
-            queue_name, cfg.aws_access_key_id, cfg.aws_secret_access_key)
+        return make_sqs_queue(cfg)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()

@@ -93,11 +93,11 @@ class SqsQueue(object):
         pass
 
 
-def make_sqs_queue(queue_name, cfg=None):
+def make_sqs_queue(cfg=None):
     # this doesn't actually create a queue in aws, it just creates a python
     # queue object
     conn = connect_sqs(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-    queue = conn.get_queue(queue_name)
+    queue = conn.get_queue(cfg.queue_name)
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
