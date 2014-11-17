@@ -79,6 +79,7 @@ class SqsQueue(object):
         self.sqs_queue.delete_message_batch(messages)
 
     def clear(self):
+        self.redis_client.delete(self.inflight_key)
         n = 0
         while True:
             msgs = self.sqs_queue.get_messages(10)

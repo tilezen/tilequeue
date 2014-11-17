@@ -109,3 +109,8 @@ class TestQueue(unittest.TestCase):
         self.sqs.jobs_done(messages)
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,
                                                     "1/1/1", "2/2/2")
+
+    def test_clear_removes_in_flight(self):
+        self.mockQueue.get_messages = MagicMock(return_value=[])
+        self.sqs.clear()
+        self.mockRedis.delete.assert_called_once_with(self.sqs.inflight_key)
