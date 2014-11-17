@@ -35,9 +35,11 @@ setup(name='tilequeue',
           'TileStache',
           'PyYAML',
           'redis',
-          'mock'
       ],
       test_suite='tests',
+      tests_require=[
+          'mock'
+      ],
       entry_points=dict(
           console_scripts=[
               'tilequeue = tilequeue.command:tilequeue_main',
