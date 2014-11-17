@@ -59,6 +59,16 @@ class SqsQueue(object):
     def jobs_done(self, messages):
         self.sqs_queue.delete_message_batch(messages)
 
+    def clear(self):
+        n = 0
+        while True:
+            msgs = self.sqs_queue.get_messages(10)
+            if not msgs:
+                break
+            self.sqs_queue.delete_message_batch(msgs)
+            n += len(msgs)
+        return n
+
     def close(self):
         pass
 

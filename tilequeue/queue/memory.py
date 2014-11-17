@@ -26,5 +26,10 @@ class MemoryQueue(object):
     def jobs_done(self, messages):
         pass
 
+    def clear(self):
+        n = len(self.q)
+        del self.q[:]
+        return n
+
     def close(self):
         pass

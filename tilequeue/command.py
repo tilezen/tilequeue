@@ -311,6 +311,14 @@ def tilequeue_parser_explode(parser):
     return parser
 
 
+def tilequeue_parser_drain(parser):
+    parser = add_config_options(parser)
+    parser = add_queue_options(parser)
+    parser = add_logging_options(parser)
+    parser.set_defaults(func=tilequeue_drain)
+    return parser
+
+
 def serialize_coords(coords):
     for coord in coords:
         serialized_coord = serialize_coord_to_redis_value(coord)
@@ -348,6 +356,15 @@ def tilequeue_explode(cfg):
         # for coord in exploded_coords:
         #     coord_str = serialize_coord(coord)
         #     print coord_str
+
+
+def tilequeue_drain(cfg):
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    logger = make_logger(cfg, 'drain')
+    logger.info('Draining queue ...')
+    n = queue.clear()
+    logger.info('Draining queue ... done')
+    logger.info('Removed %d messages' % n)
 
 
 def tilequeue_cache_index_seed(cfg):
@@ -622,6 +639,7 @@ def tilequeue_main(argv_args=None):
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
         ('explode', tilequeue_parser_explode),
+        ('drain', tilequeue_parser_drain),
         ('cache-index-diffs-load', tilequeue_parser_cache_index_diffs_load),
         ('cache-index-diffs-intersect',
          tilequeue_parser_cache_index_diffs_intersect),
