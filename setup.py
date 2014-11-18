@@ -37,6 +37,9 @@ setup(name='tilequeue',
           'redis',
       ],
       test_suite='tests',
+      tests_require=[
+          'mock'
+      ],
       entry_points=dict(
           console_scripts=[
               'tilequeue = tilequeue.command:tilequeue_main',
