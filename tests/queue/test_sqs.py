@@ -24,9 +24,13 @@ class TestQueue(unittest.TestCase):
     def fake_write_batch(self, message_tuples):
         self.message_tuples = message_tuples
 
-    def fake_sadd(self, name, value):
+    def fake_sadd(self, name, *value):
         self.key_name = name
-        self.values.append(value)
+        if isinstance(value, list):
+            for val in value:
+                self.values.append(val)
+        else:
+            self.values.append(value)
 
     def test_enqueue_should_check_if_pending_work(self):
         coord = Coordinate(row=1, column=1, zoom=1)
@@ -86,8 +90,7 @@ class TestQueue(unittest.TestCase):
         self.mockRedis.sadd = self.fake_sadd
         self.sqs.enqueue_batch(coords)
         self.assertEqual(self.key_name, self.sqs.inflight_key)
-        self.assertIn("1/1/1", self.values)
-        self.assertIn("2/2/2", self.values)
+        self.assertEqual([("1/1/1", "2/2/2")], self.values)
 
     def test_job_done_removes_tile_from_in_flight(self):
         coord = Coordinate(row=1, column=1, zoom=1)

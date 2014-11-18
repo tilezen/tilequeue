@@ -23,8 +23,14 @@ class SqsQueue(object):
 
     def _write_batch(self, coords):
         assert len(coords) <= 10
-        msg_tuples = [(str(i), serialize_coord(coord), 0)
-                      for i, coord in enumerate(coords)]
+        values = []
+        msg_tuples = []
+
+        for i, coord in enumerate(coords):
+            msg_tuples.append((str(i), serialize_coord(coord), 0))
+            values.append(serialize_coord(coord))
+
+        self.redis_client.sadd(self.inflight_key, *values)
         self.sqs_queue.write_batch(msg_tuples)
 
     def _inflight(self, coord):
@@ -40,7 +46,6 @@ class SqsQueue(object):
         n = 0
         for coord in coords:
             if not self._inflight(coord):
-                self._add_to_flight(coord)
                 buffer.append(coord)
             if len(buffer) == 10:
                 self._write_batch(buffer)
