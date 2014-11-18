@@ -23,7 +23,7 @@ extension_to_format = dict(
 )
 
 name_to_format = {
-    'JSON': 'json_format',
+    'JSON': json_format,
     'OpenScienceMap': vtm_format,
     'TopoJSON': topojson_format,
     'Mapbox': mapbox_format,
