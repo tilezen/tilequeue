@@ -214,6 +214,7 @@ def tilequeue_parser_seed(parser):
     parser = add_queue_options(parser)
     parser = add_logging_options(parser)
     parser = add_seed_options(parser)
+    parser = add_redis_options(parser)
     parser.set_defaults(func=tilequeue_seed)
     return parser
 
