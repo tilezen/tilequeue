@@ -3,6 +3,7 @@ from boto.sqs.message import RawMessage
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
+from redis import StrictRedis
 
 
 class SqsQueue(object):
@@ -101,6 +102,5 @@ def make_sqs_queue(cfg=None):
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % cfg.queue_name
     queue.set_message_class(RawMessage)
-    from redis import StrictRedis
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
     return SqsQueue(queue, redis_client)
