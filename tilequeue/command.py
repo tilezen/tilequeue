@@ -7,7 +7,7 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.queue import make_sqs_queue
+from tilequeue.queue import get_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
 from tilequeue.store import make_tile_file_store
@@ -99,7 +99,7 @@ def add_logging_options(parser):
 
 def make_queue(queue_type, queue_name, cfg):
     if queue_type == 'sqs':
-        return make_sqs_queue(cfg)
+        return get_sqs_queue(cfg)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
