@@ -99,7 +99,7 @@ def make_sqs_queue(cfg=None):
     conn = connect_sqs(cfg.aws_access_key_id, cfg.aws_secret_access_key)
     queue = conn.get_queue(cfg.queue_name)
     assert queue is not None, \
-        'Could not get sqs queue with name: %s' % queue_name
+        'Could not get sqs queue with name: %s' % cfg.queue_name
     queue.set_message_class(RawMessage)
     from redis import StrictRedis
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
