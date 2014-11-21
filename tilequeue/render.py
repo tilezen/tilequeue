@@ -23,9 +23,10 @@ class RenderJob(object):
 
 class RenderJobCreator(object):
 
-    def __init__(self, tilestache_config, formats):
+    def __init__(self, tilestache_config, formats, store):
         self.tilestache_config = tilestache_config
         self.formats = formats
+        self.store = store
         layers = tilestache_config.layers
         all_layer = layers['all']
         self.layer_names = all_layer.provider.names
@@ -34,3 +35,9 @@ class RenderJobCreator(object):
         return [RenderJob(coord, format,
                           self.tilestache_config, self.layer_names)
                 for format in self.formats]
+
+    def process_jobs_for_coord(self, coods):
+        jobs = job_creator.create(coord)
+        for job in jobs:
+            with closing(self.store.output_fp(coord, job.format)) as store_fp:
+                 job(store_fp)
