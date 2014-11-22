@@ -5,6 +5,7 @@ from ModestMaps.Core import Coordinate
 from mock import MagicMock
 from boto.sqs.message import RawMessage
 from tilequeue.tile import serialize_coord
+from tilequeue.tile import deserialize_coord
 
 
 class TestQueue(unittest.TestCase):
@@ -17,6 +18,7 @@ class TestQueue(unittest.TestCase):
         self.sqs = SqsQueue(self.mockQueue, self.mockRedis)
         self.values = []
         self.key_name = None
+        self.coords = None
 
     def fake_write(self, message):
         self.message = message
@@ -119,3 +121,68 @@ class TestQueue(unittest.TestCase):
         self.mockQueue.get_messages = MagicMock(return_value=[])
         self.sqs.clear()
         self.mockRedis.delete.assert_called_once_with(self.sqs.inflight_key)
+
+    def test_process_calls_process_jobs_for_coord(self):
+        job_creator_mock = MagicMock()
+        self.sqs.process(job_creator_mock)
+        job_creator_mock.process_jobs_for_coord.assert_called_once()
+
+    def fake_process_jobs_for_coord(self, coords):
+        self.coords = coords
+
+    def _build_message(self, row=1, column=1, zoom=1):
+        coord = Coordinate(row=row, column=column, zoom=zoom)
+        payload = serialize_coord(coord)
+        message = RawMessage()
+        message.set_body(payload)
+        return message
+
+    def assertSameCoords(self, coord1, coord2):
+        self.assertEqual(serialize_coord(coord1), serialize_coord(coord2))
+
+    def test_process_calls_process_jobs_for_coord_with_same_coord(self):
+        job_creator_mock = MagicMock()
+        job_creator_mock.process_jobs_for_coord = \
+            self.fake_process_jobs_for_coord
+        message = self._build_message(row=1, column=2, zoom=3)
+        self.mockQueue.get_messages = MagicMock(return_value=[message])
+        self.sqs.process(job_creator_mock)
+        self.assertSameCoords(self.coords,
+                              deserialize_coord(message.get_body()))
+
+    def test_process_marks_job_done(self):
+        job_creator_mock = MagicMock()
+        message_mock = MagicMock()
+        message_mock.get_body = lambda: "1/1/1"
+        message_mock.message_handle = message_mock
+        self.mockQueue.get_messages = MagicMock(return_value=[message_mock])
+        self.sqs.process(job_creator_mock)
+        self.mockQueue.delete_message.assert_called_once_with(message_mock)
+
+    def test_process_logs_timing(self):
+        job_creator_mock = MagicMock()
+        job_creator_mock.process_jobs_for_coord = \
+            self.fake_process_jobs_for_coord
+        message = self._build_message(row=1, column=2, zoom=3)
+        self.mockQueue.get_messages = MagicMock(return_value=[message])
+        logger_mock = MagicMock()
+        self.sqs.set_logger(logger_mock)
+        self.sqs.process(job_creator_mock)
+        timing = False
+        for call in logger_mock.info.call_args_list:
+            if "done took" in call[0][0]:
+                timing = True
+        self.assertTrue(timing)
+        logger_mock.info.assert_any_call('processing 3/2/1 ...')
+
+    def test_daemonize(self):
+        logger_mock = MagicMock()
+        self.sqs.set_logger(logger_mock)
+        self.sqs.daemonize(True)
+        self.assertTrue(self.sqs.run_as_daemon)
+
+    def test_daemonize_should_log(self):
+        logger_mock = MagicMock()
+        self.sqs.set_logger(logger_mock)
+        self.sqs.daemonize(True)
+        logger_mock.info.assert_called_once_with('Setting daemon mode: True')

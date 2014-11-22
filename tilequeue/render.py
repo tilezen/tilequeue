@@ -1,3 +1,4 @@
+from contextlib import closing
 from TileStache.Goodies.VecTiles.server import MultiResponse
 
 
@@ -36,8 +37,8 @@ class RenderJobCreator(object):
                           self.tilestache_config, self.layer_names)
                 for format in self.formats]
 
-    def process_jobs_for_coord(self, coods):
-        jobs = job_creator.create(coord)
+    def process_jobs_for_coord(self, coord):
+        jobs = self.create(coord)
         for job in jobs:
             with closing(self.store.output_fp(coord, job.format)) as store_fp:
-                 job(store_fp)
+                job(store_fp)

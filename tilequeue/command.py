@@ -20,7 +20,6 @@ from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from TileStache import parseConfigfile
 from urllib2 import urlopen
-import time
 import argparse
 import logging
 import logging.config
@@ -482,6 +481,7 @@ def lookup_formats(format_extensions):
         formats.append(format)
     return formats
 
+
 def make_logger(cfg, logger_name):
     if getattr(cfg, 'logconfig') is not None:
         logging.config.fileConfig(cfg.logconfig)
@@ -510,28 +510,9 @@ def tilequeue_process(cfg):
     job_creator = RenderJobCreator(tilestache_config, formats, store)
 
     if cfg.daemon:
-        logger.info('Starting tilequeue processing in daemon mode')
-    else:
-        logger.info('Starting tilequeue processing, not in daemon mode')
+        queue.daemonize(True)
 
-    n_msgs = 0
-    while True:
-        msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
-        if not msgs and not cfg.daemon:
-            break
-        for msg in msgs:
-            start_time = time.time()
-            coord = msg.coord
-            coord_str = serialize_coord(coord)
-            logger.info('processing %s ...' % coord_str)
-            job_creator.process_jobs_for_coord(coord)
-            queue.job_done(msg.message_handle)
-            total_time = time.time() - start_time
-            logger.info('processing %s ... done took %s (seconds)'
-                        % (coord_str, total_time))
-            n_msgs += 1
-
-    logger.info('processed %d messages' % n_msgs)
+    queue.process(job_creator, logger)
 
 
 def uniquify_generator(generator):
