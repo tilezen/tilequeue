@@ -18,6 +18,7 @@ from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
+from tilequeue.worker import Worker
 from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
@@ -509,10 +510,10 @@ def tilequeue_process(cfg):
 
     job_creator = RenderJobCreator(tilestache_config, formats, store)
 
-    if cfg.daemon:
-        queue.daemonize(True)
-
-    queue.process(job_creator, logger)
+    worker = Worker(queue, job_creator)
+    worker.logger = logger
+    worker.daemonized = cfg.daemon
+    worker.process()
 
 
 def uniquify_generator(generator):

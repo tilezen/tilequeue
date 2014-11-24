@@ -4,7 +4,6 @@ from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
 from redis import StrictRedis
-import time
 
 
 class SqsQueue(object):
@@ -100,32 +99,6 @@ class SqsQueue(object):
 
     def close(self):
         pass
-
-    def set_logger(self, logger):
-        self.logger = logger
-
-    def daemonize(self, run_as_daemon):
-        self.run_as_daemon = run_as_daemon
-        self.logger.info('Setting daemon mode: ' + str(run_as_daemon))
-
-    def process(self, job_creator):
-        while True:
-            msgs = self.read(max_to_read=1)
-            for msg in msgs:
-                start_time = time.time()
-                coord = msg.coord
-                coord_str = serialize_coord(coord)
-                if self.logger:
-                    self.logger.info('processing %s ...' % coord_str)
-
-                job_creator.process_jobs_for_coord(msg.coord)
-                self.job_done(msg.message_handle)
-                total_time = time.time() - start_time
-                if self.logger:
-                    self.logger.info('processing %s ... done took %s (seconds)'
-                                     % (coord_str, total_time))
-            if not self.run_as_daemon:
-                break
 
 
 def get_sqs_queue(cfg=None):
