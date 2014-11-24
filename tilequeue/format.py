@@ -13,7 +13,7 @@ json_format = OutputFormat('JSON', 'json', 'application/json')
 topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json')
 # TODO image/png mimetype? app doesn't work unless image/png?
 vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png')
-mapbox_format = OutputFormat('Mapbox', 'mapbox', 'image/png')
+mapbox_format = OutputFormat('Mapbox', 'mapbox', 'application/x-protobuf')
 
 extension_to_format = dict(
     json=json_format,
