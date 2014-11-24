@@ -267,6 +267,7 @@ def add_redis_options(parser):
 def tilequeue_parser_cache_index_diffs_load(parser):
     parser = add_config_options(parser)
     parser = add_redis_options(parser)
+    parser = add_expired_tiles_options(parser)
     parser.set_defaults(func=tilequeue_cache_index_diffs_load)
     return parser
 
