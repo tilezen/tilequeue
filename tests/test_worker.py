@@ -1,5 +1,6 @@
 import unittest
 
+
 class TestWorker(unittest.TestCase):
     def _build_message(self, row=1, column=1, zoom=1):
         from tilequeue.tile import CoordMessage

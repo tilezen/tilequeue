@@ -5,7 +5,6 @@ from ModestMaps.Core import Coordinate
 from mock import MagicMock
 from boto.sqs.message import RawMessage
 from tilequeue.tile import serialize_coord
-from tilequeue.tile import deserialize_coord
 
 
 class TestQueue(unittest.TestCase):
