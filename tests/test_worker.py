@@ -72,6 +72,17 @@ class TestWorker(unittest.TestCase):
             job_creator_mock.process_jobs_for_coord.call_args_list[0][0][0]
         self.assertEqual(serialize_coord(argument), "3/2/1")
 
+    def test_process_with_multiple_read_messages(self):
+        from tilequeue.worker import Worker
+        from mock import MagicMock
+        job_creator_mock = MagicMock()
+        queue_mock = MagicMock()
+        worker = Worker(queue_mock, job_creator_mock)
+        message = self._build_message(row=1, column=2, zoom=3)
+        queue_mock.read = MagicMock(return_value=[message])
+        worker.process(4)
+        queue_mock.read.assert_called_once_with(max_to_read=4)
+
     def test_process_marks_job_done(self):
         from tilequeue.worker import Worker
         from mock import MagicMock

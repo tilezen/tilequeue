@@ -513,11 +513,12 @@ def tilequeue_process(cfg):
     job_creator = RenderJobCreator(tilestache_config, formats, store)
 
     workers = []
-    for i in range(4):
+    for i in range(cfg.workers):
         worker = Worker(queue, job_creator)
         worker.logger = logger
         worker.daemonized = cfg.daemon
-        p = multiprocessing.Process(target=worker.process)
+        p = multiprocessing.Process(target=worker.process,
+                                    args=(cfg.messages_at_once,))
         workers.append(p)
         p.start()
     trap_signal()

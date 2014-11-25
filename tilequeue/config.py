@@ -55,6 +55,10 @@ class CliConfiguration(object):
                                             'redis diff-set-key')
         self.explode_until = self._cfg('explode_until',
                                        'tiles explode-until')
+        self.workers = self._cfg('workers', 'workers')
+        self.workers = self._cfg('workers', 'workers')
+        self.messages_at_once = self._cfg('messages_at_once',
+                                          'messages_at_once')
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -96,6 +100,8 @@ def default_yml_config():
             'daemon': False,
             'expired': None,
         },
+        'workers': 4,
+        'messages_at_once': 4,
         'tilestache': {
             'config': None,
             'formats': ('json', 'vtm'),

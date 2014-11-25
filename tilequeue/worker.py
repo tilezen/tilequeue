@@ -15,10 +15,10 @@ class Worker(object):
         if self.logger:
             self.logger.info(message)
 
-    def process(self):
+    def process(self, max_to_read=1):
         trap_signal()
         while True:
-            msgs = self.queue.read(max_to_read=1)
+            msgs = self.queue.read(max_to_read=max_to_read)
             for msg in msgs:
                 start_time = time.time()
                 coord = msg.coord
