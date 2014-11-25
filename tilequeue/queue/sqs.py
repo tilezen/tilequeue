@@ -7,8 +7,6 @@ from redis import StrictRedis
 
 
 class SqsQueue(object):
-    run_as_daemon = False
-    logger = None
 
     def __init__(self, sqs_queue, redis_client):
         self.sqs_queue = sqs_queue
