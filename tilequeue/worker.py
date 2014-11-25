@@ -7,7 +7,7 @@ class Worker(object):
     daemonized = False
     logger = None
 
-    def __init__(self, queue=None, job_creator=None):
+    def __init__(self, queue, job_creator):
         self.queue = queue
         self.job_creator = job_creator
 

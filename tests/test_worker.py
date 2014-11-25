@@ -14,24 +14,24 @@ class TestWorker(unittest.TestCase):
 
     def test_defaults_to_non_daemonized(self):
         from tilequeue.worker import Worker
-        worker = Worker()
+        worker = Worker(None, None)
         self.assertFalse(worker.daemonized)
 
     def test_sets_to_daemonized(self):
         from tilequeue.worker import Worker
-        worker = Worker()
+        worker = Worker(None, None)
         worker.daemonized = True
         self.assertTrue(worker.daemonized)
 
     def test_defaults_to_no_logger(self):
         from tilequeue.worker import Worker
-        worker = Worker()
+        worker = Worker(None, None)
         self.assertIsNone(worker.logger)
 
     def test_set_logger(self):
         from tilequeue.worker import Worker
         from mock import MagicMock
-        worker = Worker()
+        worker = Worker(None, None)
         worker.logger = MagicMock()
         self.assertIsNotNone(worker.logger)
 
