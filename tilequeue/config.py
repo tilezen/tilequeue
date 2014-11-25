@@ -56,7 +56,6 @@ class CliConfiguration(object):
         self.explode_until = self._cfg('explode_until',
                                        'tiles explode-until')
         self.workers = self._cfg('workers', 'workers')
-        self.workers = self._cfg('workers', 'workers')
         self.messages_at_once = self._cfg('messages_at_once',
                                           'messages_at_once')
 
