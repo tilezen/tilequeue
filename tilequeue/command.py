@@ -19,6 +19,7 @@ from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.worker import Worker
+from tilequeue.utils import trap_signal
 from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
@@ -26,6 +27,7 @@ import logging
 import logging.config
 import os
 import sys
+import multiprocessing
 
 
 def add_config_options(parser):
@@ -510,10 +512,15 @@ def tilequeue_process(cfg):
 
     job_creator = RenderJobCreator(tilestache_config, formats, store)
 
-    worker = Worker(queue, job_creator)
-    worker.logger = logger
-    worker.daemonized = cfg.daemon
-    worker.process()
+    workers = []
+    for i in range(4):
+        worker = Worker(queue, job_creator)
+        worker.logger = logger
+        worker.daemonized = cfg.daemon
+        p = multiprocessing.Process(target=worker.process)
+        workers.append(p)
+        p.start()
+    trap_signal()
 
 
 def uniquify_generator(generator):

@@ -1,5 +1,6 @@
 from tilequeue.tile import serialize_coord
 import time
+from tilequeue.utils import trap_signal
 
 
 class Worker(object):
@@ -15,6 +16,7 @@ class Worker(object):
             self.logger.info(message)
 
     def process(self):
+        trap_signal()
         while True:
             msgs = self.queue.read(max_to_read=1)
             for msg in msgs:
