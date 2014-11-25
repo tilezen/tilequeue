@@ -18,14 +18,16 @@ from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
+from tilequeue.worker import Worker
+from tilequeue.utils import trap_signal
 from TileStache import parseConfigfile
 from urllib2 import urlopen
-import time
 import argparse
 import logging
 import logging.config
 import os
 import sys
+import multiprocessing
 
 
 def add_config_options(parser):
@@ -483,13 +485,6 @@ def lookup_formats(format_extensions):
     return formats
 
 
-def process_jobs_for_coord(coord, job_creator, store):
-    jobs = job_creator.create(coord)
-    for job in jobs:
-        with closing(store.output_fp(coord, job.format)) as store_fp:
-            job(store_fp)
-
-
 def make_logger(cfg, logger_name):
     if getattr(cfg, 'logconfig') is not None:
         logging.config.fileConfig(cfg.logconfig)
@@ -510,35 +505,23 @@ def tilequeue_process(cfg):
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
     tilestache_config = parseConfigfile(cfg.tilestache_config)
-    job_creator = RenderJobCreator(tilestache_config, formats)
 
     store = make_s3_store(
         cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
         path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
 
-    if cfg.daemon:
-        logger.info('Starting tilequeue processing in daemon mode')
-    else:
-        logger.info('Starting tilequeue processing, not in daemon mode')
+    job_creator = RenderJobCreator(tilestache_config, formats, store)
 
-    n_msgs = 0
-    while True:
-        msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
-        if not msgs and not cfg.daemon:
-            break
-        for msg in msgs:
-            start_time = time.time()
-            coord = msg.coord
-            coord_str = serialize_coord(coord)
-            logger.info('processing %s ...' % coord_str)
-            process_jobs_for_coord(coord, job_creator, store)
-            queue.job_done(msg.message_handle)
-            total_time = time.time() - start_time
-            logger.info('processing %s ... done took %s (seconds)'
-                        % (coord_str, total_time))
-            n_msgs += 1
-
-    logger.info('processed %d messages' % n_msgs)
+    workers = []
+    for i in range(cfg.workers):
+        worker = Worker(queue, job_creator)
+        worker.logger = logger
+        worker.daemonized = cfg.daemon
+        p = multiprocessing.Process(target=worker.process,
+                                    args=(cfg.messages_at_once,))
+        workers.append(p)
+        p.start()
+    trap_signal()
 
 
 def uniquify_generator(generator):
@@ -603,7 +586,6 @@ def tilequeue_generate_tile(cfg):
 
     tilestache_config = parseConfigfile(cfg.tilestache_config)
     formats = lookup_formats(cfg.output_formats)
-    job_creator = RenderJobCreator(tilestache_config, formats)
 
     if cfg.s3_bucket:
         store = make_s3_store(
@@ -612,7 +594,8 @@ def tilequeue_generate_tile(cfg):
     else:
         store = make_tile_file_store(sys.stdout)
 
-    process_jobs_for_coord(coord, job_creator, store)
+    job_creator = RenderJobCreator(tilestache_config, formats, store)
+    job_creator.process_jobs_for_coord(coord)
 
     sys.stdout = open("/dev/stdout", "w")
     logger = make_logger(cfg, 'generate_tile')

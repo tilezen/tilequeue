@@ -35,6 +35,7 @@ setup(name='tilequeue',
           'TileStache',
           'PyYAML',
           'redis',
+          'psutil',
       ],
       test_suite='tests',
       tests_require=[

@@ -17,6 +17,7 @@ class TestQueue(unittest.TestCase):
         self.sqs = SqsQueue(self.mockQueue, self.mockRedis)
         self.values = []
         self.key_name = None
+        self.coords = None
 
     def fake_write(self, message):
         self.message = message

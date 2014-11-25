@@ -19,6 +19,8 @@ tiles:
   explode-until: 0
   daemon: false
   expired: <path/to/expired/tiles/file>
+workers: 4
+messages_at_once: 4
 tilestache:
   config: <path/to/config/file>
   formats: [json, vtm]
