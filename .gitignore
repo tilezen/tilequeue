@@ -3,3 +3,5 @@ tilequeue.egg-info
 config.yaml
 logging.conf
 *.sw*
+build
+dist
