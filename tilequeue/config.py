@@ -20,9 +20,6 @@ class CliConfiguration(object):
         self.queue_name = self._cfg('queue_name',
                                     'aws sqs name')
         self.queue_type = getattr(self.args, 'queue_type', 'sqs')
-        self.read_timeout = self._cfg('sqs_read_timeout',
-                                      'aws sqs timeout-seconds',
-                                      0)
         self.s3_bucket = self._cfg('s3_bucket', 'aws s3 bucket')
         self.s3_reduced_redundancy = self._cfg('s3_reduced_redundancy',
                                                'aws s3 reduced-redundancy',

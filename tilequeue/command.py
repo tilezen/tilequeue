@@ -150,7 +150,7 @@ def tilequeue_read(cfg):
     assert cfg.queue_name, 'Missing queue name'
     logger = make_logger(cfg, 'read')
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-    msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
+    msgs = queue.read(max_to_read=1)
     if not msgs:
         logger.info('No messages found on queue: %s' % cfg.queue_name)
     for msg in msgs:
