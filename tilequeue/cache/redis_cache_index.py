@@ -7,6 +7,9 @@ class RedisCacheIndex(object):
         self.redis_client = redis_client
         self.cache_set_key = cache_set_key
 
+    def get_list(self):
+        return self.redis_client.smembers(self.cache_set_key)
+
     def index_coord(self, coord):
         redis_coord_value = serialize_coord_to_redis_value(coord)
         self.redis_client.sadd(self.cache_set_key, redis_coord_value)
