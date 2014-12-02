@@ -32,16 +32,8 @@ import multiprocessing
 
 def add_config_options(parser):
     parser.add_argument('--config')
-    return parser
-
-
-def add_aws_cred_options(parser):
     parser.add_argument('--aws_access_key_id')
     parser.add_argument('--aws_secret_access_key')
-    return parser
-
-
-def add_queue_options(parser):
     parser.add_argument('--queue-name',
                         help='Name of the queue, should already exist.',
                         )
@@ -56,10 +48,6 @@ def add_queue_options(parser):
                         help='Read timeout in seconds when reading '
                              'sqs messages.',
                         )
-    return parser
-
-
-def add_s3_options(parser):
     parser.add_argument('--s3-bucket',
                         help='Name of aws s3 bucket, should already exist.',
                         )
@@ -72,111 +60,28 @@ def add_s3_options(parser):
                         default='',
                         help='Store tile data in s3 with this path prefix.',
                         )
-    return parser
-
-
-def add_tilestache_config_options(parser):
     parser.add_argument('--tilestache-config',
                         help='Path to Tilestache config.',
                         )
-    return parser
-
-
-def add_output_format_options(parser):
     parser.add_argument('--output-formats',
                         nargs='+',
                         choices=('json', 'vtm', 'topojson', 'mapbox'),
                         default=('json', 'vtm'),
                         help='Output formats to produce for each tile.',
                         )
-    return parser
-
-
-def add_logging_options(parser):
     parser.add_argument('--logconfig',
                         help='Path to python logging config file.',
                         )
-    return parser
-
-
-def make_queue(queue_type, queue_name, cfg):
-    if queue_type == 'sqs':
-        return get_sqs_queue(cfg)
-    elif queue_type == 'mem':
-        from tilequeue.queue import MemoryQueue
-        return MemoryQueue()
-    elif queue_type == 'file':
-        # only support file queues for writing
-        # useful for testing
-        from tilequeue.queue import OutputFileQueue
-        fp = open(queue_name, 'w')
-        return OutputFileQueue(fp)
-    elif queue_type == 'stdout':
-        # only support writing
-        from tilequeue.queue import OutputFileQueue
-        return OutputFileQueue(sys.stdout)
-    else:
-        raise ValueError('Unknown queue type: %s' % queue_type)
-
-
-def add_expired_tiles_options(parser):
     parser.add_argument('--expired-tiles-file',
                         help='Path to file containing list of expired tiles. '
                              'Should be one per line, <zoom>/<column>/<row>',
                         )
-    return parser
-
-
-def tilequeue_parser_write(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.set_defaults(func=tilequeue_write)
-    return parser
-
-
-def tilequeue_parser_read(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser.set_defaults(func=tilequeue_read)
-    return parser
-
-
-def tilequeue_read(cfg, peripherals):
-    assert cfg.queue_name, 'Missing queue name'
-    logger = make_logger(cfg, 'read')
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-    msgs = queue.read(max_to_read=1)
-    if not msgs:
-        logger.info('No messages found on queue: %s' % cfg.queue_name)
-    for msg in msgs:
-        coord = msg.coord
-        logger.info('Received tile: %s' % serialize_coord(coord))
-
-
-def tilequeue_parser_process(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_s3_options(parser)
-    parser = add_tilestache_config_options(parser)
-    parser = add_output_format_options(parser)
-    parser = add_logging_options(parser)
     parser.add_argument('--daemon',
                         action='store_true',
                         default=False,
                         help='Enable daemon mode, which will continue to poll '
                              'for messages',
                         )
-    parser.set_defaults(func=tilequeue_process)
-    return parser
-
-
-def add_seed_options(parser):
     parser.add_argument('--zoom-start',
                         type=int,
                         default=0,
@@ -207,45 +112,10 @@ def add_seed_options(parser):
                         'duplicate tiles for the overlaps. This flag ensures '
                         'that the tiles will be unique.',
                         )
-    return parser
-
-
-def tilequeue_parser_seed(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser = add_seed_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_seed)
-    return parser
-
-
-def tilequeue_parser_generate_tile(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_s3_options(parser)
-    parser = add_tilestache_config_options(parser)
-    parser = add_output_format_options(parser)
-    parser = add_logging_options(parser)
     parser.add_argument('--tile',
                         help='Tile coordinate used to generate a tile. Must '
                         'be of the form: <zoom>/<column>/<row>',
                         )
-    parser.set_defaults(func=tilequeue_generate_tile)
-    return parser
-
-
-def assert_aws_config(cfg):
-    if (cfg.aws_access_key_id is not None or
-            cfg.aws_secret_access_key is not None):
-        # assert that if either is specified, both are specified
-        assert (cfg.aws_access_key_id is not None and
-                cfg.aws_secret_access_key is not None), \
-            'Must specify both aws key and secret'
-
-
-def add_redis_options(parser):
     parser.add_argument('--redis-host',
                         help='Redis host',
                         )
@@ -263,32 +133,98 @@ def add_redis_options(parser):
     parser.add_argument('--redis-diff-set-key',
                         help='Redis key name of diff coordinates',
                         )
+    parser.add_argument('--explode-until',
+                        type=int,
+                        help='Generate tiles up until a particular zoom',
+                        )
     return parser
+
+
+def make_queue(queue_type, queue_name, cfg):
+    if queue_type == 'sqs':
+        return get_sqs_queue(cfg)
+    elif queue_type == 'mem':
+        from tilequeue.queue import MemoryQueue
+        return MemoryQueue()
+    elif queue_type == 'file':
+        # only support file queues for writing
+        # useful for testing
+        from tilequeue.queue import OutputFileQueue
+        fp = open(queue_name, 'w')
+        return OutputFileQueue(fp)
+    elif queue_type == 'stdout':
+        # only support writing
+        from tilequeue.queue import OutputFileQueue
+        return OutputFileQueue(sys.stdout)
+    else:
+        raise ValueError('Unknown queue type: %s' % queue_type)
+
+
+def tilequeue_parser_write(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_write)
+    return parser
+
+
+def tilequeue_parser_read(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_read)
+    return parser
+
+
+def tilequeue_read(cfg, peripherals):
+    assert cfg.queue_name, 'Missing queue name'
+    logger = make_logger(cfg, 'read')
+    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    msgs = queue.read(max_to_read=1)
+    if not msgs:
+        logger.info('No messages found on queue: %s' % cfg.queue_name)
+    for msg in msgs:
+        coord = msg.coord
+        logger.info('Received tile: %s' % serialize_coord(coord))
+
+
+def tilequeue_parser_process(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_process)
+    return parser
+
+
+def tilequeue_parser_seed(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_seed)
+    return parser
+
+
+def tilequeue_parser_generate_tile(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_generate_tile)
+    return parser
+
+
+def assert_aws_config(cfg):
+    if (cfg.aws_access_key_id is not None or
+            cfg.aws_secret_access_key is not None):
+        # assert that if either is specified, both are specified
+        assert (cfg.aws_access_key_id is not None and
+                cfg.aws_secret_access_key is not None), \
+            'Must specify both aws key and secret'
 
 
 def tilequeue_parser_cache_index_seed(parser):
     parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser = add_seed_options(parser)
     parser.set_defaults(func=tilequeue_cache_index_seed)
     return parser
 
 
 def tilequeue_parser_explode(parser):
     parser = add_config_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.add_argument('--explode-until',
-                        type=int,
-                        help='Generate tiles up until a particular zoom',
-                        )
     parser.set_defaults(func=tilequeue_explode)
     return parser
 
 
 def tilequeue_parser_drain(parser):
     parser = add_config_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
     parser.set_defaults(func=tilequeue_drain)
     return parser
 
