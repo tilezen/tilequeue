@@ -49,12 +49,6 @@ class RedisCacheIndex(object):
     def remove_key(self, diff_set_key):
         self.redis_client.delete(diff_set_key)
 
-    def cache_coords(self):
-        redis_values = self.redis_client.smembers(self.cache_set_key)
-        for redis_value in redis_values:
-            coord = deserialize_redis_value_to_coord(redis_value)
-            yield coord
-
 
 # The tiles will get encoded into integers suitable for redis to store. When
 # redis is given integers, it is able to store them efficiently. Note that the

@@ -266,40 +266,11 @@ def add_redis_options(parser):
     return parser
 
 
-def tilequeue_parser_cache_index_diffs_load(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_load)
-    return parser
-
-
-def tilequeue_parser_cache_index_diffs_intersect(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_intersect)
-    return parser
-
-
-def tilequeue_parser_cache_index_diffs_remove(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_remove)
-    return parser
-
-
 def tilequeue_parser_cache_index_seed(parser):
     parser = add_config_options(parser)
     parser = add_redis_options(parser)
     parser = add_seed_options(parser)
     parser.set_defaults(func=tilequeue_cache_index_seed)
-    return parser
-
-
-def tilequeue_parser_cache_index_tiles(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_tiles)
     return parser
 
 
@@ -378,15 +349,6 @@ def tilequeue_cache_index_seed(cfg):
         out, cfg.redis_cache_set_key, tile_generator)
 
 
-def tilequeue_cache_index_tiles(cfg):
-    redis_cache_index = make_redis_cache_index(cfg)
-    out = sys.stdout
-    coords = redis_cache_index.cache_coords()
-    for coord in coords:
-        coord_str = serialize_coord(coord)
-        out.write(coord_str + '\n')
-
-
 def assert_redis_config(cfg):
     assert cfg.redis_host, 'Missing redis host'
     assert cfg.redis_port, 'Missing redis port'
@@ -418,38 +380,6 @@ def deserialized_coords(serialized_coords):
     for serialized_coord in serialized_coords:
         coord = deserialize_redis_value_to_coord(serialized_coord)
         yield coord
-
-
-def tilequeue_cache_index_diffs_load(cfg):
-    assert cfg.expired_tiles_file, 'Missing expired tiles file'
-    assert os.path.exists(cfg.expired_tiles_file), \
-        'Invalid expired tiles path'
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
-    with open(cfg.expired_tiles_file) as fp:
-        expired_tiles = create_coords_generator_from_tiles_file(fp)
-        serialized_coords = serialize_coords(expired_tiles)
-        exploded_serialized_coords = explode_serialized_coords(
-            serialized_coords, cfg.explode_until,
-            serialize_fn=serialize_coord_to_redis_value,
-            deserialize_fn=deserialize_redis_value_to_coord)
-        exploded_coords = deserialized_coords(exploded_serialized_coords)
-        redis_cache_index.write_coords_redis_protocol(
-            sys.stdout, cfg.redis_diff_set_key, exploded_coords)
-
-
-def tilequeue_cache_index_diffs_intersect(cfg):
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
-    coords = redis_cache_index.find_intersection(cfg.redis_diff_set_key)
-    for coord in coords:
-        print serialize_coord(coord)
-
-
-def tilequeue_cache_index_diffs_remove(cfg):
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
-    redis_cache_index.remove_key(cfg.redis_diff_set_key)
 
 
 def tilequeue_write(cfg):
@@ -624,13 +554,7 @@ def tilequeue_main(argv_args=None):
         ('generate-tile', tilequeue_parser_generate_tile),
         ('explode', tilequeue_parser_explode),
         ('drain', tilequeue_parser_drain),
-        ('cache-index-diffs-load', tilequeue_parser_cache_index_diffs_load),
-        ('cache-index-diffs-intersect',
-         tilequeue_parser_cache_index_diffs_intersect),
-        ('cache-index-diffs-remove',
-         tilequeue_parser_cache_index_diffs_remove),
         ('cache-index-seed', tilequeue_parser_cache_index_seed),
-        ('cache-index-tiles', tilequeue_parser_cache_index_tiles),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
