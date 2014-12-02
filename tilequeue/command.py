@@ -279,9 +279,8 @@ def tilequeue_drain(cfg, peripherals):
 
 def tilequeue_cache_index_seed(cfg, peripherals):
     tile_generator = make_seed_tile_generator(cfg)
-    redis_cache_index = make_redis_cache_index(cfg)
     out = sys.stdout
-    redis_cache_index.write_coords_redis_protocol(
+    peripherals.get('redis_cache_index').write_coords_redis_protocol(
         out, cfg.redis_cache_set_key, tile_generator)
 
 
@@ -498,5 +497,6 @@ def tilequeue_main(argv_args=None):
 
     args = parser.parse_args(argv_args)
     cfg = make_config_from_argparse(args)
-    peripherals = dict(redis=None, queue=None, store=None)
+    peripherals = dict(redis_cache_index=make_redis_cache_index(cfg),
+                       queue=None, store=None)
     args.func(cfg, peripherals)
