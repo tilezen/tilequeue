@@ -146,7 +146,7 @@ def tilequeue_parser_read(parser):
     return parser
 
 
-def tilequeue_read(cfg):
+def tilequeue_read(cfg, peripherals):
     assert cfg.queue_name, 'Missing queue name'
     logger = make_logger(cfg, 'read')
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
@@ -305,7 +305,7 @@ def deserialize_coords(serialized_coords):
         yield coord
 
 
-def tilequeue_explode(cfg):
+def tilequeue_explode(cfg, peripherals):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
@@ -332,7 +332,7 @@ def tilequeue_explode(cfg):
         #     print coord_str
 
 
-def tilequeue_drain(cfg):
+def tilequeue_drain(cfg, peripherals):
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     logger = make_logger(cfg, 'drain')
     logger.info('Draining queue ...')
@@ -341,7 +341,7 @@ def tilequeue_drain(cfg):
     logger.info('Removed %d messages' % n)
 
 
-def tilequeue_cache_index_seed(cfg):
+def tilequeue_cache_index_seed(cfg, peripherals):
     tile_generator = make_seed_tile_generator(cfg)
     redis_cache_index = make_redis_cache_index(cfg)
     out = sys.stdout
@@ -422,7 +422,7 @@ def make_logger(cfg, logger_name):
     return logger
 
 
-def tilequeue_process(cfg):
+def tilequeue_process(cfg, peripherals):
     assert_aws_config(cfg)
 
     logger = make_logger(cfg, 'process')
@@ -492,7 +492,7 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def tilequeue_seed(cfg):
+def tilequeue_seed(cfg, peripherals):
     if cfg.queue_type == 'sqs':
         assert_aws_config(cfg)
 
@@ -507,7 +507,7 @@ def tilequeue_seed(cfg):
     logger.info('Queued %d tiles' % n_tiles)
 
 
-def tilequeue_generate_tile(cfg):
+def tilequeue_generate_tile(cfg, peripherals):
     assert cfg.tile, 'Missing tile coordinate'
     tile_str = cfg.tile
 
@@ -562,4 +562,5 @@ def tilequeue_main(argv_args=None):
 
     args = parser.parse_args(argv_args)
     cfg = make_config_from_argparse(args)
-    args.func(cfg)
+    peripherals = dict(redis=None, queue=None, store=None)
+    args.func(cfg, peripherals)
