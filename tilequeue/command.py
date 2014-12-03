@@ -309,7 +309,7 @@ def tilequeue_intersect(cfg, peripherals):
             if i % 500000 == 0:
                 logger.info("processed %d entries", (i))
             serialized_coord = serialize_coord_to_redis_value(coord)
-            if str(serialized_coord) in all_tiles:
+            if serialized_coord in all_tiles:
                 logger.info("enqueuing " + serialize_coord(coord))
                 queue.enqueue(coord)
 

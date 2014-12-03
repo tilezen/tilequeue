@@ -72,8 +72,8 @@ class TestUniquifyGenerator(unittest.TestCase):
         redis_coords = [serialize_coord_to_redis_value(c0),
                         serialize_coord_to_redis_value(c1)]
         periperals_mock.redis_cache_index = \
-            MagicMock(get_list=lambda: ([str(redis_coords[0]),
-                                         str(redis_coords[1])]))
+            MagicMock(get_list=lambda: ([redis_coords[0],
+                                         redis_coords[1]]))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue
