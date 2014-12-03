@@ -161,24 +161,6 @@ def make_queue(queue_type, queue_name, cfg):
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
-def tilequeue_parser_read(parser):
-    parser = add_config_options(parser)
-    parser.set_defaults(func=tilequeue_read)
-    return parser
-
-
-def tilequeue_read(cfg, peripherals):
-    assert cfg.queue_name, 'Missing queue name'
-    logger = make_logger(cfg, 'read')
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-    msgs = queue.read(max_to_read=1)
-    if not msgs:
-        logger.info('No messages found on queue: %s' % cfg.queue_name)
-    for msg in msgs:
-        coord = msg.coord
-        logger.info('Received tile: %s' % serialize_coord(coord))
-
-
 def tilequeue_parser_process(parser):
     parser = add_config_options(parser)
     parser.set_defaults(func=tilequeue_process)
@@ -491,7 +473,6 @@ def tilequeue_main(argv_args=None):
 
     parser_config = (
         ('process', tilequeue_parser_process),
-        ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
         ('generate-tile', tilequeue_parser_generate_tile),
         ('explode', tilequeue_parser_explode),
