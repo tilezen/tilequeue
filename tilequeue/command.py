@@ -161,12 +161,6 @@ def make_queue(queue_type, queue_name, cfg):
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
-def tilequeue_parser_write(parser):
-    parser = add_config_options(parser)
-    parser.set_defaults(func=tilequeue_write)
-    return parser
-
-
 def tilequeue_parser_read(parser):
     parser = add_config_options(parser)
     parser.set_defaults(func=tilequeue_read)
@@ -355,30 +349,6 @@ def tilequeue_intersect(cfg, peripherals):
     return
 
 
-def tilequeue_write(cfg, peripherals):
-
-    assert_aws_config(cfg)
-
-    assert os.path.exists(cfg.expired_tiles_file), \
-        'Invalid expired tiles path'
-
-    assert cfg.queue_name, 'Missing queue name'
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-
-    logger = make_logger(cfg, 'write')
-
-    with open(cfg.expired_tiles_file) as fp:
-        expired_tiles = create_coords_generator_from_tiles_file(fp, logger)
-        exploded_coords = explode_with_parents(expired_tiles)
-
-        logger.info('Queuing ... ')
-
-        n_coords = queue.enqueue_batch(exploded_coords)
-
-        logger.info('Queuing ... Done')
-        logger.info('Queued %d tiles' % n_coords)
-
-
 def lookup_formats(format_extensions):
     formats = []
     for extension in format_extensions:
@@ -520,7 +490,6 @@ def tilequeue_main(argv_args=None):
     subparsers = parser.add_subparsers()
 
     parser_config = (
-        ('write', tilequeue_parser_write),
         ('process', tilequeue_parser_process),
         ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
