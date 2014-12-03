@@ -5,7 +5,19 @@ class RedisCacheIndex(object):
 
     def __init__(self, redis_client, cache_set_key='tilestache.cache'):
         self.redis_client = redis_client
+        self.redis_client.set_response_callback('SMEMBERS',
+                                                lambda l: [int(i) for i in l])
         self.cache_set_key = cache_set_key
+
+    def intersect(self, coords):
+        all_tiles = self._get_list_of_redis_serialized_coords()
+        for coord in coords:
+            serialized_coord = serialize_coord_to_redis_value(coord)
+            if serialized_coord in all_tiles:
+                yield coord
+
+    def _get_list_of_redis_serialized_coords(self):
+        return self.redis_client.smembers(self.cache_set_key)
 
     def index_coord(self, coord):
         redis_coord_value = serialize_coord_to_redis_value(coord)
@@ -48,12 +60,6 @@ class RedisCacheIndex(object):
 
     def remove_key(self, diff_set_key):
         self.redis_client.delete(diff_set_key)
-
-    def cache_coords(self):
-        redis_values = self.redis_client.smembers(self.cache_set_key)
-        for redis_value in redis_values:
-            coord = deserialize_redis_value_to_coord(redis_value)
-            yield coord
 
 
 # The tiles will get encoded into integers suitable for redis to store. When

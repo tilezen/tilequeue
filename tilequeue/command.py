@@ -1,4 +1,5 @@
 from contextlib import closing
+from collections import namedtuple
 from itertools import chain
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
@@ -10,10 +11,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import get_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
-from tilequeue.store import make_tile_file_store
-from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_serialized_coords
-from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
@@ -32,16 +30,8 @@ import multiprocessing
 
 def add_config_options(parser):
     parser.add_argument('--config')
-    return parser
-
-
-def add_aws_cred_options(parser):
     parser.add_argument('--aws_access_key_id')
     parser.add_argument('--aws_secret_access_key')
-    return parser
-
-
-def add_queue_options(parser):
     parser.add_argument('--queue-name',
                         help='Name of the queue, should already exist.',
                         )
@@ -56,10 +46,6 @@ def add_queue_options(parser):
                         help='Read timeout in seconds when reading '
                              'sqs messages.',
                         )
-    return parser
-
-
-def add_s3_options(parser):
     parser.add_argument('--s3-bucket',
                         help='Name of aws s3 bucket, should already exist.',
                         )
@@ -72,111 +58,28 @@ def add_s3_options(parser):
                         default='',
                         help='Store tile data in s3 with this path prefix.',
                         )
-    return parser
-
-
-def add_tilestache_config_options(parser):
     parser.add_argument('--tilestache-config',
                         help='Path to Tilestache config.',
                         )
-    return parser
-
-
-def add_output_format_options(parser):
     parser.add_argument('--output-formats',
                         nargs='+',
                         choices=('json', 'vtm', 'topojson', 'mapbox'),
                         default=('json', 'vtm'),
                         help='Output formats to produce for each tile.',
                         )
-    return parser
-
-
-def add_logging_options(parser):
     parser.add_argument('--logconfig',
                         help='Path to python logging config file.',
                         )
-    return parser
-
-
-def make_queue(queue_type, queue_name, cfg):
-    if queue_type == 'sqs':
-        return get_sqs_queue(cfg)
-    elif queue_type == 'mem':
-        from tilequeue.queue import MemoryQueue
-        return MemoryQueue()
-    elif queue_type == 'file':
-        # only support file queues for writing
-        # useful for testing
-        from tilequeue.queue import OutputFileQueue
-        fp = open(queue_name, 'w')
-        return OutputFileQueue(fp)
-    elif queue_type == 'stdout':
-        # only support writing
-        from tilequeue.queue import OutputFileQueue
-        return OutputFileQueue(sys.stdout)
-    else:
-        raise ValueError('Unknown queue type: %s' % queue_type)
-
-
-def add_expired_tiles_options(parser):
     parser.add_argument('--expired-tiles-file',
                         help='Path to file containing list of expired tiles. '
                              'Should be one per line, <zoom>/<column>/<row>',
                         )
-    return parser
-
-
-def tilequeue_parser_write(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.set_defaults(func=tilequeue_write)
-    return parser
-
-
-def tilequeue_parser_read(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser.set_defaults(func=tilequeue_read)
-    return parser
-
-
-def tilequeue_read(cfg):
-    assert cfg.queue_name, 'Missing queue name'
-    logger = make_logger(cfg, 'read')
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-    msgs = queue.read(max_to_read=1, timeout_seconds=cfg.read_timeout)
-    if not msgs:
-        logger.info('No messages found on queue: %s' % cfg.queue_name)
-    for msg in msgs:
-        coord = msg.coord
-        logger.info('Received tile: %s' % serialize_coord(coord))
-
-
-def tilequeue_parser_process(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_s3_options(parser)
-    parser = add_tilestache_config_options(parser)
-    parser = add_output_format_options(parser)
-    parser = add_logging_options(parser)
     parser.add_argument('--daemon',
                         action='store_true',
                         default=False,
                         help='Enable daemon mode, which will continue to poll '
                              'for messages',
                         )
-    parser.set_defaults(func=tilequeue_process)
-    return parser
-
-
-def add_seed_options(parser):
     parser.add_argument('--zoom-start',
                         type=int,
                         default=0,
@@ -207,45 +110,6 @@ def add_seed_options(parser):
                         'duplicate tiles for the overlaps. This flag ensures '
                         'that the tiles will be unique.',
                         )
-    return parser
-
-
-def tilequeue_parser_seed(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
-    parser = add_seed_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_seed)
-    return parser
-
-
-def tilequeue_parser_generate_tile(parser):
-    parser = add_config_options(parser)
-    parser = add_aws_cred_options(parser)
-    parser = add_s3_options(parser)
-    parser = add_tilestache_config_options(parser)
-    parser = add_output_format_options(parser)
-    parser = add_logging_options(parser)
-    parser.add_argument('--tile',
-                        help='Tile coordinate used to generate a tile. Must '
-                        'be of the form: <zoom>/<column>/<row>',
-                        )
-    parser.set_defaults(func=tilequeue_generate_tile)
-    return parser
-
-
-def assert_aws_config(cfg):
-    if (cfg.aws_access_key_id is not None or
-            cfg.aws_secret_access_key is not None):
-        # assert that if either is specified, both are specified
-        assert (cfg.aws_access_key_id is not None and
-                cfg.aws_secret_access_key is not None), \
-            'Must specify both aws key and secret'
-
-
-def add_redis_options(parser):
     parser.add_argument('--redis-host',
                         help='Redis host',
                         )
@@ -263,62 +127,75 @@ def add_redis_options(parser):
     parser.add_argument('--redis-diff-set-key',
                         help='Redis key name of diff coordinates',
                         )
+    parser.add_argument('--explode-until',
+                        type=int,
+                        help='Generate tiles up until a particular zoom',
+                        )
     return parser
 
 
-def tilequeue_parser_cache_index_diffs_load(parser):
+def make_queue(queue_type, queue_name, cfg):
+    if queue_type == 'sqs':
+        return get_sqs_queue(cfg)
+    elif queue_type == 'mem':
+        from tilequeue.queue import MemoryQueue
+        return MemoryQueue()
+    elif queue_type == 'file':
+        # only support file queues for writing
+        # useful for testing
+        from tilequeue.queue import OutputFileQueue
+        fp = open(queue_name, 'w')
+        return OutputFileQueue(fp)
+    elif queue_type == 'stdout':
+        # only support writing
+        from tilequeue.queue import OutputFileQueue
+        return OutputFileQueue(sys.stdout)
+    else:
+        raise ValueError('Unknown queue type: %s' % queue_type)
+
+
+def tilequeue_parser_process(parser):
     parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_load)
+    parser.set_defaults(func=tilequeue_process)
     return parser
 
 
-def tilequeue_parser_cache_index_diffs_intersect(parser):
+def tilequeue_parser_seed(parser):
     parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_intersect)
+    parser.set_defaults(func=tilequeue_seed)
     return parser
 
 
-def tilequeue_parser_cache_index_diffs_remove(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_diffs_remove)
-    return parser
+def assert_aws_config(cfg):
+    if (cfg.aws_access_key_id is not None or
+            cfg.aws_secret_access_key is not None):
+        # assert that if either is specified, both are specified
+        assert (cfg.aws_access_key_id is not None and
+                cfg.aws_secret_access_key is not None), \
+            'Must specify both aws key and secret'
 
 
 def tilequeue_parser_cache_index_seed(parser):
     parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser = add_seed_options(parser)
     parser.set_defaults(func=tilequeue_cache_index_seed)
-    return parser
-
-
-def tilequeue_parser_cache_index_tiles(parser):
-    parser = add_config_options(parser)
-    parser = add_redis_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_tiles)
     return parser
 
 
 def tilequeue_parser_explode(parser):
     parser = add_config_options(parser)
-    parser = add_expired_tiles_options(parser)
-    parser.add_argument('--explode-until',
-                        type=int,
-                        help='Generate tiles up until a particular zoom',
-                        )
     parser.set_defaults(func=tilequeue_explode)
     return parser
 
 
 def tilequeue_parser_drain(parser):
     parser = add_config_options(parser)
-    parser = add_queue_options(parser)
-    parser = add_logging_options(parser)
     parser.set_defaults(func=tilequeue_drain)
+    return parser
+
+
+def tilequeue_parser_intersect(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_intersect)
     return parser
 
 
@@ -334,7 +211,7 @@ def deserialize_coords(serialized_coords):
         yield coord
 
 
-def tilequeue_explode(cfg):
+def tilequeue_explode(cfg, peripherals):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
@@ -361,7 +238,7 @@ def tilequeue_explode(cfg):
         #     print coord_str
 
 
-def tilequeue_drain(cfg):
+def tilequeue_drain(cfg, peripherals):
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     logger = make_logger(cfg, 'drain')
     logger.info('Draining queue ...')
@@ -370,21 +247,11 @@ def tilequeue_drain(cfg):
     logger.info('Removed %d messages' % n)
 
 
-def tilequeue_cache_index_seed(cfg):
+def tilequeue_cache_index_seed(cfg, peripherals):
     tile_generator = make_seed_tile_generator(cfg)
-    redis_cache_index = make_redis_cache_index(cfg)
     out = sys.stdout
-    redis_cache_index.write_coords_redis_protocol(
+    peripherals.redis_cache_index.write_coords_redis_protocol(
         out, cfg.redis_cache_set_key, tile_generator)
-
-
-def tilequeue_cache_index_tiles(cfg):
-    redis_cache_index = make_redis_cache_index(cfg)
-    out = sys.stdout
-    coords = redis_cache_index.cache_coords()
-    for coord in coords:
-        coord_str = serialize_coord(coord)
-        out.write(coord_str + '\n')
 
 
 def assert_redis_config(cfg):
@@ -420,12 +287,13 @@ def deserialized_coords(serialized_coords):
         yield coord
 
 
-def tilequeue_cache_index_diffs_load(cfg):
+def tilequeue_intersect(cfg, peripherals):
     assert cfg.expired_tiles_file, 'Missing expired tiles file'
     assert os.path.exists(cfg.expired_tiles_file), \
         'Invalid expired tiles path'
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
+    logger = make_logger(cfg, 'read')
+    logger.info("intersecting")
+    queue = peripherals.queue
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
         serialized_coords = serialize_coords(expired_tiles)
@@ -434,46 +302,18 @@ def tilequeue_cache_index_diffs_load(cfg):
             serialize_fn=serialize_coord_to_redis_value,
             deserialize_fn=deserialize_redis_value_to_coord)
         exploded_coords = deserialized_coords(exploded_serialized_coords)
-        redis_cache_index.write_coords_redis_protocol(
-            sys.stdout, cfg.redis_diff_set_key, exploded_coords)
+        coords_to_enqueue = \
+            peripherals.redis_cache_index.intersect(exploded_coords)
+        i = 0
+        for coord in coords_to_enqueue:
+            i += 1
+            if i % 500000 == 0:
+                logger.info("processed %d entries", (i))
+            queue.enqueue(coord)
+            logger.info("enqueuing " + str(coord))
 
-
-def tilequeue_cache_index_diffs_intersect(cfg):
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
-    coords = redis_cache_index.find_intersection(cfg.redis_diff_set_key)
-    for coord in coords:
-        print serialize_coord(coord)
-
-
-def tilequeue_cache_index_diffs_remove(cfg):
-    assert cfg.redis_diff_set_key, 'Missing redis diff set key name'
-    redis_cache_index = make_redis_cache_index(cfg)
-    redis_cache_index.remove_key(cfg.redis_diff_set_key)
-
-
-def tilequeue_write(cfg):
-
-    assert_aws_config(cfg)
-
-    assert os.path.exists(cfg.expired_tiles_file), \
-        'Invalid expired tiles path'
-
-    assert cfg.queue_name, 'Missing queue name'
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
-
-    logger = make_logger(cfg, 'write')
-
-    with open(cfg.expired_tiles_file) as fp:
-        expired_tiles = create_coords_generator_from_tiles_file(fp, logger)
-        exploded_coords = explode_with_parents(expired_tiles)
-
-        logger.info('Queuing ... ')
-
-        n_coords = queue.enqueue_batch(exploded_coords)
-
-        logger.info('Queuing ... Done')
-        logger.info('Queued %d tiles' % n_coords)
+    logger.info("Completed deleting file: " + cfg.expired_tiles_file)
+    os.remove(cfg.expired_tiles_file)
 
 
 def lookup_formats(format_extensions):
@@ -492,7 +332,7 @@ def make_logger(cfg, logger_name):
     return logger
 
 
-def tilequeue_process(cfg):
+def tilequeue_process(cfg, peripherals):
     assert_aws_config(cfg)
 
     logger = make_logger(cfg, 'process')
@@ -562,7 +402,7 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def tilequeue_seed(cfg):
+def tilequeue_seed(cfg, peripherals):
     if cfg.queue_type == 'sqs':
         assert_aws_config(cfg)
 
@@ -575,31 +415,6 @@ def tilequeue_seed(cfg):
     n_tiles = queue.enqueue_batch(tile_generator)
 
     logger.info('Queued %d tiles' % n_tiles)
-
-
-def tilequeue_generate_tile(cfg):
-    assert cfg.tile, 'Missing tile coordinate'
-    tile_str = cfg.tile
-
-    coord = deserialize_coord(tile_str)
-    assert coord is not None, 'Could not parse tile from %s' % tile_str
-
-    tilestache_config = parseConfigfile(cfg.tilestache_config)
-    formats = lookup_formats(cfg.output_formats)
-
-    if cfg.s3_bucket:
-        store = make_s3_store(
-            cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
-            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
-    else:
-        store = make_tile_file_store(sys.stdout)
-
-    job_creator = RenderJobCreator(tilestache_config, formats, store)
-    job_creator.process_jobs_for_coord(coord)
-
-    sys.stdout = open("/dev/stdout", "w")
-    logger = make_logger(cfg, 'generate_tile')
-    logger.info('Generated tile for: %s' % tile_str)
 
 
 class TileArgumentParser(argparse.ArgumentParser):
@@ -617,20 +432,12 @@ def tilequeue_main(argv_args=None):
     subparsers = parser.add_subparsers()
 
     parser_config = (
-        ('write', tilequeue_parser_write),
         ('process', tilequeue_parser_process),
-        ('read', tilequeue_parser_read),
         ('seed', tilequeue_parser_seed),
-        ('generate-tile', tilequeue_parser_generate_tile),
         ('explode', tilequeue_parser_explode),
         ('drain', tilequeue_parser_drain),
-        ('cache-index-diffs-load', tilequeue_parser_cache_index_diffs_load),
-        ('cache-index-diffs-intersect',
-         tilequeue_parser_cache_index_diffs_intersect),
-        ('cache-index-diffs-remove',
-         tilequeue_parser_cache_index_diffs_remove),
         ('cache-index-seed', tilequeue_parser_cache_index_seed),
-        ('cache-index-tiles', tilequeue_parser_cache_index_tiles),
+        ('intersect', tilequeue_parser_intersect),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
@@ -638,4 +445,8 @@ def tilequeue_main(argv_args=None):
 
     args = parser.parse_args(argv_args)
     cfg = make_config_from_argparse(args)
-    args.func(cfg)
+    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue store')
+    peripherals = Peripherals(make_redis_cache_index(cfg),
+                              make_queue(cfg.queue_type, cfg.queue_name, cfg),
+                              None)
+    args.func(cfg, peripherals)

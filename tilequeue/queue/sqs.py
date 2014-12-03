@@ -55,14 +55,9 @@ class SqsQueue(object):
             self._write_batch(buffer)
         return n
 
-    def read(self, max_to_read=1, timeout_seconds=20):
+    def read(self, max_to_read=1):
         coord_messages = []
         messages = self.sqs_queue.get_messages(num_messages=max_to_read)
-        if not messages:
-            message = self.sqs_queue.read(wait_time_seconds=timeout_seconds)
-            if message is None:
-                return []
-            messages = [message]
         for message in messages:
             data = message.get_body()
             coord = deserialize_coord(data)

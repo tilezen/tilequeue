@@ -1,7 +1,6 @@
 aws:
   sqs:
     name: <queue name>
-    timeout-seconds: 20
   s3:
     bucket: <name-of-bucket>
     path: osm
