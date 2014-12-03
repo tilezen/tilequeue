@@ -11,10 +11,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import get_sqs_queue
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
-from tilequeue.store import make_tile_file_store
-from tilequeue.tile import deserialize_coord
 from tilequeue.tile import explode_serialized_coords
-from tilequeue.tile import explode_with_parents
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
@@ -113,10 +110,6 @@ def add_config_options(parser):
                         'duplicate tiles for the overlaps. This flag ensures '
                         'that the tiles will be unique.',
                         )
-    parser.add_argument('--tile',
-                        help='Tile coordinate used to generate a tile. Must '
-                        'be of the form: <zoom>/<column>/<row>',
-                        )
     parser.add_argument('--redis-host',
                         help='Redis host',
                         )
@@ -170,12 +163,6 @@ def tilequeue_parser_process(parser):
 def tilequeue_parser_seed(parser):
     parser = add_config_options(parser)
     parser.set_defaults(func=tilequeue_seed)
-    return parser
-
-
-def tilequeue_parser_generate_tile(parser):
-    parser = add_config_options(parser)
-    parser.set_defaults(func=tilequeue_generate_tile)
     return parser
 
 
@@ -432,31 +419,6 @@ def tilequeue_seed(cfg, peripherals):
     logger.info('Queued %d tiles' % n_tiles)
 
 
-def tilequeue_generate_tile(cfg, peripherals):
-    assert cfg.tile, 'Missing tile coordinate'
-    tile_str = cfg.tile
-
-    coord = deserialize_coord(tile_str)
-    assert coord is not None, 'Could not parse tile from %s' % tile_str
-
-    tilestache_config = parseConfigfile(cfg.tilestache_config)
-    formats = lookup_formats(cfg.output_formats)
-
-    if cfg.s3_bucket:
-        store = make_s3_store(
-            cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
-            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
-    else:
-        store = make_tile_file_store(sys.stdout)
-
-    job_creator = RenderJobCreator(tilestache_config, formats, store)
-    job_creator.process_jobs_for_coord(coord)
-
-    sys.stdout = open("/dev/stdout", "w")
-    logger = make_logger(cfg, 'generate_tile')
-    logger.info('Generated tile for: %s' % tile_str)
-
-
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -474,7 +436,6 @@ def tilequeue_main(argv_args=None):
     parser_config = (
         ('process', tilequeue_parser_process),
         ('seed', tilequeue_parser_seed),
-        ('generate-tile', tilequeue_parser_generate_tile),
         ('explode', tilequeue_parser_explode),
         ('drain', tilequeue_parser_drain),
         ('cache-index-seed', tilequeue_parser_cache_index_seed),
