@@ -302,10 +302,15 @@ def tilequeue_intersect(cfg, peripherals):
             serialize_fn=serialize_coord_to_redis_value,
             deserialize_fn=deserialize_redis_value_to_coord)
         exploded_coords = deserialized_coords(exploded_serialized_coords)
-        RedisCacheIndex.enqueue_relevant_coords(peripherals.redis_cache_index,
-                                                exploded_coords,
-                                                queue,
-                                                logger)
+        coords_to_enqueue = \
+            peripherals.redis_cache_index.intersect(exploded_coords)
+        i = 0
+        for coord in coords_to_enqueue:
+            i += 1
+            if i % 500000 == 0:
+                logger.info("processed %d entries", (i))
+            queue.enqueue(coord)
+            logger.info("enqueuing " + str(coord))
 
     logger.info("Completed deleting file: " + cfg.expired_tiles_file)
     os.remove(cfg.expired_tiles_file)

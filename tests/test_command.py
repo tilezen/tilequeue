@@ -44,8 +44,8 @@ class TestUniquifyGenerator(unittest.TestCase):
         periperals_mock = MagicMock()
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
-        periperals_mock.redis_cache_index = \
-            MagicMock(_get_list_of_redis_serialized_coords=lambda: ())
+        periperals_mock.redis_cache_index = MagicMock(
+            intersect=lambda x: ([]))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue
@@ -62,18 +62,14 @@ class TestUniquifyGenerator(unittest.TestCase):
         from mock import MagicMock
         from tilequeue.command import tilequeue_intersect
         from ModestMaps.Core import Coordinate
-        from tilequeue.cache import serialize_coord_to_redis_value
         from tilequeue.tile import serialize_coord
         cfg_mock = MagicMock()
         cfg_mock.queue_type = 'sqs'
         periperals_mock = MagicMock()
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
-        redis_coords = [serialize_coord_to_redis_value(c0),
-                        serialize_coord_to_redis_value(c1)]
         periperals_mock.redis_cache_index = MagicMock(
-            _get_list_of_redis_serialized_coords=lambda: ([redis_coords[0],
-                                                          redis_coords[1]]))
+            intersect=lambda x: ([c0, c1]))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue
