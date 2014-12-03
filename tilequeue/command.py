@@ -250,7 +250,7 @@ def tilequeue_drain(cfg, peripherals):
 def tilequeue_cache_index_seed(cfg, peripherals):
     tile_generator = make_seed_tile_generator(cfg)
     out = sys.stdout
-    peripherals.get('redis_cache_index').write_coords_redis_protocol(
+    peripherals.redis_cache_index.write_coords_redis_protocol(
         out, cfg.redis_cache_set_key, tile_generator)
 
 
@@ -315,7 +315,6 @@ def tilequeue_intersect(cfg, peripherals):
 
     logger.info("Completed deleting file: " + cfg.expired_tiles_file)
     os.remove(cfg.expired_tiles_file)
-    return
 
 
 def lookup_formats(format_extensions):
