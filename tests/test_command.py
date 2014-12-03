@@ -45,7 +45,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
         periperals_mock.redis_cache_index = \
-            MagicMock(get_list=lambda: ())
+            MagicMock(_get_list_of_redis_serialized_coords=lambda: ())
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue
@@ -71,9 +71,9 @@ class TestUniquifyGenerator(unittest.TestCase):
         c1 = Coordinate(row=1, column=1, zoom=1)
         redis_coords = [serialize_coord_to_redis_value(c0),
                         serialize_coord_to_redis_value(c1)]
-        periperals_mock.redis_cache_index = \
-            MagicMock(get_list=lambda: ([redis_coords[0],
-                                         redis_coords[1]]))
+        periperals_mock.redis_cache_index = MagicMock(
+            _get_list_of_redis_serialized_coords=lambda: ([redis_coords[0],
+                                                          redis_coords[1]]))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue

@@ -9,7 +9,21 @@ class RedisCacheIndex(object):
                                                 lambda l: [int(i) for i in l])
         self.cache_set_key = cache_set_key
 
-    def get_list(self):
+    @staticmethod
+    def enqueue_relevant_coords(cache, coords, queue, logger):
+        from tilequeue.tile import serialize_coord
+        all_tiles = cache._get_list_of_redis_serialized_coords()
+        i = 0
+        for coord in coords:
+            i += 1
+            if i % 500000 == 0:
+                logger.info("processed %d entries", (i))
+            serialized_coord = serialize_coord_to_redis_value(coord)
+            if serialized_coord in all_tiles:
+                logger.info("enqueuing " + serialize_coord(coord))
+                queue.enqueue(coord)
+
+    def _get_list_of_redis_serialized_coords(self):
         return self.redis_client.smembers(self.cache_set_key)
 
     def index_coord(self, coord):

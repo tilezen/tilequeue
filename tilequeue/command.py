@@ -293,7 +293,6 @@ def tilequeue_intersect(cfg, peripherals):
         'Invalid expired tiles path'
     logger = make_logger(cfg, 'read')
     logger.info("intersecting")
-    all_tiles = peripherals.redis_cache_index.get_list()
     queue = peripherals.queue
     with open(cfg.expired_tiles_file) as fp:
         expired_tiles = create_coords_generator_from_tiles_file(fp)
@@ -303,15 +302,10 @@ def tilequeue_intersect(cfg, peripherals):
             serialize_fn=serialize_coord_to_redis_value,
             deserialize_fn=deserialize_redis_value_to_coord)
         exploded_coords = deserialized_coords(exploded_serialized_coords)
-        i = 0
-        for coord in exploded_coords:
-            i += 1
-            if i % 500000 == 0:
-                logger.info("processed %d entries", (i))
-            serialized_coord = serialize_coord_to_redis_value(coord)
-            if serialized_coord in all_tiles:
-                logger.info("enqueuing " + serialize_coord(coord))
-                queue.enqueue(coord)
+        RedisCacheIndex.enqueue_relevant_coords(peripherals.redis_cache_index,
+                                                exploded_coords,
+                                                queue,
+                                                logger)
 
     logger.info("Completed deleting file: " + cfg.expired_tiles_file)
     os.remove(cfg.expired_tiles_file)
