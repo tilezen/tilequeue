@@ -1,4 +1,5 @@
 from contextlib import closing
+from multiprocessing.pool import ThreadPool
 from shapely.wkb import dumps
 from shapely.wkb import loads
 from tilequeue.format import json_format
@@ -104,8 +105,23 @@ class RenderDataFetcher(object):
         self.spherical_mercator = SphericalMercator()
         self.update_feature_layer = update_feature_layer
         self.find_columns_for_queries = find_columns_for_queries
+        self.sql_thread_pool = None
+        self._is_initialized = False
+
+    def initialize(self):
+        assert not self._is_initialized, 'Multiple initialization'
+
+        # create a thread pool
+        n_layers = 7
+        # we execute vtm queries concurrently
+        n_threads = n_layers * 2
+        self.sql_thread_pool = ThreadPool(n_threads)
+
+        self._is_initialized = True
 
     def __call__(self, coord):
+        assert self._is_initialized, 'Need to call initialize first'
+
         ul = self.spherical_mercator.coordinateProj(coord)
         lr = self.spherical_mercator.coordinateProj(coord.down().right())
         bounds = (
@@ -135,51 +151,73 @@ class RenderDataFetcher(object):
         render_data = []
 
         if has_vtm:
-            vtm_feature_layers = execute_queries_for(
-                self.conn_info, self.layer_data, zoom, bounds, tolerance,
-                vtm_padding, vtm_scale,
-                columns_for_queries, self.update_feature_layer)
-            vtm_render_data = RenderData(vtm_format, vtm_feature_layers,
-                                         bounds)
+            vtm_empty_results, vtm_async_results = enqueue_queries(
+                self.sql_thread_pool, self.conn_info, self.layer_data, zoom,
+                bounds, tolerance, vtm_padding, vtm_scale,
+                columns_for_queries)
+
+        if has_non_vtm:
+            non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
+                self.sql_thread_pool, self.conn_info, self.layer_data, zoom,
+                bounds, tolerance, non_vtm_padding, non_vtm_scale,
+                columns_for_queries)
+
+        def feature_layers_from_results(async_results):
+            feature_layers = []
+            for async_result in async_results:
+                layer_name, features = async_result.get()
+                feature_layer = dict(name=layer_name, features=features)
+                if self.update_feature_layer:
+                    feature_layer = self.update_feature_layer(feature_layer)
+                feature_layers.append(feature_layer)
+            return feature_layers
+
+        if has_vtm:
+            vtm_feature_layers = feature_layers_from_results(vtm_async_results)
+            vtm_feature_layers.extend(vtm_empty_results)
+            vtm_render_data = RenderData(
+                vtm_format, vtm_feature_layers, bounds)
             render_data.append(vtm_render_data)
 
         if has_non_vtm:
-            non_vtm_feature_layers = execute_queries_for(
-                self.conn_info, self.layer_data, zoom, bounds, tolerance,
-                non_vtm_padding, non_vtm_scale,
-                columns_for_queries, self.update_feature_layer)
-            non_vtm_render_data = [RenderData(format, non_vtm_feature_layers,
-                                              bounds)
-                                   for format in self.formats
-                                   if format != vtm_format]
+            non_vtm_feature_layers = feature_layers_from_results(
+                non_vtm_async_results)
+            non_vtm_feature_layers.extend(non_vtm_empty_results)
+            non_vtm_render_data = [
+                RenderData(format, non_vtm_feature_layers, bounds)
+                for format in self.formats if format != vtm_format
+            ]
             render_data.extend(non_vtm_render_data)
 
         return render_data
 
 
-def execute_queries_for(conn_info, layer_data, zoom, bounds,
-                        tolerance, padding, scale, columns,
-                        update_feature_layer=None):
+def execute_query(conn_info, query, geometry_types, layer_name):
+    features = get_features(conn_info, query, geometry_types)
+    return layer_name, features
+
+
+def enqueue_queries(thread_pool, conn_info, layer_data, zoom, bounds,
+                    tolerance, padding, scale, columns):
     queries_to_execute = build_feature_queries(
         bounds, layer_data, zoom,
         tolerance, padding, scale, columns)
 
-    # consider fetching all in parallel
-    # feature_layers will have the same data shape that the
-    # formatters expect
-    feature_layers = []
+    empty_results = []
+    async_results = []
     for layer_name, geometry_types, query in queries_to_execute:
         if query is None:
-            features = []
+            empty_feature_layer = dict(name=layer_name, features=[])
+            empty_results.append(empty_feature_layer)
         else:
-            # get_features makes a new connection every time
-            features = get_features(conn_info, query, geometry_types)
-        feature_layer = dict(name=layer_name, features=features)
-        if update_feature_layer:
-            feature_layer = update_feature_layer(feature_layer)
-        feature_layers.append(feature_layer)
+            # TODO we'll want to do the geometry_types check outside
+            # of the threads
+            async_result = thread_pool.apply_async(
+                execute_query,
+                (conn_info, query, geometry_types, layer_name))
+            async_results.append(async_result)
 
-    return feature_layers
+    return empty_results, async_results
 
 
 half_circumference_meters = 20037508.342789244
@@ -280,6 +318,10 @@ class RenderJobCreator(object):
         self.formats = formats
         self.feature_fetcher = make_feature_fetcher(tilestache_config, formats)
         self.store = store
+
+    def initialize(self):
+        # process local initialization
+        self.feature_fetcher.initialize()
 
     def create(self, coord):
         return RenderJob(coord, self.formats, self.feature_fetcher,

@@ -17,6 +17,10 @@ class Worker(object):
 
     def process(self, max_to_read=1):
         trap_signal()
+
+        # process specific initialization
+        self.job_creator.initialize()
+
         while True:
             msgs = self.queue.read(max_to_read=max_to_read)
             for msg in msgs:
