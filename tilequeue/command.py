@@ -1,4 +1,5 @@
 from contextlib import closing
+from collections import namedtuple
 from itertools import chain
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
@@ -229,6 +230,12 @@ def tilequeue_parser_drain(parser):
     return parser
 
 
+def tilequeue_parser_intersect(parser):
+    parser = add_config_options(parser)
+    parser.set_defaults(func=tilequeue_intersect)
+    return parser
+
+
 def serialize_coords(coords):
     for coord in coords:
         serialized_coord = serialize_coord_to_redis_value(coord)
@@ -317,7 +324,38 @@ def deserialized_coords(serialized_coords):
         yield coord
 
 
-def tilequeue_write(cfg):
+def tilequeue_intersect(cfg, peripherals):
+    assert cfg.expired_tiles_file, 'Missing expired tiles file'
+    assert os.path.exists(cfg.expired_tiles_file), \
+        'Invalid expired tiles path'
+    logger = make_logger(cfg, 'read')
+    logger.info("intersecting")
+    all_tiles = peripherals.redis_cache_index.get_list()
+    queue = peripherals.queue
+    with open(cfg.expired_tiles_file) as fp:
+        expired_tiles = create_coords_generator_from_tiles_file(fp)
+        serialized_coords = serialize_coords(expired_tiles)
+        exploded_serialized_coords = explode_serialized_coords(
+            serialized_coords, cfg.explode_until,
+            serialize_fn=serialize_coord_to_redis_value,
+            deserialize_fn=deserialize_redis_value_to_coord)
+        exploded_coords = deserialized_coords(exploded_serialized_coords)
+        i = 0
+        for coord in exploded_coords:
+            i += 1
+            if i % 500000 == 0:
+                logger.info("processed %d entries", (i))
+            serialized_coord = serialize_coord_to_redis_value(coord)
+            if str(serialized_coord) in all_tiles:
+                logger.info("enqueuing " + serialize_coord(coord))
+                queue.enqueue(coord)
+
+    logger.info("Completed deleting file: " + cfg.expired_tiles_file)
+    os.remove(cfg.expired_tiles_file)
+    return
+
+
+def tilequeue_write(cfg, peripherals):
 
     assert_aws_config(cfg)
 
@@ -490,6 +528,7 @@ def tilequeue_main(argv_args=None):
         ('explode', tilequeue_parser_explode),
         ('drain', tilequeue_parser_drain),
         ('cache-index-seed', tilequeue_parser_cache_index_seed),
+        ('intersect', tilequeue_parser_intersect),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
@@ -497,6 +536,8 @@ def tilequeue_main(argv_args=None):
 
     args = parser.parse_args(argv_args)
     cfg = make_config_from_argparse(args)
-    peripherals = dict(redis_cache_index=make_redis_cache_index(cfg),
-                       queue=None, store=None)
+    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue store')
+    peripherals = Peripherals(make_redis_cache_index(cfg),
+                              make_queue(cfg.queue_type, cfg.queue_name, cfg),
+                              None)
     args.func(cfg, peripherals)
