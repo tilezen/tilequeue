@@ -10,7 +10,7 @@ from tilequeue.format import vtm_format
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import build_query
-from TileStache.Goodies.VecTiles.server import get_features
+from TileStache.Goodies.VecTiles.server import Connection
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
@@ -165,7 +165,28 @@ class RenderDataFetcher(object):
         def feature_layers_from_results(async_results):
             feature_layers = []
             for async_result in async_results:
-                layer_name, features = async_result.get()
+                rows, layer_name, geometry_types = async_result.get()
+
+                features = []
+                for row in rows:
+                    assert '__geometry__' in row, \
+                        'Missing __geometry__ in query for: %s' % layer_name
+                    assert '__id__' in row, \
+                        'Missing __id__ in query for: %s' % layer_name
+
+                    wkb = bytes(row.pop('__geometry__'))
+                    id = row.pop('__id__')
+
+                    if geometry_types is not None:
+                        shape = loads(wkb)
+                        geom_type = shape.__geo_interface__['type']
+                        if geom_type not in geometry_types:
+                            continue
+
+                    props = dict((k, v) for k, v in row.items()
+                                 if v is not None)
+                    features.append((wkb, props, id))
+
                 feature_layer = dict(name=layer_name, features=features)
                 if self.update_feature_layer:
                     feature_layer = self.update_feature_layer(feature_layer)
@@ -193,8 +214,11 @@ class RenderDataFetcher(object):
 
 
 def execute_query(conn_info, query, geometry_types, layer_name):
-    features = get_features(conn_info, query, geometry_types)
-    return layer_name, features
+    # TODO connection pool
+    with Connection(conn_info) as db:
+        db.execute(query)
+        raw_results = list(db.fetchall())
+        return raw_results, layer_name, geometry_types
 
 
 def enqueue_queries(thread_pool, conn_info, layer_data, zoom, bounds,
