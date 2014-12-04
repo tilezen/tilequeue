@@ -64,7 +64,7 @@ def add_config_options(parser):
     parser.add_argument('--output-formats',
                         nargs='+',
                         choices=('json', 'vtm', 'topojson', 'mapbox'),
-                        default=('json', 'vtm'),
+                        default=None,
                         help='Output formats to produce for each tile.',
                         )
     parser.add_argument('--logconfig',

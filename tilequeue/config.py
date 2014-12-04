@@ -29,9 +29,7 @@ class CliConfiguration(object):
                                            'tilestache config')
         self.expired_tiles_file = self._cfg('expired_tiles_file',
                                             'tiles expired')
-        self.output_formats = self._cfg('output_formats',
-                                        'tilestache formats',
-                                        ('json', 'vtm'))
+        self.output_formats = self._cfg('output_formats', 'tilestache formats')
         self.zoom_start = self._cfg('zoom_start', 'tiles zoom-start', 0)
         self.zoom_until = self._cfg('zoom_until', 'tiles zoom-until', 0)
         self.unique_tiles = self._cfg('unique-tiles', 'tiles unique')
