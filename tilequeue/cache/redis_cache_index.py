@@ -5,8 +5,10 @@ class RedisCacheIndex(object):
 
     def __init__(self, redis_client, cache_set_key='tilestache.cache'):
         self.redis_client = redis_client
-        self.redis_client.set_response_callback('SMEMBERS',
-                                                lambda l: [int(i) for i in l])
+        self.redis_client.set_response_callback(
+            'SMEMBERS',
+            lambda l: set((int(i) for i in l))
+        )
         self.cache_set_key = cache_set_key
 
     def intersect(self, coords):
