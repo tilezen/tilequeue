@@ -1,5 +1,7 @@
 from contextlib import closing
 from multiprocessing.pool import ThreadPool
+from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 from shapely.wkb import dumps
 from shapely.wkb import loads
 from tilequeue.format import json_format
@@ -10,7 +12,6 @@ from tilequeue.format import vtm_format
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import build_query
-from TileStache.Goodies.VecTiles.server import Connection
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
@@ -96,9 +97,6 @@ class RenderDataFetcher(object):
     def __init__(self, conn_info, layer_data, formats,
                  update_feature_layer=None,
                  find_columns_for_queries=find_columns_for_queries):
-        # TODO consider conn_info to instead be a function to call to retrieve
-        # an actual postgis connection
-        # we would need to duplicate the get_features function however
         self.conn_info = conn_info
         self.formats = formats
         self.layer_data = layer_data
@@ -116,6 +114,12 @@ class RenderDataFetcher(object):
         # we execute vtm queries concurrently
         n_threads = n_layers * 2
         self.sql_thread_pool = ThreadPool(n_threads)
+
+        # create a postgresql connection pool
+        min_n_conn = n_layers
+        max_n_conn = n_layers * 2
+        self.sql_conn_pool = ThreadedConnectionPool(min_n_conn, max_n_conn,
+                                                    **self.conn_info)
 
         self._is_initialized = True
 
@@ -152,15 +156,15 @@ class RenderDataFetcher(object):
 
         if has_vtm:
             vtm_empty_results, vtm_async_results = enqueue_queries(
-                self.sql_thread_pool, self.conn_info, self.layer_data, zoom,
-                bounds, tolerance, vtm_padding, vtm_scale,
-                columns_for_queries)
+                self.sql_thread_pool, self.sql_conn_pool,
+                self.layer_data, zoom, bounds, tolerance, vtm_padding,
+                vtm_scale, columns_for_queries)
 
         if has_non_vtm:
             non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
-                self.sql_thread_pool, self.conn_info, self.layer_data, zoom,
-                bounds, tolerance, non_vtm_padding, non_vtm_scale,
-                columns_for_queries)
+                self.sql_thread_pool, self.sql_conn_pool,
+                self.layer_data, zoom, bounds, tolerance,
+                non_vtm_padding, non_vtm_scale, columns_for_queries)
 
         def feature_layers_from_results(async_results):
             feature_layers = []
@@ -213,15 +217,18 @@ class RenderDataFetcher(object):
         return render_data
 
 
-def execute_query(conn_info, query, geometry_types, layer_name):
-    # TODO connection pool
-    with Connection(conn_info) as db:
-        db.execute(query)
-        raw_results = list(db.fetchall())
-        return raw_results, layer_name, geometry_types
+def execute_query(conn_pool, query, geometry_types, layer_name):
+    conn = conn_pool.getconn()
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(query)
+        rows = list(cursor.fetchall())
+        return rows, layer_name, geometry_types
+    finally:
+        conn_pool.putconn(conn)
 
 
-def enqueue_queries(thread_pool, conn_info, layer_data, zoom, bounds,
+def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
                     tolerance, padding, scale, columns):
     queries_to_execute = build_feature_queries(
         bounds, layer_data, zoom,
@@ -234,11 +241,9 @@ def enqueue_queries(thread_pool, conn_info, layer_data, zoom, bounds,
             empty_feature_layer = dict(name=layer_name, features=[])
             empty_results.append(empty_feature_layer)
         else:
-            # TODO we'll want to do the geometry_types check outside
-            # of the threads
             async_result = thread_pool.apply_async(
                 execute_query,
-                (conn_info, query, geometry_types, layer_name))
+                (conn_pool, query, geometry_types, layer_name))
             async_results.append(async_result)
 
     return empty_results, async_results
