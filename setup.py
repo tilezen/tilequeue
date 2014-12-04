@@ -31,6 +31,7 @@ setup(name='tilequeue',
       zip_safe=False,
       install_requires=[
           'boto',
+          'hiredis',
           'ModestMaps',
           'TileStache',
           'PyYAML',
