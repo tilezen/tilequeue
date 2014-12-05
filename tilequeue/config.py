@@ -53,6 +53,7 @@ class CliConfiguration(object):
         self.workers = self._cfg('workers', 'workers')
         self.messages_at_once = self._cfg('messages_at_once',
                                           'messages_at_once')
+        self.postgresql_conn_info = self.yml['postgresql']
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -109,6 +110,13 @@ def default_yml_config():
             'db': 0,
             'cache-set-key': 'tilestache.cache',
             'diff-set-key': None,
+        },
+        'postgresql': {
+            'host': 'localhost',
+            'port': 5432,
+            'database': 'osm',
+            'user': 'osm',
+            'password': None,
         },
     }
 

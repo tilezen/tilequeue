@@ -1,5 +1,5 @@
-from contextlib import closing
 from collections import namedtuple
+from contextlib import closing
 from itertools import chain
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
@@ -9,6 +9,7 @@ from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.queue import get_sqs_queue
+from tilequeue.render import make_feature_fetcher
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
 from tilequeue.tile import explode_serialized_coords
@@ -16,16 +17,16 @@ from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
-from tilequeue.worker import Worker
 from tilequeue.utils import trap_signal
+from tilequeue.worker import Worker
 from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
 import logging
 import logging.config
+import multiprocessing
 import os
 import sys
-import multiprocessing
 
 
 def add_config_options(parser):
@@ -350,7 +351,11 @@ def tilequeue_process(cfg, peripherals):
         cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
         path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
 
-    job_creator = RenderJobCreator(tilestache_config, formats, store)
+    assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
+    feature_fetcher = make_feature_fetcher(
+        cfg.postgresql_conn_info, tilestache_config, formats)
+    job_creator = RenderJobCreator(
+        tilestache_config, formats, store, feature_fetcher)
 
     workers = []
     for i in range(cfg.workers):

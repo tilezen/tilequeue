@@ -342,10 +342,10 @@ class RenderJob(object):
 
 class RenderJobCreator(object):
 
-    def __init__(self, tilestache_config, formats, store):
+    def __init__(self, tilestache_config, formats, store, feature_fetcher):
         self.tilestache_config = tilestache_config
         self.formats = formats
-        self.feature_fetcher = make_feature_fetcher(tilestache_config, formats)
+        self.feature_fetcher = feature_fetcher
         self.store = store
 
     def initialize(self):
@@ -361,7 +361,7 @@ class RenderJobCreator(object):
         job()
 
 
-def make_feature_fetcher(tilestache_config, formats):
+def make_feature_fetcher(conn_info, tilestache_config, formats):
     # layer_data interface:
     # list of dicts with these keys: name, queries, is_clipped, geometry_types
 
@@ -370,7 +370,6 @@ def make_feature_fetcher(tilestache_config, formats):
     assert all_layer is not None, 'All layer is expected in tilestache config'
     layer_names = all_layer.provider.names
     layer_data = []
-    conn_info = None
     for layer_name in layer_names:
         # NOTE: obtain postgis connection information from first layer
         # this assumes all connection info is exactly the same
@@ -378,8 +377,6 @@ def make_feature_fetcher(tilestache_config, formats):
             ('Layer not found in config but found in all layers: %s'
              % layer_name)
         layer = layers[layer_name]
-        if conn_info is None:
-            conn_info = layer.provider.dbinfo
         layer_datum = dict(
             name=layer_name,
             queries=layer.provider.queries,
