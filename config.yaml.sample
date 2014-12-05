@@ -6,8 +6,8 @@ aws:
     path: osm
     reduced-redundancy: true
   credentials:
-    aws_access_key_id = <aws_access_key_id>
-    aws_secret_access_key = <aws_secret_access_key>
+    aws_access_key_id: <aws_access_key_id>
+    aws_secret_access_key: <aws_secret_access_key>
 tiles:
   metro-extract:
     url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
