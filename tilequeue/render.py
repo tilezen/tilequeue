@@ -69,39 +69,25 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
         if subquery is None:
             query = None
         else:
+            if (zoom >= layer_datum['simplify_until'] or
+                    zoom in layer_datum['suppress_simplification']):
+                tolerance = None
             query = build_query(
                 srid, subquery, columns, bounds, tolerance,
                 is_geo, layer_datum['is_clipped'], padding, scale)
         queries_to_execute.append(
-            (layer_datum['name'], layer_datum['geometry_types'], query))
+            (layer_datum, query))
     return queries_to_execute
-
-
-def make_add_clipped_property(layer_data):
-    def add_clipped_property(feature_layer):
-        # mutates the feature_layer itself
-        layer_name = feature_layer['name']
-        for layer_datum in layer_data:
-            if layer_datum['name'] == layer_name:
-                if layer_datum['is_clipped']:
-                    features = feature_layer['features']
-                    for wkb, props, id in features:
-                        props['clipped'] = True
-                return feature_layer
-        return feature_layer
-    return add_clipped_property
 
 
 class RenderDataFetcher(object):
 
     def __init__(self, conn_info, layer_data, formats,
-                 update_feature_layer=None,
                  find_columns_for_queries=find_columns_for_queries):
         self.conn_info = conn_info
         self.formats = formats
         self.layer_data = layer_data
         self.spherical_mercator = SphericalMercator()
-        self.update_feature_layer = update_feature_layer
         self.find_columns_for_queries = find_columns_for_queries
         self.sql_thread_pool = None
         self._is_initialized = False
@@ -169,8 +155,10 @@ class RenderDataFetcher(object):
         def feature_layers_from_results(async_results):
             feature_layers = []
             for async_result in async_results:
-                rows, layer_name, geometry_types = async_result.get()
+                rows, layer_datum = async_result.get()
 
+                geometry_types = layer_datum['geometry_types']
+                layer_name = layer_datum['name']
                 features = []
                 for row in rows:
                     assert '__geometry__' in row, \
@@ -191,9 +179,8 @@ class RenderDataFetcher(object):
                                  if v is not None)
                     features.append((wkb, props, id))
 
-                feature_layer = dict(name=layer_name, features=features)
-                if self.update_feature_layer:
-                    feature_layer = self.update_feature_layer(feature_layer)
+                feature_layer = dict(name=layer_name, features=features,
+                                     layer_datum=layer_datum)
                 feature_layers.append(feature_layer)
             return feature_layers
 
@@ -217,13 +204,13 @@ class RenderDataFetcher(object):
         return render_data
 
 
-def execute_query(conn_pool, query, geometry_types, layer_name):
+def execute_query(conn_pool, query, layer_datum):
     conn = conn_pool.getconn()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
-        return rows, layer_name, geometry_types
+        return rows, layer_datum
     finally:
         conn_pool.putconn(conn)
 
@@ -236,14 +223,14 @@ def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
 
     empty_results = []
     async_results = []
-    for layer_name, geometry_types, query in queries_to_execute:
+    for layer_datum, query in queries_to_execute:
         if query is None:
-            empty_feature_layer = dict(name=layer_name, features=[])
+            empty_feature_layer = dict(
+                name=layer_datum['name'], features=[])
             empty_results.append(empty_feature_layer)
         else:
             async_result = thread_pool.apply_async(
-                execute_query,
-                (conn_pool, query, geometry_types, layer_name))
+                execute_query, (conn_pool, query, layer_datum))
             async_results.append(async_result)
 
     return empty_results, async_results
@@ -305,6 +292,7 @@ def transform_feature_layers(feature_layers, format, bounds, scale):
         transformed_feature_layer = dict(
             name=feature_layer['name'],
             features=transformed_features,
+            layer_datum=feature_layer['layer_datum'],
         )
         transformed_feature_layers.append(transformed_feature_layer)
 
@@ -382,12 +370,10 @@ def make_feature_fetcher(conn_info, tilestache_config, formats):
             queries=layer.provider.queries,
             is_clipped=layer.provider.clip,
             geometry_types=layer.provider.geometry_types,
+            simplify_until=layer.provider.simplify_until,
+            suppress_simplification=layer.provider.suppress_simplification,
         )
         layer_data.append(layer_datum)
 
-    update_feature_layer = make_add_clipped_property(layer_data)
-    data_fetcher = RenderDataFetcher(
-        conn_info, layer_data, formats,
-        update_feature_layer=update_feature_layer
-    )
+    data_fetcher = RenderDataFetcher(conn_info, layer_data, formats)
     return data_fetcher

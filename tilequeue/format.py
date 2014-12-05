@@ -66,8 +66,8 @@ def format_json(fp, feature_layers, coord, bounds):
     for feature_layer in feature_layers:
         names.append(feature_layer['name'])
         out = StringIO()
-        # clipping is added separately, outside of the formatter
-        json_encode(out, feature_layer['features'], coord.zoom, False)
+        is_clipped = feature_layer['layer_datum']['is_clipped']
+        json_encode(out, feature_layer['features'], coord.zoom, is_clipped)
         # out now contains a json serialized result
         # now we deserialize it, so that it can be combined with the
         # merge function
@@ -83,8 +83,8 @@ def format_topojson(fp, feature_layers, coord, bounds):
     for feature_layer in feature_layers:
         names.append(feature_layer['name'])
         out = StringIO()
-        # clipping is added separately, outside of the formatter
-        topojson_encode(out, feature_layer['features'], bounds, False)
+        is_clipped = feature_layer['layer_datum']['is_clipped']
+        topojson_encode(out, feature_layer['features'], bounds, is_clipped)
         # out now contains a json serialized result
         # now we deserialize it, so that it can be combined with the
         # merge function
