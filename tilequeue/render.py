@@ -1,4 +1,4 @@
-from contextlib import closing
+from cStringIO import StringIO
 from multiprocessing.pool import ThreadPool
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
@@ -89,19 +89,16 @@ class RenderDataFetcher(object):
         self.layer_data = layer_data
         self.spherical_mercator = SphericalMercator()
         self.find_columns_for_queries = find_columns_for_queries
-        self.sql_thread_pool = None
+        self.thread_pool = None
         self._is_initialized = False
 
-    def initialize(self):
+    def initialize(self, thread_pool):
         assert not self._is_initialized, 'Multiple initialization'
 
-        # create a thread pool
-        n_layers = 7
-        # we execute vtm queries concurrently
-        n_threads = n_layers * 2
-        self.sql_thread_pool = ThreadPool(n_threads)
+        self.thread_pool = thread_pool
 
         # create a postgresql connection pool
+        n_layers = len(self.layer_data)
         min_n_conn = n_layers
         max_n_conn = n_layers * 2
         self.sql_conn_pool = ThreadedConnectionPool(min_n_conn, max_n_conn,
@@ -142,13 +139,13 @@ class RenderDataFetcher(object):
 
         if has_vtm:
             vtm_empty_results, vtm_async_results = enqueue_queries(
-                self.sql_thread_pool, self.sql_conn_pool,
+                self.thread_pool, self.sql_conn_pool,
                 self.layer_data, zoom, bounds, tolerance, vtm_padding,
                 vtm_scale, columns_for_queries)
 
         if has_non_vtm:
             non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
-                self.sql_thread_pool, self.sql_conn_pool,
+                self.thread_pool, self.sql_conn_pool,
                 self.layer_data, zoom, bounds, tolerance,
                 non_vtm_padding, non_vtm_scale, columns_for_queries)
 
@@ -305,15 +302,16 @@ class RenderJob(object):
 
     scale = 4096
 
-    def __init__(self, coord, formats, feature_fetcher, store,
-                 lookup_formatter=lookup_formatter):
+    def __init__(self, coord, formats, feature_fetcher, store, thread_pool):
         self.coord = coord
         self.formats = formats
         self.feature_fetcher = feature_fetcher
         self.store = store
+        self.thread_pool = thread_pool
 
     def __call__(self):
         render_data = self.feature_fetcher(self.coord)
+        async_jobs = []
         for render_datum in render_data:
             format = render_datum.format
             feature_layers = render_datum.feature_layers
@@ -323,8 +321,17 @@ class RenderJob(object):
                 feature_layers, format, bounds, self.scale)
 
             formatter = lookup_formatter(format)
-            with closing(self.store.output_fp(self.coord, format)) as store_fp:
-                formatter(store_fp, feature_layers, self.coord, bounds)
+            tile_data_file = StringIO()
+            formatter(tile_data_file, feature_layers, self.coord, bounds)
+            tile_data = tile_data_file.getvalue()
+            async_result = self.thread_pool.apply_async(
+                self.store.write_tile,
+                (tile_data, self.coord, format)
+            )
+            async_jobs.append(async_result)
+
+        for async_job in async_jobs:
+            async_job.wait()
 
     def __repr__(self):
         return 'RenderJob(%s, %s)' % (self.coord, self.format)
@@ -339,12 +346,19 @@ class RenderJobCreator(object):
         self.store = store
 
     def initialize(self):
+        # create a thread pool, shared between fetching features and
+        # writing to s3
+        n_layers = len(self.feature_fetcher.layer_data)
+        # we execute vtm queries concurrently
+        n_threads = n_layers * 2
+        self.thread_pool = ThreadPool(n_threads)
+
         # process local initialization
-        self.feature_fetcher.initialize()
+        self.feature_fetcher.initialize(self.thread_pool)
 
     def create(self, coord):
         return RenderJob(coord, self.formats, self.feature_fetcher,
-                         self.store)
+                         self.store, self.thread_pool)
 
     def process_jobs_for_coord(self, coord):
         job = self.create(coord)
