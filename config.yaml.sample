@@ -6,8 +6,8 @@ aws:
     path: osm
     reduced-redundancy: true
   credentials:
-    aws_access_key_id = <aws_access_key_id>
-    aws_secret_access_key = <aws_secret_access_key>
+    aws_access_key_id: <aws_access_key_id>
+    aws_secret_access_key: <aws_secret_access_key>
 tiles:
   metro-extract:
     url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
@@ -33,3 +33,9 @@ redis:
   db: 0
   cache-set-key: tilestache.cache
   diff-set-key: tilestache.difflist
+postgresql:
+  host: localhost
+  port: 5432
+  database: osm
+  user: osm
+  password:

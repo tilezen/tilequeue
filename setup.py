@@ -37,6 +37,7 @@ setup(name='tilequeue',
           'PyYAML',
           'redis',
           'psutil',
+          'psycopg2',
       ],
       test_suite='tests',
       tests_require=[

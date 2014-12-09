@@ -29,9 +29,7 @@ class CliConfiguration(object):
                                            'tilestache config')
         self.expired_tiles_file = self._cfg('expired_tiles_file',
                                             'tiles expired')
-        self.output_formats = self._cfg('output_formats',
-                                        'tilestache formats',
-                                        ('json', 'vtm'))
+        self.output_formats = self._cfg('output_formats', 'tilestache formats')
         self.zoom_start = self._cfg('zoom_start', 'tiles zoom-start', 0)
         self.zoom_until = self._cfg('zoom_until', 'tiles zoom-until', 0)
         self.unique_tiles = self._cfg('unique-tiles', 'tiles unique')
@@ -55,6 +53,7 @@ class CliConfiguration(object):
         self.workers = self._cfg('workers', 'workers')
         self.messages_at_once = self._cfg('messages_at_once',
                                           'messages_at_once')
+        self.postgresql_conn_info = self.yml['postgresql']
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -111,6 +110,13 @@ def default_yml_config():
             'db': 0,
             'cache-set-key': 'tilestache.cache',
             'diff-set-key': None,
+        },
+        'postgresql': {
+            'host': 'localhost',
+            'port': 5432,
+            'database': 'osm',
+            'user': 'osm',
+            'password': None,
         },
     }
 
