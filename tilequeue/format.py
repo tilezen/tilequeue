@@ -10,10 +10,11 @@ from TileStache.Goodies.VecTiles.topojson import merge as topojson_merge
 
 class OutputFormat(object):
 
-    def __init__(self, name, extension, mimetype):
+    def __init__(self, name, extension, mimetype, format_fn):
         self.name = name
         self.extension = extension
         self.mimetype = mimetype
+        self.format_fn = format_fn
 
     def __repr__(self):
         return 'OutputFormat(%s, %s, %s)' % \
@@ -28,33 +29,8 @@ class OutputFormat(object):
     def __eq__(self, other):
         return self.extension == other.extension
 
-json_format = OutputFormat('JSON', 'json', 'application/json')
-topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json')
-# TODO image/png mimetype? app doesn't work unless image/png?
-vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png')
-mapbox_format = OutputFormat('Mapbox', 'mapbox', 'application/x-protobuf')
-
-extension_to_format = dict(
-    json=json_format,
-    topojson=topojson_format,
-    vtm=vtm_format,
-    mapbox=mapbox_format,
-)
-
-name_to_format = {
-    'JSON': json_format,
-    'OpenScienceMap': vtm_format,
-    'TopoJSON': topojson_format,
-    'Mapbox': mapbox_format,
-}
-
-
-def lookup_format_by_extension(extension):
-    return extension_to_format.get(extension)
-
-
-def lookup_format_by_name(name):
-    return name_to_format.get(name)
+    def format_tile(self, tile_data_file, feature_layers, coord, bounds):
+        self.format_fn(tile_data_file, feature_layers, coord, bounds)
 
 
 # consistent facade around all tilestache formatters that we use
@@ -101,15 +77,32 @@ def format_vtm(fp, feature_layers, coord, bounds):
     vtm_merge(fp, feature_layers, coord)
 
 
-format_to_formatter = {
-    json_format: format_json,
-    vtm_format: format_vtm,
-    topojson_format: format_topojson,
-    mapbox_format: format_mapbox,
+json_format = OutputFormat('JSON', 'json', 'application/json', format_json)
+topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json',
+                               format_topojson)
+# TODO image/png mimetype? app doesn't work unless image/png?
+vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm)
+mapbox_format = OutputFormat('Mapbox', 'mapbox', 'application/x-protobuf',
+                             format_mapbox)
+
+extension_to_format = dict(
+    json=json_format,
+    topojson=topojson_format,
+    vtm=vtm_format,
+    mapbox=mapbox_format,
+)
+
+name_to_format = {
+    'JSON': json_format,
+    'OpenScienceMap': vtm_format,
+    'TopoJSON': topojson_format,
+    'Mapbox': mapbox_format,
 }
 
 
-def lookup_formatter(format):
-    format_fn = format_to_formatter.get(format)
-    assert format_fn is not None, 'Unknown format: %s' % format
-    return format_fn
+def lookup_format_by_extension(extension):
+    return extension_to_format.get(extension)
+
+
+def lookup_format_by_name(name):
+    return name_to_format.get(name)

@@ -5,7 +5,6 @@ from psycopg2.pool import ThreadedConnectionPool
 from shapely.wkb import dumps
 from shapely.wkb import loads
 from tilequeue.format import json_format
-from tilequeue.format import lookup_formatter
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
@@ -320,9 +319,9 @@ class RenderJob(object):
             feature_layers = transform_feature_layers(
                 feature_layers, format, bounds, self.scale)
 
-            formatter = lookup_formatter(format)
             tile_data_file = StringIO()
-            formatter(tile_data_file, feature_layers, self.coord, bounds)
+            format.format_tile(tile_data_file, feature_layers, self.coord,
+                               bounds)
             tile_data = tile_data_file.getvalue()
             async_result = self.thread_pool.apply_async(
                 self.store.write_tile,
