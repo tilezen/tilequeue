@@ -258,10 +258,12 @@ def rescale_point(bounds, scale):
 
     def fn(point):
         x, y = point
-        x -= minx
-        y -= miny
-        x *= (scale / (maxx - minx))
-        y *= (scale / (maxy - miny))
+
+        xfac = scale / (maxx - minx)
+        yfac = scale / (maxy - miny)
+        x = x * xfac - minx * xfac
+        y = y * yfac - miny * yfac
+
         return x, y
 
     return fn
