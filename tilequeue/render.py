@@ -222,7 +222,10 @@ def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
     for layer_datum, query in queries_to_execute:
         if query is None:
             empty_feature_layer = dict(
-                name=layer_datum['name'], features=[])
+                name=layer_datum['name'],
+                features=[],
+                layer_datum=layer_datum,
+            )
             empty_results.append(empty_feature_layer)
         else:
             async_result = thread_pool.apply_async(
