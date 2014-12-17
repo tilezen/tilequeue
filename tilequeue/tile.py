@@ -8,6 +8,7 @@ class CoordMessage(object):
     def __init__(self, coord, message_handle):
         self.coord = coord
         self.message_handle = message_handle
+        self.attributes = message_handle.attributes
 
     def __repr__(self):
         return 'CoordMessage(%s, %s)' % (self.coord, self.message_handle)

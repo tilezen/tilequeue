@@ -30,8 +30,12 @@ class Worker(object):
                 self._log('processing %s ...' % coord_str)
                 self.job_creator.process_jobs_for_coord(msg.coord)
                 self.queue.job_done(msg.message_handle)
-                total_time = time.time() - start_time
+                current_time = time.time()
+                total_time = current_time - start_time
                 self._log('processing %s ... done took %s (seconds)'
                           % (coord_str, total_time))
+                message_sent = int(msg.attributes.get('SentTimestamp')) / 1000
+                time_in_queue = int(current_time) - message_sent
+                self._log('time in queue %s (seconds)' % (time_in_queue))
             if not self.daemonized:
                 break

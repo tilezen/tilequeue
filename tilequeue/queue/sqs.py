@@ -57,7 +57,8 @@ class SqsQueue(object):
 
     def read(self, max_to_read=1):
         coord_messages = []
-        messages = self.sqs_queue.get_messages(num_messages=max_to_read)
+        messages = self.sqs_queue.get_messages(num_messages=max_to_read,
+                                               attributes=["SentTimestamp"])
         for message in messages:
             data = message.get_body()
             coord = deserialize_coord(data)
