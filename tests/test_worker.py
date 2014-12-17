@@ -11,6 +11,7 @@ class TestWorker(unittest.TestCase):
         payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
+        message.attributes = dict(SentTimestamp=1)
         return CoordMessage(coord, message)
 
     def test_defaults_to_non_daemonized(self):
