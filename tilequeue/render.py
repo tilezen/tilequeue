@@ -96,11 +96,18 @@ class RenderDataFetcher(object):
 
         self.thread_pool = thread_pool
 
-        # create a postgresql connection pool
+        # we expect to execute 2 sets of queries for each layer
         n_layers = len(self.layer_data)
-        min_n_conn = n_layers
-        max_n_conn = n_layers * 2
-        self.sql_conn_pool = ThreadedConnectionPool(min_n_conn, max_n_conn,
+        n_conn = n_layers * 2
+
+        # Setting the min number of connections to the same as the max
+        # forces all connections to be created up front. This should
+        # help with performance, but more importantly will force any
+        # round robin connection factory to do all its work initially,
+        # rather than become interleaved with fetching the columns
+        # from postgresql, and potentially ending up with an
+        # imbalanced set of hosts.
+        self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
                                                     **self.conn_info)
 
         self._is_initialized = True

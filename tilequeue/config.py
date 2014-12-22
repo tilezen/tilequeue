@@ -54,6 +54,13 @@ class CliConfiguration(object):
         self.messages_at_once = self._cfg('messages_at_once',
                                           'messages_at_once')
         self.postgresql_conn_info = self.yml['postgresql']
+        if 'hosts' in self.postgresql_conn_info:
+            hosts = self.postgresql_conn_info.pop('hosts')
+            del self.postgresql_conn_info['host']
+            conn_info = dict(self.postgresql_conn_info)
+            from tilequeue.postgresql import RoundRobinConnectionFactory
+            conn_factory = RoundRobinConnectionFactory(conn_info, hosts)
+            self.postgresql_conn_info['connection_factory'] = conn_factory
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
