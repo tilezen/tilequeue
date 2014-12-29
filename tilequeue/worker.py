@@ -1,6 +1,8 @@
 from tilequeue.tile import serialize_coord
-import time
 from tilequeue.utils import trap_signal
+import sys
+import time
+import traceback
 
 
 class Worker(object):
@@ -28,14 +30,23 @@ class Worker(object):
                 coord = msg.coord
                 coord_str = serialize_coord(coord)
                 self._log('processing %s ...' % coord_str)
-                self.job_creator.process_jobs_for_coord(msg.coord)
-                self.queue.job_done(msg.message_handle)
-                current_time = time.time()
-                total_time = current_time - start_time
-                self._log('processing %s ... done took %s (seconds)'
-                          % (coord_str, total_time))
-                message_sent = int(msg.attributes.get('SentTimestamp')) / 1000
+                try:
+                    self.job_creator.process_jobs_for_coord(msg.coord)
+                    self.queue.job_done(msg.message_handle)
+                    current_time = time.time()
+                    total_time = current_time - start_time
+                    self._log('processing %s ... done took %s (seconds)'
+                              % (coord_str, total_time))
+                except:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    stacktrace = ''.join(traceback.format_exception(
+                        exc_type, exc_value, exc_traceback))
+                    self._log('processing %s ... failed' % coord_str)
+                    self._log(stacktrace)
+                sent_timestamp = int(msg.attributes.get('SentTimestamp'))
+                message_sent = sent_timestamp / 1000
                 time_in_queue = int(current_time) - message_sent
                 self._log('time in queue %s (seconds)' % (time_in_queue))
+
             if not self.daemonized:
                 break
