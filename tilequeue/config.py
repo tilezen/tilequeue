@@ -1,3 +1,4 @@
+from tilequeue.postgresql import RoundRobinConnectionFactory
 from yaml import load
 
 
@@ -54,13 +55,17 @@ class CliConfiguration(object):
         self.messages_at_once = self._cfg('messages_at_once',
                                           'messages_at_once')
         self.postgresql_conn_info = self.yml['postgresql']
-        if 'hosts' in self.postgresql_conn_info:
-            hosts = self.postgresql_conn_info.pop('hosts')
-            del self.postgresql_conn_info['host']
-            conn_info = dict(self.postgresql_conn_info)
-            from tilequeue.postgresql import RoundRobinConnectionFactory
-            conn_factory = RoundRobinConnectionFactory(conn_info, hosts)
-            self.postgresql_conn_info['connection_factory'] = conn_factory
+        assert 'host' not in self.postgresql_conn_info, \
+            "postgresql 'host' option is unused, use 'hosts'"
+        assert 'connection_factory' not in self.postgresql_conn_info, \
+            'connection_factory postgresql option will be overridden'
+        hosts = self.postgresql_conn_info.pop('hosts')
+        assert isinstance(hosts, (tuple, list)), \
+            "Expecting postgresql 'hosts' to be a list"
+        assert len(hosts) > 0, 'No postgresql hosts configured'
+        conn_info = dict(self.postgresql_conn_info)
+        conn_factory = RoundRobinConnectionFactory(conn_info, hosts)
+        self.postgresql_conn_info['connection_factory'] = conn_factory
 
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
@@ -119,7 +124,7 @@ def default_yml_config():
             'diff-set-key': None,
         },
         'postgresql': {
-            'host': 'localhost',
+            'hosts': ('localhost',),
             'port': 5432,
             'database': 'osm',
             'user': 'osm',

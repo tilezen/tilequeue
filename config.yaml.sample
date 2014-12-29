@@ -34,9 +34,7 @@ redis:
   cache-set-key: tilestache.cache
   diff-set-key: tilestache.difflist
 postgresql:
-  # if connection to a single host
-  host: localhost
-  # if hosts is specified, connections are round robin'ed
+  # connections are round robin'ed between hosts
   hosts: [localhost]
   port: 5432
   database: osm
