@@ -19,26 +19,23 @@ class RedisSerializeTest(unittest.TestCase):
             Coordinate(1, 2, 3),
         ]
         cache_index.write_coords_redis_protocol(out, 'diffs', coords)
-        exp = '*3\r\n$4\r\nSADD\r\n$5\r\ndiffs\r\n$10\r\n2147483683\r\n'
+        exp = '*3\r\n$4\r\nSADD\r\n$5\r\ndiffs\r\n$11\r\n34359738403\r\n'
         self.assertEquals(exp, out.getvalue())
 
     def test_roundtrip_serialization(self):
         from tilequeue.cache import serialize_coord_to_redis_value
         from tilequeue.cache import deserialize_redis_value_to_coord
         from tilequeue.tile import seed_tiles
-        coords = seed_tiles(0, 5)
+        from ModestMaps.Core import Coordinate
+        from itertools import chain
+        seed_coords = seed_tiles(0, 5)
+        example_coords = [
+            Coordinate(zoom=20, column=1002463, row=312816),
+            Coordinate(zoom=30, column=12345678, row=12345678),
+        ]
+        coords = chain(seed_coords, example_coords)
         for coord in coords:
             self.assertEquals(
                 coord,
                 deserialize_redis_value_to_coord(
                     serialize_coord_to_redis_value(coord)))
-
-    def test_serialized_examples(self):
-        from ModestMaps.Core import Coordinate
-        from tilequeue.cache import serialize_coord_to_redis_value
-        from tilequeue.cache import deserialize_redis_value_to_coord
-        coord = Coordinate(zoom=20, column=1002463, row=312816)
-        self.assertEquals(
-            coord,
-            deserialize_redis_value_to_coord(
-                serialize_coord_to_redis_value(coord)))

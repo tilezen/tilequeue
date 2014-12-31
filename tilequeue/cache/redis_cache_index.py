@@ -72,12 +72,14 @@ class RedisCacheIndex(object):
 # be stored more efficiently.
 
 # This is how the data is encoded into a 64 bit integer:
-# 9 bits unused | 25 bits column | 25 bits row | 5 bits zoom
-zoom_mask = int('1' * 5, 2)
-row_mask = int(('1' * 25), 2)
+# 1 bit unused | 29 bits column | 29 bits row | 5 bits zoom
+zoom_bits = 5
+row_bits = 29
+zoom_mask = int('1' * zoom_bits, 2)
+row_mask = int(('1' * row_bits), 2)
 col_mask = row_mask
-row_offset = 5
-col_offset = 25 + 5
+row_offset = zoom_bits
+col_offset = zoom_bits + row_bits
 
 
 def serialize_coord_to_redis_value(coord):
