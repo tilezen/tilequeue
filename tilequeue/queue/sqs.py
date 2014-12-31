@@ -1,5 +1,6 @@
 from boto import connect_sqs
 from boto.sqs.message import RawMessage
+from tilequeue.cache import serialize_coord_to_redis_value
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
@@ -28,18 +29,18 @@ class SqsQueue(object):
 
         for i, coord in enumerate(coords):
             msg_tuples.append((str(i), serialize_coord(coord), 0))
-            values.append(serialize_coord(coord))
+            values.append(serialize_coord_to_redis_value(coord))
 
         self.redis_client.sadd(self.inflight_key, *values)
         self.sqs_queue.write_batch(msg_tuples)
 
     def _inflight(self, coord):
-        return self.redis_client.sismember(self.inflight_key,
-                                           serialize_coord(coord))
+        return self.redis_client.sismember(
+            self.inflight_key, serialize_coord_to_redis_value(coord))
 
     def _add_to_flight(self, coord):
         self.redis_client.sadd(self.inflight_key,
-                               serialize_coord(coord))
+                               serialize_coord_to_redis_value(coord))
 
     def enqueue_batch(self, coords):
         buffer = []
@@ -70,14 +71,20 @@ class SqsQueue(object):
         return coord_messages
 
     def job_done(self, message):
-        self.redis_client.srem(self.inflight_key, message.get_body())
+        coord_str = message.get_body()
+        coord = deserialize_coord(coord_str)
+        coord_redis_value = serialize_coord_to_redis_value(coord)
+        self.redis_client.srem(self.inflight_key, coord_redis_value)
         self.sqs_queue.delete_message(message)
 
     def jobs_done(self, messages):
-        payloads = []
+        redis_values = []
         for message in messages:
-            payloads.append(message.get_body())
-        self.redis_client.srem(self.inflight_key, *payloads)
+            coord_str = message.get_body()
+            coord = deserialize_coord(coord_str)
+            redis_value = serialize_coord_to_redis_value(coord)
+            redis_values.append(redis_value)
+        self.redis_client.srem(self.inflight_key, *redis_values)
         self.sqs_queue.delete_message_batch(messages)
 
     def clear(self):
