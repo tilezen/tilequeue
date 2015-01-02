@@ -67,6 +67,11 @@ class CliConfiguration(object):
         conn_factory = RoundRobinConnectionFactory(conn_info, hosts)
         self.postgresql_conn_info['connection_factory'] = conn_factory
 
+        self.top_tiles = self.yml['tiles']['top-tiles']
+        self.top_tiles_url = self.top_tiles['url']
+        self.top_tiles_zoom_start = self.top_tiles['zoom-start']
+        self.top_tiles_zoom_until = self.top_tiles['zoom-until']
+
     def _cfg(self, argname, yamlkeys_str, default_arg_value=None):
         argval = getattr(self.args, argname, default_arg_value)
         if argval is not default_arg_value:
@@ -99,6 +104,11 @@ def default_yml_config():
             'metro-extract': {
                 'url': None,
                 'zoom-filter': 0,
+            },
+            'top-tiles': {
+                'url': None,
+                'zoom-start': 0,
+                'zoom-until': 0
             },
             'unique': False,
             'zoom-start': 0,

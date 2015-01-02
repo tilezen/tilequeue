@@ -17,6 +17,7 @@ from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
+from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import trap_signal
 from tilequeue.worker import Worker
 from TileStache import parseConfigfile
@@ -398,11 +399,24 @@ def make_seed_tile_generator(cfg):
         filtered_tiles = ()
         unfiltered_end_zoom = cfg.zoom_until
 
+    if cfg.top_tiles_url:
+        assert cfg.top_tiles_zoom_start, 'Missing top tiles zoom start'
+        assert cfg.top_tiles_zoom_until, 'Missing top tiles zoom until'
+        with closing(urlopen(cfg.top_tiles_url)) as fp:
+            top_tiles = parse_top_tiles(
+                fp, cfg.top_tiles_zoom_start, cfg.top_tiles_zoom_until)
+    else:
+        top_tiles = ()
+
     assert cfg.zoom_start <= unfiltered_end_zoom
 
     unfiltered_tiles = seed_tiles(cfg.zoom_start, unfiltered_end_zoom)
 
-    tile_generator = chain(unfiltered_tiles, filtered_tiles)
+    dynamic_tiles = chain(filtered_tiles, top_tiles)
+    if cfg.unique_tiles:
+        dynamic_tiles = uniquify_generator(dynamic_tiles)
+
+    tile_generator = chain(unfiltered_tiles, dynamic_tiles)
 
     return tile_generator
 
