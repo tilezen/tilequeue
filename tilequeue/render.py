@@ -14,6 +14,7 @@ from TileStache.Goodies.VecTiles.server import build_query
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
+import traceback
 
 
 # This is what will get passed from fetching data. Ideally, this would
@@ -215,7 +216,12 @@ def execute_query(conn_pool, query, layer_datum):
         rows = list(cursor.fetchall())
         return rows, layer_datum
     finally:
-        conn_pool.putconn(conn)
+        try:
+            conn_pool.putconn(conn)
+        except:
+            print 'Error returning connection to pool'
+            print traceback.format_exc()
+            raise
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
