@@ -215,6 +215,10 @@ def execute_query(conn_pool, query, layer_datum):
         cursor.execute(query)
         rows = list(cursor.fetchall())
         return rows, layer_datum
+    except:
+        print 'Error executing query'
+        print query
+        print traceback.format_exc()
     finally:
         try:
             conn_pool.putconn(conn)
