@@ -14,6 +14,7 @@ from TileStache.Goodies.VecTiles.server import build_query
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
+import traceback
 
 
 # This is what will get passed from fetching data. Ideally, this would
@@ -215,7 +216,37 @@ def execute_query(conn_pool, query, layer_datum):
         rows = list(cursor.fetchall())
         return rows, layer_datum
     finally:
-        conn_pool.putconn(conn)
+        # more resilient way to put conn back to pool
+        conn_pool._lock.acquire()
+        try:
+            conn_pool._putconn(conn)
+        except:
+            print 'Error: exception when returning conn to pool'
+            print traceback.format_exc()
+
+            # ensure that the conn is completely cleared from the pool
+            conn_id = id(conn)
+            # remove indexes to connection
+            key = conn_pool._rused.get(conn_id)
+            if key is not None:
+                del conn_pool._rused[conn_id]
+                if key in conn_pool._used:
+                    del conn_pool._used[key]
+            # remove connection from pool
+            for i, x in enumerate(conn_pool._pool):
+                if conn_id == id(x):
+                    del conn_pool._pool[i]
+                    break
+            # and safely close the connection
+            try:
+                conn.close()
+            except:
+                pass
+
+            print 'Cleared connection from pool'
+
+        finally:
+            conn_pool._lock.release()
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
