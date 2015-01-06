@@ -1,3 +1,4 @@
+from psycopg2.extensions import TransactionRollbackError
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import trap_signal
 import sys
@@ -37,7 +38,7 @@ class Worker(object):
                     total_time = current_time - start_time
                     self._log('processing %s ... done took %s (seconds)'
                               % (coord_str, total_time))
-                except:
+                except TransactionRollbackError:
                     current_time = time.time()
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     stacktrace = ''.join(traceback.format_exception(
