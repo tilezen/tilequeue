@@ -1,20 +1,19 @@
 from cStringIO import StringIO
 from multiprocessing.pool import ThreadPool
 from psycopg2.extras import RealDictCursor
-from psycopg2.pool import ThreadedConnectionPool
 from shapely.wkb import dumps
 from shapely.wkb import loads
 from tilequeue.format import json_format
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
+from tilequeue.postgresql import NoPoolingConnectionPool
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import build_query
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
-import traceback
 
 
 # This is what will get passed from fetching data. Ideally, this would
@@ -101,15 +100,8 @@ class RenderDataFetcher(object):
         n_layers = len(self.layer_data)
         n_conn = n_layers * 2
 
-        # Setting the min number of connections to the same as the max
-        # forces all connections to be created up front. This should
-        # help with performance, but more importantly will force any
-        # round robin connection factory to do all its work initially,
-        # rather than become interleaved with fetching the columns
-        # from postgresql, and potentially ending up with an
-        # imbalanced set of hosts.
-        self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
-                                                    **self.conn_info)
+        self.sql_conn_pool = NoPoolingConnectionPool(n_conn, n_conn,
+                                                     **self.conn_info)
 
         self._is_initialized = True
 
@@ -208,50 +200,15 @@ class RenderDataFetcher(object):
         return render_data
 
 
-def debug_print_conn_pool(conn_pool):
-    from pprint import pprint as pp
-    conn_pool._lock.acquire()
-    try:
-        print 'Postgresql connection pool details'
-        print '*' * 80
-        print 'Reverse used index'
-        pp(conn_pool._rused)
-        print 'Used index'
-        pp(dict([(key, id(conn)) for key, conn in conn_pool._used.items()]))
-        print 'Pool'
-        pp([id(conn) for conn in conn_pool._pool])
-    finally:
-        conn_pool._lock.release()
-
-
 def execute_query(conn_pool, query, layer_datum):
-    try:
-        conn = conn_pool.getconn()
-    except:
-        print 'Error obtaining connection'
-        print traceback.format_exc()
-        debug_print_conn_pool(conn_pool)
-        raise
-
+    conn = conn_pool.getconn()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
         return rows, layer_datum
-    except:
-        print 'Error executing query'
-        print query
-        print traceback.format_exc()
-        debug_print_conn_pool(conn_pool)
-        raise
     finally:
-        try:
-            conn_pool.putconn(conn)
-        except:
-            print 'Error returning connection to pool'
-            print traceback.format_exc()
-            debug_print_conn_pool(conn_pool)
-            raise
+        conn_pool.putconn(conn)
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
