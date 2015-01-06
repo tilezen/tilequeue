@@ -208,8 +208,31 @@ class RenderDataFetcher(object):
         return render_data
 
 
+def debug_print_conn_pool(conn_pool):
+    from pprint import pprint as pp
+    conn_pool._lock.acquire()
+    try:
+        print 'Postgresql connection pool details'
+        print '*' * 80
+        print 'Reverse used index'
+        pp(conn_pool._rused)
+        print 'Used index'
+        pp(dict([(key, id(conn)) for key, conn in conn_pool._used.items()]))
+        print 'Pool'
+        pp([id(conn) for conn in conn_pool._pool])
+    finally:
+        conn_pool._lock.release()
+
+
 def execute_query(conn_pool, query, layer_datum):
-    conn = conn_pool.getconn()
+    try:
+        conn = conn_pool.getconn()
+    except:
+        print 'Error obtaining connection'
+        print traceback.format_exc()
+        debug_print_conn_pool(conn_pool)
+        raise
+
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
@@ -219,6 +242,7 @@ def execute_query(conn_pool, query, layer_datum):
         print 'Error executing query'
         print query
         print traceback.format_exc()
+        debug_print_conn_pool(conn_pool)
         raise
     finally:
         try:
@@ -226,6 +250,7 @@ def execute_query(conn_pool, query, layer_datum):
         except:
             print 'Error returning connection to pool'
             print traceback.format_exc()
+            debug_print_conn_pool(conn_pool)
             raise
 
 
