@@ -219,6 +219,7 @@ def execute_query(conn_pool, query, layer_datum):
         print 'Error executing query'
         print query
         print traceback.format_exc()
+        raise
     finally:
         try:
             conn_pool.putconn(conn)
