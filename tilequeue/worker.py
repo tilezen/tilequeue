@@ -38,6 +38,7 @@ class Worker(object):
                     self._log('processing %s ... done took %s (seconds)'
                               % (coord_str, total_time))
                 except:
+                    current_time = time.time()
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     stacktrace = ''.join(traceback.format_exception(
                         exc_type, exc_value, exc_traceback))
