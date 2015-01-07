@@ -15,12 +15,12 @@ class SqsQueue(object):
         self.inflight_key = "tilequeue.in-flight"
 
     def enqueue(self, coord):
-        payload = serialize_coord(coord)
-        message = RawMessage()
-        message.set_body(payload)
         if not self._inflight(coord):
-            self._add_to_flight(coord)
+            payload = serialize_coord(coord)
+            message = RawMessage()
+            message.set_body(payload)
             self.sqs_queue.write(message)
+            self._add_to_flight(coord)
 
     def _write_batch(self, coords):
         assert len(coords) <= 10
