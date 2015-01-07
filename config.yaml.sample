@@ -22,6 +22,7 @@ tiles:
   explode-until: 0
   daemon: false
   expired: <path/to/expired/tiles/file>
+  expired-location: <path/to/expired/tiles/list>
 workers: 4
 messages_at_once: 4
 tilestache:

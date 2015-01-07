@@ -11,14 +11,15 @@ class RedisCacheIndex(object):
         )
         self.cache_set_key = cache_set_key
 
-    def intersect(self, coords):
-        all_tiles = self._get_list_of_redis_serialized_coords()
+    def intersect(self, coords, tiles_of_interest=None):
+        if tiles_of_interest is None:
+            tiles_of_interest = self.fetch_tiles_of_interest()
         for coord in coords:
             serialized_coord = serialize_coord_to_redis_value(coord)
-            if serialized_coord in all_tiles:
+            if serialized_coord in tiles_of_interest:
                 yield coord
 
-    def _get_list_of_redis_serialized_coords(self):
+    def fetch_tiles_of_interest(self):
         return self.redis_client.smembers(self.cache_set_key)
 
     def index_coord(self, coord):

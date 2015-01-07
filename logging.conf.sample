@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,write,read,generate_tile,drain
+keys=root,process,seed,write,read,intersect,generate_tile,drain
 
 [handlers]
 keys=consoleHandler
@@ -33,6 +33,12 @@ propagate=0
 level=INFO
 handlers=consoleHandler
 qualName=read
+propagate=0
+
+[logger_intersect]
+level=INFO
+handlers=consoleHandler
+qualName=intersect
 propagate=0
 
 [logger_generate_tile]
