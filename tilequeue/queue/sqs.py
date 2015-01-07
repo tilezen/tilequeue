@@ -44,17 +44,21 @@ class SqsQueue(object):
 
     def enqueue_batch(self, coords):
         buffer = []
-        n = 0
+        n_queued = 0
+        n_in_flight = 0
         for coord in coords:
-            if not self._inflight(coord):
+            if self._inflight(coord):
+                n_in_flight += 1
+            else:
+                n_queued += 1
                 buffer.append(coord)
-            if len(buffer) == 10:
-                self._write_batch(buffer)
-                del buffer[:]
-            n += 1
+                if len(buffer) == 10:
+                    self._write_batch(buffer)
+                    del buffer[:]
         if buffer:
             self._write_batch(buffer)
-        return n
+
+        return n_queued, n_in_flight
 
     def read(self, max_to_read=1):
         coord_messages = []

@@ -290,32 +290,52 @@ def deserialized_coords(serialized_coords):
 
 
 def tilequeue_intersect(cfg, peripherals):
-    assert cfg.expired_tiles_file, 'Missing expired tiles file'
-    assert os.path.exists(cfg.expired_tiles_file), \
-        'Invalid expired tiles path'
-    logger = make_logger(cfg, 'read')
-    logger.info("intersecting")
+    logger = make_logger(cfg, 'intersect')
+    logger.info("Intersecting expired tiles with tiles of interest")
     queue = peripherals.queue
-    with open(cfg.expired_tiles_file) as fp:
-        expired_tiles = create_coords_generator_from_tiles_file(fp)
-        serialized_coords = serialize_coords(expired_tiles)
-        exploded_serialized_coords = explode_serialized_coords(
-            serialized_coords, cfg.explode_until,
-            serialize_fn=serialize_coord_to_redis_value,
-            deserialize_fn=deserialize_redis_value_to_coord)
-        exploded_coords = deserialized_coords(exploded_serialized_coords)
-        coords_to_enqueue = \
-            peripherals.redis_cache_index.intersect(exploded_coords)
-        i = 0
-        for coord in coords_to_enqueue:
-            i += 1
-            if i % 500000 == 0:
-                logger.info("processed %d entries", (i))
-            queue.enqueue(coord)
-            logger.info("enqueuing " + str(coord))
 
-    logger.info("Completed deleting file: " + cfg.expired_tiles_file)
-    os.remove(cfg.expired_tiles_file)
+    assert cfg.expired_tiles_location, \
+        'Missing tiles expired-location configuration'
+    assert os.path.isdir(cfg.expired_tiles_location), \
+        'tiles expired-location is not a directory'
+
+    file_names = os.listdir(cfg.expired_tiles_location)
+    if not file_names:
+        logger.info('No expired tiles found, terminating.')
+        return
+    file_names.sort()
+    expired_tile_paths = [os.path.join(cfg.expired_tiles_location, x)
+                          for x in file_names]
+
+    logger.info('Fetching tiles of interest ...')
+    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    logger.info('Fetching tiles of interest ... done')
+
+    logger.info('Will process %d expired tile files.'
+                % len(expired_tile_paths))
+
+    for expired_tile_path in expired_tile_paths:
+        logger.info('Processing: %s' % expired_tile_path)
+        with open(expired_tile_path) as fp:
+            expired_tiles = create_coords_generator_from_tiles_file(fp)
+            serialized_coords = serialize_coords(expired_tiles)
+            exploded_serialized_coords = explode_serialized_coords(
+                serialized_coords, cfg.explode_until,
+                serialize_fn=serialize_coord_to_redis_value,
+                deserialize_fn=deserialize_redis_value_to_coord)
+            exploded_coords = deserialized_coords(exploded_serialized_coords)
+
+            coords_to_enqueue = peripherals.redis_cache_index.intersect(
+                exploded_coords, tiles_of_interest)
+            n_queued, n_in_flight = queue.enqueue_batch(coords_to_enqueue)
+            logger.info('Processing complete: %s' % expired_tile_path)
+            logger.info('%d tiles enqueued. %d tiles in flight.' %
+                        (n_queued, n_in_flight))
+
+        os.remove(expired_tile_path)
+        logger.info('Removed: %s' % expired_tile_path)
+
+    logger.info('Intersection complete.')
 
 
 def lookup_formats(format_extensions):
@@ -431,9 +451,9 @@ def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Beginning to enqueue seed tiles')
 
-    n_tiles = queue.enqueue_batch(tile_generator)
+    n_enqueued, n_in_flight = queue.enqueue_batch(tile_generator)
 
-    logger.info('Queued %d tiles' % n_tiles)
+    logger.info('Queued %d tiles' % n_enqueued)
 
 
 class TileArgumentParser(argparse.ArgumentParser):

@@ -14,7 +14,7 @@ class MemoryQueue(object):
         for coord in coords:
             self.enqueue(coord)
             n += 1
-        return n
+        return n, 0
 
     def read(self, max_to_read=1, timeout_seconds=None):
         self.q, coords = self.q[max_to_read:], self.q[:max_to_read]

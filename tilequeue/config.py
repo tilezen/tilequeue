@@ -30,6 +30,7 @@ class CliConfiguration(object):
                                            'tilestache config')
         self.expired_tiles_file = self._cfg('expired_tiles_file',
                                             'tiles expired')
+        self.expired_tiles_location = self.yml['tiles']['expired-location']
         self.output_formats = self._cfg('output_formats', 'tilestache formats')
         self.zoom_start = self._cfg('zoom_start', 'tiles zoom-start', 0)
         self.zoom_until = self._cfg('zoom_until', 'tiles zoom-until', 0)
@@ -116,6 +117,7 @@ def default_yml_config():
             'explode-until': 0,
             'daemon': False,
             'expired': None,
+            'expired-location': None,
         },
         'workers': 4,
         'messages_at_once': 4,
