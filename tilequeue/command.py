@@ -315,7 +315,11 @@ def tilequeue_intersect(cfg, peripherals):
                 % len(expired_tile_paths))
 
     for expired_tile_path in expired_tile_paths:
-        logger.info('Processing: %s' % expired_tile_path)
+        stat_result = os.stat(expired_tile_path)
+        file_size = stat_result.st_size
+        file_size_in_kilobytes = file_size / 1024
+        logger.info('Processing %s. Size: %dK' %
+                    (expired_tile_path, file_size_in_kilobytes))
         with open(expired_tile_path) as fp:
             expired_tiles = create_coords_generator_from_tiles_file(fp)
             serialized_coords = serialize_coords(expired_tiles)
