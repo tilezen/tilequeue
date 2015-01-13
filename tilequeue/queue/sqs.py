@@ -31,8 +31,8 @@ class SqsQueue(object):
             msg_tuples.append((str(i), serialize_coord(coord), 0))
             values.append(serialize_coord_to_redis_value(coord))
 
-        self.redis_client.sadd(self.inflight_key, *values)
         self.sqs_queue.write_batch(msg_tuples)
+        self.redis_client.sadd(self.inflight_key, *values)
 
     def _inflight(self, coord):
         return self.redis_client.sismember(
