@@ -7,7 +7,7 @@ from tilequeue.format import json_format
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
-from tilequeue.postgresql import NoPoolingConnectionPool
+from tilequeue.postgresql import ThreadedConnectionPool
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import build_query
@@ -100,8 +100,8 @@ class RenderDataFetcher(object):
         n_layers = len(self.layer_data)
         n_conn = n_layers * 2
 
-        self.sql_conn_pool = NoPoolingConnectionPool(n_conn, n_conn,
-                                                     **self.conn_info)
+        self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
+                                                    **self.conn_info)
 
         self._is_initialized = True
 
@@ -207,6 +207,16 @@ def execute_query(conn_pool, query, layer_datum):
         cursor.execute(query)
         rows = list(cursor.fetchall())
         return rows, layer_datum
+    except:
+        # if any exception occurs during query execution, close the
+        # connection to ensure it is not in an invalid state
+        # the connection pool knows to ignore closed connections and
+        # create a new one when requested
+        try:
+            conn.close()
+        except:
+            pass
+        raise
     finally:
         conn_pool.putconn(conn)
 
