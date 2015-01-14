@@ -101,6 +101,7 @@ class TestWorker(unittest.TestCase):
     def test_process_logs_timing(self):
         from tilequeue.worker import Worker
         from mock import MagicMock
+        import logging
         job_creator_mock = MagicMock()
         queue_mock = MagicMock()
         message = self._build_message(row=1, column=2, zoom=3)
@@ -110,8 +111,8 @@ class TestWorker(unittest.TestCase):
         worker.logger = logger_mock
         worker.process()
         timing = False
-        for call in logger_mock.info.call_args_list:
-            if "done took" in call[0][0]:
+        for call in logger_mock.log.call_args_list:
+            if "done took" in call[0][1]:
                 timing = True
         self.assertTrue(timing)
-        logger_mock.info.assert_any_call('processing 3/2/1 ...')
+        logger_mock.log.assert_any_call(logging.INFO, 'processing 3/2/1 ...')
