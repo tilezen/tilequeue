@@ -60,7 +60,7 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
 def build_query(srid, subquery, subcolumns, bounds, padding=0):
     ''' Build and return an PostGIS query.
     '''
-    bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
+    bbox = ('ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))'
             % (bounds[0] - padding, bounds[1] - padding,
                bounds[2] + padding, bounds[3] + padding))
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
