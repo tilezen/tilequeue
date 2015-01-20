@@ -153,13 +153,11 @@ class RenderDataFetcher(object):
 
         ul = self.spherical_mercator.coordinateProj(coord)
         lr = self.spherical_mercator.coordinateProj(coord.down().right())
-        bounds = (
-            min(ul.x, lr.x),
-            min(ul.y, lr.y),
-            max(ul.x, lr.x),
-            max(ul.y, lr.y)
-        )
-        shape_bounds_bbox = geometry.box(*bounds)
+        minx = min(ul.x, lr.x)
+        miny = min(ul.y, lr.y)
+        maxx = max(ul.x, lr.x)
+        maxy = max(ul.y, lr.y)
+        bounds = minx, miny, maxx, maxy
 
         zoom = coord.zoom
         tolerance = tolerances[zoom]
@@ -168,6 +166,12 @@ class RenderDataFetcher(object):
         # scaling for mapbox format will be performed in python
         non_vtm_scale = None
         vtm_scale = 4096
+
+        shape_bounds_non_vtm_bbox = geometry.box(minx, miny, maxx, maxy)
+        shape_bounds_vtm_bbox = geometry.box(
+            minx - vtm_padding, miny - vtm_padding,
+            maxx + vtm_padding, maxy + vtm_padding,
+        )
 
         has_vtm = any((format == vtm_format for format in self.formats))
         has_non_vtm = any((format != vtm_format for format in self.formats))
@@ -232,7 +236,7 @@ class RenderDataFetcher(object):
 
         if has_vtm:
             vtm_feature_layers = feature_layers_from_results(
-                vtm_async_results, shape_bounds_bbox)
+                vtm_async_results, shape_bounds_vtm_bbox)
             vtm_feature_layers.extend(vtm_empty_results)
             vtm_render_data = RenderData(
                 vtm_format, vtm_feature_layers, bounds)
@@ -240,7 +244,7 @@ class RenderDataFetcher(object):
 
         if has_non_vtm:
             non_vtm_feature_layers = feature_layers_from_results(
-                non_vtm_async_results, shape_bounds_bbox)
+                non_vtm_async_results, shape_bounds_non_vtm_bbox)
             non_vtm_feature_layers.extend(non_vtm_empty_results)
             non_vtm_render_data = [
                 RenderData(format, non_vtm_feature_layers, bounds)
