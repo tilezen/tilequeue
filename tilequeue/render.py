@@ -57,10 +57,10 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-# TODO This is copied over from tilestache build_query for now.
-# This is to make it easier to test whether changes to the query
-# builder have an impact.
-def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo,
+# the major difference between the tilestache build_query function is
+# that we only perform a bounding box query on the feature geometry
+# and then perform an intersection in python
+def build_query(srid, subquery, subcolumns, bounds, tolerance,
                 is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
@@ -76,9 +76,6 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo,
     if tolerance is not None:
         geom = 'ST_SimplifyPreserveTopology(%s, %.2f)' % (geom, tolerance)
 
-    if is_geo:
-        geom = 'ST_Transform(%s, 4326)' % geom
-
     if scale:
         # scale applies to the un-padded bounds, e.g. geometry in the
         # padding area "spills over" past the scale range
@@ -88,14 +85,10 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo,
                    scale / (bounds[3] - bounds[1])))
 
     subquery = subquery.replace('!bbox!', bbox)
-    columns = ['q."%s"' % c for c in subcolumns if c not in ('__geometry__', )]
+    columns = ['q."%s"' % c for c in subcolumns if c != '__geometry__']
 
     if '__geometry__' not in subcolumns:
         raise Exception("There's supposed to be a __geometry__ column.")
-
-    if '__id__' not in subcolumns:
-        columns.append(
-            'Substr(MD5(ST_AsBinary(q.__geometry__)), 1, 10) AS __id__')
 
     columns = ', '.join(columns)
 
@@ -110,7 +103,6 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo,
 
 def build_feature_queries(bounds, layer_data, zoom, tolerance,
                           padding, scale, columns_for_queries):
-    is_geo = False
     srid = 900913
     queries_to_execute = []
     for layer_datum, columns in zip(layer_data, columns_for_queries):
@@ -124,7 +116,7 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
                 tolerance = None
             query = build_query(
                 srid, subquery, columns, bounds, tolerance,
-                is_geo, layer_datum['is_clipped'], padding, scale)
+                layer_datum['is_clipped'], padding, scale)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
