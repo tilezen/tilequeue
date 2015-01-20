@@ -57,32 +57,14 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-# the major difference between the tilestache build_query function is
-# that we only perform a bounding box query on the feature geometry
-# and then perform an intersection in python
-def build_query(srid, subquery, subcolumns, bounds, tolerance,
-                is_clipped, padding=0, scale=None):
+def build_query(srid, subquery, subcolumns, bounds, padding=0):
     ''' Build and return an PostGIS query.
     '''
-    bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
+    bbox = ('ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))'
             % (bounds[0] - padding, bounds[1] - padding,
                bounds[2] + padding, bounds[3] + padding))
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
-
-    if is_clipped:
-        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-
-    if tolerance is not None:
-        geom = 'ST_SimplifyPreserveTopology(%s, %.2f)' % (geom, tolerance)
-
-    if scale:
-        # scale applies to the un-padded bounds, e.g. geometry in the
-        # padding area "spills over" past the scale range
-        geom = ('ST_TransScale(%s, %s, %s, %s, %s)'
-                % (geom, -bounds[0], -bounds[1],
-                   scale / (bounds[2] - bounds[0]),
-                   scale / (bounds[3] - bounds[1])))
 
     subquery = subquery.replace('!bbox!', bbox)
     columns = ['q."%s"' % c for c in subcolumns if c != '__geometry__']
@@ -101,8 +83,8 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance,
                     q.__geometry__ && %(bbox)s''' % locals()
 
 
-def build_feature_queries(bounds, layer_data, zoom, tolerance,
-                          padding, scale, columns_for_queries):
+def build_feature_queries(bounds, layer_data, zoom, padding,
+                          columns_for_queries):
     srid = 900913
     queries_to_execute = []
     for layer_datum, columns in zip(layer_data, columns_for_queries):
@@ -111,12 +93,7 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
         if subquery is None:
             query = None
         else:
-            if (zoom >= layer_datum['simplify_until'] or
-                    zoom in layer_datum['suppress_simplification']):
-                tolerance = None
-            query = build_query(
-                srid, subquery, columns, bounds, tolerance,
-                layer_datum['is_clipped'], padding, scale)
+            query = build_query(srid, subquery, columns, bounds, padding)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -163,9 +140,6 @@ class RenderDataFetcher(object):
         tolerance = tolerances[zoom]
         non_vtm_padding = 0
         vtm_padding = 5 * tolerance
-        # scaling for mapbox format will be performed in python
-        non_vtm_scale = None
-        vtm_scale = 4096
 
         shape_bounds_non_vtm_bbox = geometry.box(minx, miny, maxx, maxy)
         shape_bounds_vtm_bbox = geometry.box(
@@ -186,15 +160,13 @@ class RenderDataFetcher(object):
 
         if has_vtm:
             vtm_empty_results, vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool,
-                self.layer_data, zoom, bounds, tolerance, vtm_padding,
-                vtm_scale, columns_for_queries)
+                self.thread_pool, self.sql_conn_pool, self.layer_data,
+                zoom, bounds, vtm_padding, columns_for_queries)
 
         if has_non_vtm:
             non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool,
-                self.layer_data, zoom, bounds, tolerance,
-                non_vtm_padding, non_vtm_scale, columns_for_queries)
+                self.thread_pool, self.sql_conn_pool, self.layer_data,
+                zoom, bounds, non_vtm_padding, columns_for_queries)
 
         def feature_layers_from_results(async_results, shape_bounds_bbox):
             feature_layers = []
@@ -223,6 +195,24 @@ class RenderDataFetcher(object):
 
                     if not shape_bounds_bbox.intersects(shape):
                         continue
+
+                    is_shape_updated = False
+
+                    if layer_datum['is_clipped']:
+                        shape = shape.intersection(shape_bounds_bbox)
+                        is_shape_updated = True
+
+                    simplify_until = layer_datum.get('simplify_until', 16)
+                    suppress_simplification = layer_datum.get(
+                        'suppress_simplification', ())
+                    if (zoom not in suppress_simplification and
+                            zoom < simplify_until):
+                        shape = shape.simplify(tolerance,
+                                               preserve_topology=True)
+                        is_shape_updated = True
+
+                    if is_shape_updated:
+                        wkb = dumps(shape)
 
                     feature_id = row.pop('__id__')
                     props = dict((k, v) for k, v in row.items()
@@ -277,10 +267,9 @@ def execute_query(conn_pool, query, layer_datum):
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
-                    tolerance, padding, scale, columns):
+                    padding, columns):
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom,
-        tolerance, padding, scale, columns)
+        bounds, layer_data, zoom, padding, columns)
 
     empty_results = []
     async_results = []
@@ -340,10 +329,10 @@ def apply_to_all_coords(fn):
 def transform_feature_layers(feature_layers, format, bounds, scale):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
-    elif format == mapbox_format:
+    elif format in (mapbox_format, vtm_format):
         transform_fn = apply_to_all_coords(rescale_point(bounds, scale))
     else:
-        # because vtm gets its own query, it doesn't need any post processing
+        # in case we add a new format, default to no transformation
         return feature_layers
 
     transformed_feature_layers = []
@@ -433,9 +422,6 @@ class RenderJobCreator(object):
 
 
 def make_feature_fetcher(conn_info, tilestache_config, formats):
-    # layer_data interface:
-    # list of dicts with these keys: name, queries, is_clipped, geometry_types
-
     layers = tilestache_config.layers
     all_layer = layers.get('all')
     assert all_layer is not None, 'All layer is expected in tilestache config'
