@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 from multiprocessing.pool import ThreadPool
 from psycopg2.extras import RealDictCursor
+from shapely import geometry
 from shapely.wkb import dumps
 from shapely.wkb import loads
 from tilequeue.format import json_format
@@ -10,7 +11,6 @@ from tilequeue.format import vtm_format
 from tilequeue.postgresql import ThreadedConnectionPool
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
-from TileStache.Goodies.VecTiles.server import build_query
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
@@ -57,9 +57,52 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
+# the major difference between the tilestache build_query function is
+# that we only perform a bounding box query on the feature geometry
+# and then perform an intersection in python
+def build_query(srid, subquery, subcolumns, bounds, tolerance,
+                is_clipped, padding=0, scale=None):
+    ''' Build and return an PostGIS query.
+    '''
+    bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
+            % (bounds[0] - padding, bounds[1] - padding,
+               bounds[2] + padding, bounds[3] + padding))
+    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
+    geom = 'q.__geometry__'
+
+    if is_clipped:
+        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
+
+    if tolerance is not None:
+        geom = 'ST_SimplifyPreserveTopology(%s, %.2f)' % (geom, tolerance)
+
+    if scale:
+        # scale applies to the un-padded bounds, e.g. geometry in the
+        # padding area "spills over" past the scale range
+        geom = ('ST_TransScale(%s, %s, %s, %s, %s)'
+                % (geom, -bounds[0], -bounds[1],
+                   scale / (bounds[2] - bounds[0]),
+                   scale / (bounds[3] - bounds[1])))
+
+    subquery = subquery.replace('!bbox!', bbox)
+    columns = ['q."%s"' % c for c in subcolumns if c != '__geometry__']
+
+    if '__geometry__' not in subcolumns:
+        raise Exception("There's supposed to be a __geometry__ column.")
+
+    columns = ', '.join(columns)
+
+    return '''SELECT %(columns)s,
+                     ST_AsBinary(%(geom)s) AS __geometry__
+              FROM (
+                %(subquery)s
+                ) AS q
+              WHERE ST_IsValid(q.__geometry__) AND
+                    q.__geometry__ && %(bbox)s''' % locals()
+
+
 def build_feature_queries(bounds, layer_data, zoom, tolerance,
                           padding, scale, columns_for_queries):
-    is_geo = False
     srid = 900913
     queries_to_execute = []
     for layer_datum, columns in zip(layer_data, columns_for_queries):
@@ -73,7 +116,7 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
                 tolerance = None
             query = build_query(
                 srid, subquery, columns, bounds, tolerance,
-                is_geo, layer_datum['is_clipped'], padding, scale)
+                layer_datum['is_clipped'], padding, scale)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -110,12 +153,11 @@ class RenderDataFetcher(object):
 
         ul = self.spherical_mercator.coordinateProj(coord)
         lr = self.spherical_mercator.coordinateProj(coord.down().right())
-        bounds = (
-            min(ul.x, lr.x),
-            min(ul.y, lr.y),
-            max(ul.x, lr.x),
-            max(ul.y, lr.y)
-        )
+        minx = min(ul.x, lr.x)
+        miny = min(ul.y, lr.y)
+        maxx = max(ul.x, lr.x)
+        maxy = max(ul.y, lr.y)
+        bounds = minx, miny, maxx, maxy
 
         zoom = coord.zoom
         tolerance = tolerances[zoom]
@@ -124,6 +166,12 @@ class RenderDataFetcher(object):
         # scaling for mapbox format will be performed in python
         non_vtm_scale = None
         vtm_scale = 4096
+
+        shape_bounds_non_vtm_bbox = geometry.box(minx, miny, maxx, maxy)
+        shape_bounds_vtm_bbox = geometry.box(
+            minx - vtm_padding, miny - vtm_padding,
+            maxx + vtm_padding, maxy + vtm_padding,
+        )
 
         has_vtm = any((format == vtm_format for format in self.formats))
         has_non_vtm = any((format != vtm_format for format in self.formats))
@@ -148,7 +196,7 @@ class RenderDataFetcher(object):
                 self.layer_data, zoom, bounds, tolerance,
                 non_vtm_padding, non_vtm_scale, columns_for_queries)
 
-        def feature_layers_from_results(async_results):
+        def feature_layers_from_results(async_results, shape_bounds_bbox):
             feature_layers = []
             for async_result in async_results:
                 rows, layer_datum = async_result.get()
@@ -163,17 +211,23 @@ class RenderDataFetcher(object):
                         'Missing __id__ in query for: %s' % layer_name
 
                     wkb = bytes(row.pop('__geometry__'))
-                    id = row.pop('__id__')
+                    shape = loads(wkb)
+
+                    if shape.is_empty:
+                        continue
 
                     if geometry_types is not None:
-                        shape = loads(wkb)
                         geom_type = shape.__geo_interface__['type']
                         if geom_type not in geometry_types:
                             continue
 
+                    if not shape_bounds_bbox.intersects(shape):
+                        continue
+
+                    feature_id = row.pop('__id__')
                     props = dict((k, v) for k, v in row.items()
                                  if v is not None)
-                    features.append((wkb, props, id))
+                    features.append((wkb, props, feature_id))
 
                 feature_layer = dict(name=layer_name, features=features,
                                      layer_datum=layer_datum)
@@ -181,7 +235,8 @@ class RenderDataFetcher(object):
             return feature_layers
 
         if has_vtm:
-            vtm_feature_layers = feature_layers_from_results(vtm_async_results)
+            vtm_feature_layers = feature_layers_from_results(
+                vtm_async_results, shape_bounds_vtm_bbox)
             vtm_feature_layers.extend(vtm_empty_results)
             vtm_render_data = RenderData(
                 vtm_format, vtm_feature_layers, bounds)
@@ -189,7 +244,7 @@ class RenderDataFetcher(object):
 
         if has_non_vtm:
             non_vtm_feature_layers = feature_layers_from_results(
-                non_vtm_async_results)
+                non_vtm_async_results, shape_bounds_non_vtm_bbox)
             non_vtm_feature_layers.extend(non_vtm_empty_results)
             non_vtm_render_data = [
                 RenderData(format, non_vtm_feature_layers, bounds)
