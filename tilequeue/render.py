@@ -58,7 +58,7 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
 
 
 def build_query(srid, subquery, subcolumns, bounds, tolerance,
-                is_clipped, padding=0, scale=None):
+                padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
     bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
@@ -66,9 +66,6 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance,
                bounds[2] + padding, bounds[3] + padding))
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
-
-    if is_clipped:
-        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
 
     if tolerance is not None:
         geom = 'ST_SimplifyPreserveTopology(%s, %.2f)' % (geom, tolerance)
@@ -112,8 +109,7 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
                     zoom in layer_datum['suppress_simplification']):
                 tolerance = None
             query = build_query(
-                srid, subquery, columns, bounds, tolerance,
-                layer_datum['is_clipped'], padding, scale)
+                srid, subquery, columns, bounds, tolerance, padding, scale)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -220,6 +216,15 @@ class RenderDataFetcher(object):
 
                     if not shape_bounds_bbox.intersects(shape):
                         continue
+
+                    is_shape_updated = False
+
+                    if layer_datum['is_clipped']:
+                        shape = shape.intersection(shape_bounds_bbox)
+                        is_shape_updated = True
+
+                    if is_shape_updated:
+                        wkb = dumps(shape)
 
                     feature_id = row.pop('__id__')
                     props = dict((k, v) for k, v in row.items()
