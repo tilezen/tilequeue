@@ -217,6 +217,9 @@ class RenderDataFetcher(object):
                     wkb = bytes(row.pop('__geometry__'))
                     shape = loads(wkb)
 
+                    if shape.is_empty:
+                        continue
+
                     if geometry_types is not None:
                         geom_type = shape.__geo_interface__['type']
                         if geom_type not in geometry_types:
