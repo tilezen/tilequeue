@@ -57,9 +57,6 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-# the major difference between the tilestache build_query function is
-# that we only perform a bounding box query on the feature geometry
-# and then perform an intersection in python
 def build_query(srid, subquery, subcolumns, bounds, tolerance,
                 is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
@@ -433,9 +430,6 @@ class RenderJobCreator(object):
 
 
 def make_feature_fetcher(conn_info, tilestache_config, formats):
-    # layer_data interface:
-    # list of dicts with these keys: name, queries, is_clipped, geometry_types
-
     layers = tilestache_config.layers
     all_layer = layers.get('all')
     assert all_layer is not None, 'All layer is expected in tilestache config'
