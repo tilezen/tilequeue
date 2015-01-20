@@ -57,7 +57,7 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-def build_query(srid, subquery, subcolumns, bounds, padding=0, scale=None):
+def build_query(srid, subquery, subcolumns, bounds, padding=0):
     ''' Build and return an PostGIS query.
     '''
     bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
@@ -65,14 +65,6 @@ def build_query(srid, subquery, subcolumns, bounds, padding=0, scale=None):
                bounds[2] + padding, bounds[3] + padding))
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
-
-    if scale:
-        # scale applies to the un-padded bounds, e.g. geometry in the
-        # padding area "spills over" past the scale range
-        geom = ('ST_TransScale(%s, %s, %s, %s, %s)'
-                % (geom, -bounds[0], -bounds[1],
-                   scale / (bounds[2] - bounds[0]),
-                   scale / (bounds[3] - bounds[1])))
 
     subquery = subquery.replace('!bbox!', bbox)
     columns = ['q."%s"' % c for c in subcolumns if c != '__geometry__']
@@ -91,7 +83,7 @@ def build_query(srid, subquery, subcolumns, bounds, padding=0, scale=None):
                     q.__geometry__ && %(bbox)s''' % locals()
 
 
-def build_feature_queries(bounds, layer_data, zoom, padding, scale,
+def build_feature_queries(bounds, layer_data, zoom, padding,
                           columns_for_queries):
     srid = 900913
     queries_to_execute = []
@@ -101,8 +93,7 @@ def build_feature_queries(bounds, layer_data, zoom, padding, scale,
         if subquery is None:
             query = None
         else:
-            query = build_query(srid, subquery, columns, bounds,
-                                padding, scale)
+            query = build_query(srid, subquery, columns, bounds, padding)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -149,9 +140,6 @@ class RenderDataFetcher(object):
         tolerance = tolerances[zoom]
         non_vtm_padding = 0
         vtm_padding = 5 * tolerance
-        # scaling for mapbox format will be performed in python
-        non_vtm_scale = None
-        vtm_scale = 4096
 
         shape_bounds_non_vtm_bbox = geometry.box(minx, miny, maxx, maxy)
         shape_bounds_vtm_bbox = geometry.box(
@@ -173,14 +161,12 @@ class RenderDataFetcher(object):
         if has_vtm:
             vtm_empty_results, vtm_async_results = enqueue_queries(
                 self.thread_pool, self.sql_conn_pool, self.layer_data,
-                zoom, bounds, vtm_padding, vtm_scale,
-                columns_for_queries)
+                zoom, bounds, vtm_padding, columns_for_queries)
 
         if has_non_vtm:
             non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
                 self.thread_pool, self.sql_conn_pool, self.layer_data,
-                zoom, bounds, non_vtm_padding, non_vtm_scale,
-                columns_for_queries)
+                zoom, bounds, non_vtm_padding, columns_for_queries)
 
         def feature_layers_from_results(async_results, shape_bounds_bbox):
             feature_layers = []
@@ -281,9 +267,9 @@ def execute_query(conn_pool, query, layer_datum):
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
-                    padding, scale, columns):
+                    padding, columns):
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom, padding, scale, columns)
+        bounds, layer_data, zoom, padding, columns)
 
     empty_results = []
     async_results = []
@@ -343,10 +329,10 @@ def apply_to_all_coords(fn):
 def transform_feature_layers(feature_layers, format, bounds, scale):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
-    elif format == mapbox_format:
+    elif format in (mapbox_format, vtm_format):
         transform_fn = apply_to_all_coords(rescale_point(bounds, scale))
     else:
-        # because vtm gets its own query, it doesn't need any post processing
+        # in case we add a new format, default to no transformation
         return feature_layers
 
     transformed_feature_layers = []
