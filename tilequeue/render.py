@@ -57,8 +57,7 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-def build_query(srid, subquery, subcolumns, bounds, tolerance,
-                padding=0, scale=None):
+def build_query(srid, subquery, subcolumns, bounds, padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
     bbox = ('ST_MakeBox2D(ST_MakePoint(%.2f, %.2f), ST_MakePoint(%.2f, %.2f))'
@@ -66,9 +65,6 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance,
                bounds[2] + padding, bounds[3] + padding))
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
-
-    if tolerance is not None:
-        geom = 'ST_SimplifyPreserveTopology(%s, %.2f)' % (geom, tolerance)
 
     if scale:
         # scale applies to the un-padded bounds, e.g. geometry in the
@@ -95,8 +91,8 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance,
                     q.__geometry__ && %(bbox)s''' % locals()
 
 
-def build_feature_queries(bounds, layer_data, zoom, tolerance,
-                          padding, scale, columns_for_queries):
+def build_feature_queries(bounds, layer_data, zoom, padding, scale,
+                          columns_for_queries):
     srid = 900913
     queries_to_execute = []
     for layer_datum, columns in zip(layer_data, columns_for_queries):
@@ -105,11 +101,8 @@ def build_feature_queries(bounds, layer_data, zoom, tolerance,
         if subquery is None:
             query = None
         else:
-            if (zoom >= layer_datum['simplify_until'] or
-                    zoom in layer_datum['suppress_simplification']):
-                tolerance = None
-            query = build_query(
-                srid, subquery, columns, bounds, tolerance, padding, scale)
+            query = build_query(srid, subquery, columns, bounds,
+                                padding, scale)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -179,15 +172,15 @@ class RenderDataFetcher(object):
 
         if has_vtm:
             vtm_empty_results, vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool,
-                self.layer_data, zoom, bounds, tolerance, vtm_padding,
-                vtm_scale, columns_for_queries)
+                self.thread_pool, self.sql_conn_pool, self.layer_data,
+                zoom, bounds, vtm_padding, vtm_scale,
+                columns_for_queries)
 
         if has_non_vtm:
             non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool,
-                self.layer_data, zoom, bounds, tolerance,
-                non_vtm_padding, non_vtm_scale, columns_for_queries)
+                self.thread_pool, self.sql_conn_pool, self.layer_data,
+                zoom, bounds, non_vtm_padding, non_vtm_scale,
+                columns_for_queries)
 
         def feature_layers_from_results(async_results, shape_bounds_bbox):
             feature_layers = []
@@ -221,6 +214,15 @@ class RenderDataFetcher(object):
 
                     if layer_datum['is_clipped']:
                         shape = shape.intersection(shape_bounds_bbox)
+                        is_shape_updated = True
+
+                    simplify_until = layer_datum.get('simplify_until', 16)
+                    suppress_simplification = layer_datum.get(
+                        'suppress_simplification', ())
+                    if (zoom not in suppress_simplification and
+                            zoom < simplify_until):
+                        shape = shape.simplify(tolerance,
+                                               preserve_topology=True)
                         is_shape_updated = True
 
                     if is_shape_updated:
@@ -279,10 +281,9 @@ def execute_query(conn_pool, query, layer_datum):
 
 
 def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
-                    tolerance, padding, scale, columns):
+                    padding, scale, columns):
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom,
-        tolerance, padding, scale, columns)
+        bounds, layer_data, zoom, padding, scale, columns)
 
     empty_results = []
     async_results = []
