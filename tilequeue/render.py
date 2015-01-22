@@ -380,6 +380,8 @@ class RenderJob(object):
             format.format_tile(tile_data_file, feature_layers, self.coord,
                                bounds)
             tile_data = tile_data_file.getvalue()
+            tile_data_file.close()
+
             async_result = self.thread_pool.apply_async(
                 self.store.write_tile,
                 (tile_data, self.coord, format)

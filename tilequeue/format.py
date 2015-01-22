@@ -6,6 +6,7 @@ from TileStache.Goodies.VecTiles.mapbox import merge as mapbox_merge
 from TileStache.Goodies.VecTiles.oscimap import merge as vtm_merge
 from TileStache.Goodies.VecTiles.topojson import encode as topojson_encode
 from TileStache.Goodies.VecTiles.topojson import merge as topojson_merge
+import gzip
 
 
 class OutputFormat(object):
@@ -70,7 +71,8 @@ def format_topojson(fp, feature_layers, coord, bounds):
 
 
 def format_mapbox(fp, feature_layers, coord, bounds):
-    mapbox_merge(fp, feature_layers, coord)
+    gzip_fp = gzip.GzipFile(mode='wb', compresslevel=9, fileobj=fp)
+    mapbox_merge(gzip_fp, feature_layers, coord)
 
 
 def format_vtm(fp, feature_layers, coord, bounds):
