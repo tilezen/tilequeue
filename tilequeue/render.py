@@ -111,9 +111,8 @@ class RenderDataFetcher(object):
 
         self.thread_pool = thread_pool
 
-        # we expect to execute 2 sets of queries for each layer
         n_layers = len(self.layer_data)
-        n_conn = n_layers * 2
+        n_conn = n_layers
 
         self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
                                                     **self.conn_info)
@@ -406,8 +405,7 @@ class RenderJobCreator(object):
         # create a thread pool, shared between fetching features and
         # writing to s3
         n_layers = len(self.feature_fetcher.layer_data)
-        # we execute vtm queries concurrently
-        n_threads = n_layers * 2
+        n_threads = n_layers
         self.thread_pool = ThreadPool(n_threads)
 
         # process local initialization
