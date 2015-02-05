@@ -8,7 +8,7 @@ from tilequeue.format import json_format
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
-from tilequeue.postgresql import ThreadedConnectionPool
+from tilequeue.postgresql import HostAffinityConnectionPool
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import query_columns
@@ -105,6 +105,8 @@ class RenderDataFetcher(object):
         self.find_columns_for_queries = find_columns_for_queries
         self.thread_pool = None
         self._is_initialized = False
+        self.sql_hosts = None
+        self.sql_host_query_index = 0
 
     def initialize(self, thread_pool):
         assert not self._is_initialized, 'Multiple initialization'
@@ -114,8 +116,10 @@ class RenderDataFetcher(object):
         n_layers = len(self.layer_data)
         n_conn = n_layers
 
-        self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
-                                                    **self.conn_info)
+        self.sql_hosts = self.conn_info.pop('hosts')
+        self.sql_conn_pool = HostAffinityConnectionPool(
+            self.sql_hosts, n_conn, self.conn_info)
+        self.sql_host_query_index = 0
 
         self._is_initialized = True
 
@@ -143,96 +147,104 @@ class RenderDataFetcher(object):
         )
         shape_padded_bounds = geometry.box(*padded_bounds)
 
-        # first determine the columns for the queries
-        # we currently perform the actual query and ask for no data
-        # we also cache this per layer, per zoom
-        columns_for_queries = self.find_columns_for_queries(
-            self.conn_info, self.layer_data, zoom, padded_bounds)
+        sql_host = self.sql_hosts[self.sql_host_query_index]
+        self.sql_host_query_index += 1
+        if self.sql_host_query_index == len(self.sql_hosts):
+            self.sql_host_query_index = 0
 
-        # the padded bounds are used here in order to only have to
-        # issue a single set of queries to the database for all
-        # formats
-        empty_results, async_results = enqueue_queries(
-            self.thread_pool, self.sql_conn_pool, self.layer_data,
-            zoom, padded_bounds, columns_for_queries)
+        sql_conns = self.sql_conn_pool.get_conns_for_host(sql_host)
+        try:
+            # first determine the columns for the queries
+            # we currently perform the actual query and ask for no data
+            # we also cache this per layer, per zoom
+            col_conn_info = dict(self.conn_info, host=sql_host)
+            columns_for_queries = self.find_columns_for_queries(
+                col_conn_info, self.layer_data, zoom, padded_bounds)
 
-        feature_layers = []
-        for async_result in async_results:
-            rows, layer_datum = async_result.get()
+            # the padded bounds are used here in order to only have to
+            # issue a single set of queries to the database for all
+            # formats
+            empty_results, async_results = enqueue_queries(
+                sql_conns, self.thread_pool, self.layer_data, zoom,
+                padded_bounds, columns_for_queries)
 
-            geometry_types = layer_datum['geometry_types']
-            layer_name = layer_datum['name']
-            features = []
-            for row in rows:
-                assert '__geometry__' in row, \
-                    'Missing __geometry__ in query for: %s' % layer_name
-                assert '__id__' in row, \
-                    'Missing __id__ in query for: %s' % layer_name
+            feature_layers = []
+            for async_result in async_results:
+                rows, layer_datum = async_result.get()
 
-                wkb = bytes(row.pop('__geometry__'))
-                shape = loads(wkb)
+                geometry_types = layer_datum['geometry_types']
+                layer_name = layer_datum['name']
+                features = []
+                for row in rows:
+                    assert '__geometry__' in row, \
+                        'Missing __geometry__ in query for: %s' % layer_name
+                    assert '__id__' in row, \
+                        'Missing __id__ in query for: %s' % layer_name
 
-                if shape.is_empty:
-                    continue
+                    wkb = bytes(row.pop('__geometry__'))
+                    shape = loads(wkb)
 
-                if geometry_types is not None:
-                    geom_type = shape.__geo_interface__['type']
-                    if geom_type not in geometry_types:
+                    if shape.is_empty:
                         continue
 
-                if not shape_padded_bounds.intersects(shape):
-                    continue
+                    if geometry_types is not None:
+                        geom_type = shape.__geo_interface__['type']
+                        if geom_type not in geometry_types:
+                            continue
 
-                feature_id = row.pop('__id__')
-                props = dict((k, v) for k, v in row.items()
-                             if v is not None)
+                    if not shape_padded_bounds.intersects(shape):
+                        continue
 
-                # the shapely object itself is kept here, it gets
-                # converted back to wkb during transformation
-                features.append((shape, props, feature_id))
+                    feature_id = row.pop('__id__')
+                    props = dict((k, v) for k, v in row.items()
+                                 if v is not None)
 
-            feature_layer = dict(name=layer_name, features=features,
-                                 layer_datum=layer_datum)
-            feature_layers.append(feature_layer)
+                    # the shapely object itself is kept here, it gets
+                    # converted back to wkb during transformation
+                    features.append((shape, props, feature_id))
 
-        feature_layers.extend(empty_results)
-        render_data = [
-            RenderData(format, feature_layers, bounds, padded_bounds)
-            for format in self.formats
-        ]
+                feature_layer = dict(name=layer_name, features=features,
+                                     layer_datum=layer_datum)
+                feature_layers.append(feature_layer)
 
-        return render_data
+            feature_layers.extend(empty_results)
+            render_data = [
+                RenderData(format, feature_layers, bounds, padded_bounds)
+                for format in self.formats
+            ]
+
+            return render_data
+
+        finally:
+            self.sql_conn_pool.put_conns_for_host(sql_host)
 
 
-def execute_query(conn_pool, query, layer_datum):
-    conn = conn_pool.getconn()
+def execute_query(conn, query, layer_datum):
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
         return rows, layer_datum
     except:
-        # if any exception occurs during query execution, close the
-        # connection to ensure it is not in an invalid state
-        # the connection pool knows to ignore closed connections and
-        # create a new one when requested
+        # If any exception occurs during query execution, close the
+        # connection to ensure it is not in an invalid state. The
+        # connection pool knows to create new connections to replace
+        # those that are closed
         try:
             conn.close()
         except:
             pass
         raise
-    finally:
-        conn_pool.putconn(conn)
 
 
-def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds, columns):
+def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds, columns):
 
     queries_to_execute = build_feature_queries(
         bounds, layer_data, zoom, columns)
 
     empty_results = []
     async_results = []
-    for layer_datum, query in queries_to_execute:
+    for (layer_datum, query), sql_conn in zip(queries_to_execute, sql_conns):
         if query is None:
             empty_feature_layer = dict(
                 name=layer_datum['name'],
@@ -242,7 +254,7 @@ def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds, columns):
             empty_results.append(empty_feature_layer)
         else:
             async_result = thread_pool.apply_async(
-                execute_query, (conn_pool, query, layer_datum))
+                execute_query, (sql_conn, query, layer_datum))
             async_results.append(async_result)
 
     return empty_results, async_results
