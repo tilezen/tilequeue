@@ -15,7 +15,6 @@ from tilequeue.store import make_s3_store
 from tilequeue.tile import explode_serialized_coords
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
-from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import trap_signal
@@ -177,18 +176,6 @@ def assert_aws_config(cfg):
             'Must specify both aws key and secret'
 
 
-def tilequeue_parser_cache_index_seed(parser):
-    parser = add_config_options(parser)
-    parser.set_defaults(func=tilequeue_cache_index_seed)
-    return parser
-
-
-def tilequeue_parser_explode(parser):
-    parser = add_config_options(parser)
-    parser.set_defaults(func=tilequeue_explode)
-    return parser
-
-
 def tilequeue_parser_drain(parser):
     parser = add_config_options(parser)
     parser.set_defaults(func=tilequeue_drain)
@@ -213,33 +200,6 @@ def deserialize_coords(serialized_coords):
         yield coord
 
 
-def tilequeue_explode(cfg, peripherals):
-    assert cfg.expired_tiles_file, 'Missing expired tiles file'
-    assert os.path.exists(cfg.expired_tiles_file), \
-        'Invalid expired tiles path'
-    with open(cfg.expired_tiles_file) as fp:
-        expired_tiles = create_coords_generator_from_tiles_file(fp)
-
-        # using serialized values in memory,
-        # but need to pay for serialize/deserialize time
-        serialized_coords = serialize_coords(expired_tiles)
-        exploded_coords = explode_serialized_coords(
-            serialized_coords, cfg.explode_until,
-            serialize_fn=serialize_coord_to_redis_value,
-            deserialize_fn=deserialize_redis_value_to_coord)
-        for serialized_coord in exploded_coords:
-            coord = deserialize_redis_value_to_coord(serialized_coord)
-            coord_str = serialize_coord(coord)
-            print coord_str
-
-        # use direct coords
-        # exploded_coords = explode_with_parents(
-        #     expired_tiles, cfg.explode_until)
-        # for coord in exploded_coords:
-        #     coord_str = serialize_coord(coord)
-        #     print coord_str
-
-
 def tilequeue_drain(cfg, peripherals):
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     logger = make_logger(cfg, 'drain')
@@ -247,13 +207,6 @@ def tilequeue_drain(cfg, peripherals):
     n = queue.clear()
     logger.info('Draining queue ... done')
     logger.info('Removed %d messages' % n)
-
-
-def tilequeue_cache_index_seed(cfg, peripherals):
-    tile_generator = make_seed_tile_generator(cfg)
-    out = sys.stdout
-    peripherals.redis_cache_index.write_coords_redis_protocol(
-        out, cfg.redis_cache_set_key, tile_generator)
 
 
 def assert_redis_config(cfg):
@@ -477,9 +430,7 @@ def tilequeue_main(argv_args=None):
     parser_config = (
         ('process', tilequeue_parser_process),
         ('seed', tilequeue_parser_seed),
-        ('explode', tilequeue_parser_explode),
         ('drain', tilequeue_parser_drain),
-        ('cache-index-seed', tilequeue_parser_cache_index_seed),
         ('intersect', tilequeue_parser_intersect),
     )
     for parser_name, parser_func in parser_config:
