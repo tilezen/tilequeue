@@ -1,4 +1,3 @@
-from tilequeue.postgresql import RoundRobinConnectionFactory
 from yaml import load
 
 
