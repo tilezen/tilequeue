@@ -106,11 +106,12 @@ class SqsQueue(object):
         pass
 
 
-def get_sqs_queue(cfg=None):
-    conn = connect_sqs(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-    queue = conn.get_queue(cfg.queue_name)
+def get_sqs_queue(queue_name, redis_host, redis_port, redis_db,
+                  aws_access_key_id=None, aws_secret_access_key=None):
+    conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
+    queue = conn.get_queue(queue_name)
     assert queue is not None, \
-        'Could not get sqs queue with name: %s' % cfg.queue_name
+        'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
+    redis_client = StrictRedis(redis_host, redis_port, redis_db)
     return SqsQueue(queue, redis_client)

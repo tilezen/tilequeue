@@ -21,7 +21,6 @@ tiles:
   zoom-until: 20
   explode-until: 0
   daemon: false
-  expired: <path/to/expired/tiles/file>
   expired-location: <path/to/expired/tiles/list>
 workers: 4
 messages_at_once: 4
@@ -37,7 +36,6 @@ redis:
   port: 6379
   db: 0
   cache-set-key: tilestache.cache
-  diff-set-key: tilestache.difflist
 postgresql:
   # connections are round robin'ed between hosts
   hosts: [localhost]
