@@ -57,8 +57,8 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
 def build_query(srid, subquery, subcolumns, bounds):
     ''' Build and return an PostGIS query.
     '''
-    bbox = ('ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))' %
-            bounds)
+    bbox = ('ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
+            '             ST_MakePoint(%.12f, %.12f))' % bounds)
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
 
