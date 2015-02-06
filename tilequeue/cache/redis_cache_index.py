@@ -23,8 +23,19 @@ class RedisCacheIndex(object):
         return self.redis_client.smembers(self.cache_set_key)
 
     def index_coord(self, coord):
-        redis_coord_value = serialize_coord_to_redis_value(coord)
-        self.redis_client.sadd(self.cache_set_key, redis_coord_value)
+        self.index_coords([coord])
+
+    def index_coords(self, coords):
+        batch_size = 100
+        buf = []
+        for coord in coords:
+            redis_coord_value = serialize_coord_to_redis_value(coord)
+            buf.append(redis_coord_value)
+            if len(buf) >= batch_size:
+                self.redis_client.sadd(self.cache_set_key, *buf)
+                del buf[:]
+        if buf:
+            self.redis_client.sadd(self.cache_set_key, *buf)
 
     def write_coords_redis_protocol(self, out, set_key, coords):
         # coords is expected to be an iterable of coord objects

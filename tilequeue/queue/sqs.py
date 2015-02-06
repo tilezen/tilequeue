@@ -9,10 +9,11 @@ from redis import StrictRedis
 
 class SqsQueue(object):
 
-    def __init__(self, sqs_queue, redis_client):
+    def __init__(self, sqs_queue, redis_client, is_seeding=False):
         self.sqs_queue = sqs_queue
         self.redis_client = redis_client
         self.inflight_key = "tilequeue.in-flight"
+        self.is_seeding = is_seeding
 
     def enqueue(self, coord):
         if not self._inflight(coord):
@@ -35,7 +36,7 @@ class SqsQueue(object):
         self.redis_client.sadd(self.inflight_key, *values)
 
     def _inflight(self, coord):
-        return self.redis_client.sismember(
+        return (not self.is_seeding) and self.redis_client.sismember(
             self.inflight_key, serialize_coord_to_redis_value(coord))
 
     def _add_to_flight(self, coord):

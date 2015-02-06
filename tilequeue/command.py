@@ -1,6 +1,8 @@
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
+from Queue import Queue
+from threading import Thread
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
 from tilequeue.cache import serialize_coord_to_redis_value
@@ -255,16 +257,56 @@ def tilequeue_process(cfg, peripherals):
     trap_signal()
 
 
+def queue_generator(queue):
+    while True:
+        data = queue.get()
+        if data is None:
+            break
+        yield data
+
+
 def tilequeue_seed(cfg, peripherals):
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     tile_generator = make_seed_tile_generator(cfg)
 
+    # updating sqs and updating redis happen in background threads
+    def sqs_enqueue(tile_gen):
+        n_enqueued, n_in_flight = queue.enqueue_batch(tile_gen)
+        logger.info('Sqs ... done')
+        logger.info('Enqueued %d tiles' % n_enqueued)
+
+    def redis_add(tile_gen):
+        peripherals.redis_cache_index.index_coords(tile_gen)
+        logger.info('Tiles of interest ... done')
+
+    queue_buf_size = 1000
+    queue_sqs_coords = Queue(queue_buf_size)
+    queue_redis_coords = Queue(queue_buf_size)
+
+    # suppresses checking the in flight list while seeding
+    queue.is_seeding = True
+
+    thread_sqs = Thread(target=sqs_enqueue,
+                        args=(queue_generator(queue_sqs_coords),))
+    thread_redis = Thread(target=redis_add,
+                          args=(queue_generator(queue_redis_coords),))
+
     logger = make_logger(cfg, 'seed')
-    logger.info('Beginning to enqueue seed tiles')
+    logger.info('Sqs ... ')
+    logger.info('Tiles of interest ...')
 
-    n_enqueued, n_in_flight = queue.enqueue_batch(tile_generator)
+    thread_sqs.start()
+    thread_redis.start()
 
-    logger.info('Queued %d tiles' % n_enqueued)
+    for tile in tile_generator:
+        queue_sqs_coords.put(tile)
+        queue_redis_coords.put(tile)
+    # None is sentinel value
+    queue_sqs_coords.put(None)
+    queue_redis_coords.put(None)
+
+    thread_redis.join()
+    thread_sqs.join()
 
 
 class TileArgumentParser(argparse.ArgumentParser):
