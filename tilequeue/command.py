@@ -272,12 +272,9 @@ def tilequeue_seed(cfg, peripherals):
     # updating sqs and updating redis happen in background threads
     def sqs_enqueue(tile_gen):
         n_enqueued, n_in_flight = queue.enqueue_batch(tile_gen)
-        logger.info('Sqs ... done')
-        logger.info('Enqueued %d tiles' % n_enqueued)
 
     def redis_add(tile_gen):
         peripherals.redis_cache_index.index_coords(tile_gen)
-        logger.info('Tiles of interest ... done')
 
     queue_buf_size = 1000
     queue_sqs_coords = Queue(queue_buf_size)
@@ -286,8 +283,12 @@ def tilequeue_seed(cfg, peripherals):
     # suppresses checking the in flight list while seeding
     queue.is_seeding = True
 
-    thread_sqs = Thread(target=sqs_enqueue,
-                        args=(queue_generator(queue_sqs_coords),))
+    # use multiple sqs threads
+    n_sqs_threads = 3
+
+    sqs_threads = [Thread(target=sqs_enqueue,
+                          args=(queue_generator(queue_sqs_coords),))
+                   for x in range(n_sqs_threads)]
     thread_redis = Thread(target=redis_add,
                           args=(queue_generator(queue_redis_coords),))
 
@@ -295,18 +296,24 @@ def tilequeue_seed(cfg, peripherals):
     logger.info('Sqs ... ')
     logger.info('Tiles of interest ...')
 
-    thread_sqs.start()
+    for thread_sqs in sqs_threads:
+        thread_sqs.start()
     thread_redis.start()
 
     for tile in tile_generator:
         queue_sqs_coords.put(tile)
         queue_redis_coords.put(tile)
+
     # None is sentinel value
-    queue_sqs_coords.put(None)
+    for i in range(n_sqs_threads):
+        queue_sqs_coords.put(None)
     queue_redis_coords.put(None)
 
     thread_redis.join()
-    thread_sqs.join()
+    logger.info('Tiles of interest ... done')
+    for thread_sqs in sqs_threads:
+        thread_sqs.join()
+    logger.info('Sqs ... done')
 
 
 class TileArgumentParser(argparse.ArgumentParser):
