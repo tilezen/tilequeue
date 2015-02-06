@@ -8,7 +8,7 @@ from tilequeue.format import json_format
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
-from tilequeue.postgresql import ThreadedConnectionPool
+from tilequeue.postgresql import HostAffinityConnectionPool
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import query_columns
@@ -16,16 +16,13 @@ from TileStache.Goodies.VecTiles.server import tolerances
 import math
 
 
-# This is what will get passed from fetching data. Ideally, this would
-# be separate from the data, but at the moment the opensciencemap
-# renderer mandates slightly different data. This forces us to track
-# which data is which to ultimately dispatch on the correct formatter.
 class RenderData(object):
 
-    def __init__(self, format, feature_layers, bounds):
+    def __init__(self, format, feature_layers, bounds, padded_bounds):
         self.format = format
         self.feature_layers = feature_layers
         self.bounds = bounds
+        self.padded_bounds = padded_bounds
 
 
 # stores the sql columns needed per layer, zoom
@@ -57,12 +54,11 @@ def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
     return columns_for_queries
 
 
-def build_query(srid, subquery, subcolumns, bounds, padding=0):
+def build_query(srid, subquery, subcolumns, bounds):
     ''' Build and return an PostGIS query.
     '''
-    bbox = ('ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))'
-            % (bounds[0] - padding, bounds[1] - padding,
-               bounds[2] + padding, bounds[3] + padding))
+    bbox = ('ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
+            '             ST_MakePoint(%.12f, %.12f))' % bounds)
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
 
@@ -83,8 +79,7 @@ def build_query(srid, subquery, subcolumns, bounds, padding=0):
                     q.__geometry__ && %(bbox)s''' % locals()
 
 
-def build_feature_queries(bounds, layer_data, zoom, padding,
-                          columns_for_queries):
+def build_feature_queries(bounds, layer_data, zoom, columns_for_queries):
     srid = 900913
     queries_to_execute = []
     for layer_datum, columns in zip(layer_data, columns_for_queries):
@@ -93,7 +88,7 @@ def build_feature_queries(bounds, layer_data, zoom, padding,
         if subquery is None:
             query = None
         else:
-            query = build_query(srid, subquery, columns, bounds, padding)
+            query = build_query(srid, subquery, columns, bounds)
         queries_to_execute.append(
             (layer_datum, query))
     return queries_to_execute
@@ -110,18 +105,21 @@ class RenderDataFetcher(object):
         self.find_columns_for_queries = find_columns_for_queries
         self.thread_pool = None
         self._is_initialized = False
+        self.sql_hosts = None
+        self.sql_host_query_index = 0
 
     def initialize(self, thread_pool):
         assert not self._is_initialized, 'Multiple initialization'
 
         self.thread_pool = thread_pool
 
-        # we expect to execute 2 sets of queries for each layer
         n_layers = len(self.layer_data)
-        n_conn = n_layers * 2
+        n_conn = n_layers
 
-        self.sql_conn_pool = ThreadedConnectionPool(n_conn, n_conn,
-                                                    **self.conn_info)
+        self.sql_hosts = self.conn_info.pop('hosts')
+        self.sql_conn_pool = HostAffinityConnectionPool(
+            self.sql_hosts, n_conn, self.conn_info)
+        self.sql_host_query_index = 0
 
         self._is_initialized = True
 
@@ -138,37 +136,38 @@ class RenderDataFetcher(object):
 
         zoom = coord.zoom
         tolerance = tolerances[zoom]
-        non_vtm_padding = 0
-        vtm_padding = 5 * tolerance
+        padding = 5 * tolerance
 
-        shape_bounds_non_vtm_bbox = geometry.box(minx, miny, maxx, maxy)
-        shape_bounds_vtm_bbox = geometry.box(
-            minx - vtm_padding, miny - vtm_padding,
-            maxx + vtm_padding, maxy + vtm_padding,
+        # the vtm renderer needs features a little surrounding the
+        # bounding box as well, these padded bounds are used in the
+        # queries
+        padded_bounds = (
+            minx - padding, miny - padding,
+            maxx + padding, maxy + padding,
         )
+        shape_padded_bounds = geometry.box(*padded_bounds)
 
-        has_vtm = any((format == vtm_format for format in self.formats))
-        has_non_vtm = any((format != vtm_format for format in self.formats))
+        sql_host = self.sql_hosts[self.sql_host_query_index]
+        self.sql_host_query_index += 1
+        if self.sql_host_query_index == len(self.sql_hosts):
+            self.sql_host_query_index = 0
 
-        # first determine the columns for the queries
-        # we currently perform the actual query and ask for no data
-        # we also cache this per layer, per zoom
-        columns_for_queries = self.find_columns_for_queries(
-            self.conn_info, self.layer_data, zoom, bounds)
+        sql_conns = self.sql_conn_pool.get_conns_for_host(sql_host)
+        try:
+            # first determine the columns for the queries
+            # we currently perform the actual query and ask for no data
+            # we also cache this per layer, per zoom
+            col_conn_info = dict(self.conn_info, host=sql_host)
+            columns_for_queries = self.find_columns_for_queries(
+                col_conn_info, self.layer_data, zoom, padded_bounds)
 
-        render_data = []
+            # the padded bounds are used here in order to only have to
+            # issue a single set of queries to the database for all
+            # formats
+            empty_results, async_results = enqueue_queries(
+                sql_conns, self.thread_pool, self.layer_data, zoom,
+                padded_bounds, columns_for_queries)
 
-        if has_vtm:
-            vtm_empty_results, vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool, self.layer_data,
-                zoom, bounds, vtm_padding, columns_for_queries)
-
-        if has_non_vtm:
-            non_vtm_empty_results, non_vtm_async_results = enqueue_queries(
-                self.thread_pool, self.sql_conn_pool, self.layer_data,
-                zoom, bounds, non_vtm_padding, columns_for_queries)
-
-        def feature_layers_from_results(async_results, shape_bounds_bbox):
             feature_layers = []
             for async_result in async_results:
                 rows, layer_datum = async_result.get()
@@ -193,87 +192,59 @@ class RenderDataFetcher(object):
                         if geom_type not in geometry_types:
                             continue
 
-                    if not shape_bounds_bbox.intersects(shape):
+                    if not shape_padded_bounds.intersects(shape):
                         continue
-
-                    is_shape_updated = False
-
-                    if layer_datum['is_clipped']:
-                        shape = shape.intersection(shape_bounds_bbox)
-                        is_shape_updated = True
-
-                    simplify_until = layer_datum.get('simplify_until', 16)
-                    suppress_simplification = layer_datum.get(
-                        'suppress_simplification', ())
-                    if (zoom not in suppress_simplification and
-                            zoom < simplify_until):
-                        shape = shape.simplify(tolerance,
-                                               preserve_topology=True)
-                        is_shape_updated = True
-
-                    if is_shape_updated:
-                        wkb = dumps(shape)
 
                     feature_id = row.pop('__id__')
                     props = dict((k, v) for k, v in row.items()
                                  if v is not None)
-                    features.append((wkb, props, feature_id))
+
+                    # the shapely object itself is kept here, it gets
+                    # converted back to wkb during transformation
+                    features.append((shape, props, feature_id))
 
                 feature_layer = dict(name=layer_name, features=features,
                                      layer_datum=layer_datum)
                 feature_layers.append(feature_layer)
-            return feature_layers
 
-        if has_vtm:
-            vtm_feature_layers = feature_layers_from_results(
-                vtm_async_results, shape_bounds_vtm_bbox)
-            vtm_feature_layers.extend(vtm_empty_results)
-            vtm_render_data = RenderData(
-                vtm_format, vtm_feature_layers, bounds)
-            render_data.append(vtm_render_data)
-
-        if has_non_vtm:
-            non_vtm_feature_layers = feature_layers_from_results(
-                non_vtm_async_results, shape_bounds_non_vtm_bbox)
-            non_vtm_feature_layers.extend(non_vtm_empty_results)
-            non_vtm_render_data = [
-                RenderData(format, non_vtm_feature_layers, bounds)
-                for format in self.formats if format != vtm_format
+            feature_layers.extend(empty_results)
+            render_data = [
+                RenderData(format, feature_layers, bounds, padded_bounds)
+                for format in self.formats
             ]
-            render_data.extend(non_vtm_render_data)
 
-        return render_data
+            return render_data
+
+        finally:
+            self.sql_conn_pool.put_conns_for_host(sql_host)
 
 
-def execute_query(conn_pool, query, layer_datum):
-    conn = conn_pool.getconn()
+def execute_query(conn, query, layer_datum):
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
         return rows, layer_datum
     except:
-        # if any exception occurs during query execution, close the
-        # connection to ensure it is not in an invalid state
-        # the connection pool knows to ignore closed connections and
-        # create a new one when requested
+        # If any exception occurs during query execution, close the
+        # connection to ensure it is not in an invalid state. The
+        # connection pool knows to create new connections to replace
+        # those that are closed
         try:
             conn.close()
         except:
             pass
         raise
-    finally:
-        conn_pool.putconn(conn)
 
 
-def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
-                    padding, columns):
+def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds, columns):
+
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom, padding, columns)
+        bounds, layer_data, zoom, columns)
 
     empty_results = []
     async_results = []
-    for layer_datum, query in queries_to_execute:
+    for (layer_datum, query), sql_conn in zip(queries_to_execute, sql_conns):
         if query is None:
             empty_feature_layer = dict(
                 name=layer_datum['name'],
@@ -283,7 +254,7 @@ def enqueue_queries(thread_pool, conn_pool, layer_data, zoom, bounds,
             empty_results.append(empty_feature_layer)
         else:
             async_result = thread_pool.apply_async(
-                execute_query, (conn_pool, query, layer_datum))
+                execute_query, (sql_conn, query, layer_datum))
             async_results.append(async_result)
 
     return empty_results, async_results
@@ -326,24 +297,59 @@ def apply_to_all_coords(fn):
     return lambda shape: transform(shape, fn)
 
 
-def transform_feature_layers(feature_layers, format, bounds, scale):
+def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
+                             padded_bounds, coord):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
     elif format in (mapbox_format, vtm_format):
-        transform_fn = apply_to_all_coords(rescale_point(bounds, scale))
+        transform_fn = apply_to_all_coords(
+            rescale_point(unpadded_bounds, scale))
     else:
         # in case we add a new format, default to no transformation
-        return feature_layers
+        transform_fn = lambda shape: shape
+
+    is_vtm_format = format == vtm_format
+    shape_unpadded_bounds = geometry.box(*unpadded_bounds)
+    shape_padded_bounds = geometry.box(*padded_bounds)
 
     transformed_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
         transformed_features = []
-        for wkb, props, id in features:
-            shape = loads(wkb)
-            new_shape = transform_fn(shape)
-            new_wkb = dumps(new_shape)
-            transformed_features.append((new_wkb, props, id))
+
+        is_clipped = feature_layer['layer_datum']['is_clipped']
+
+        for shape, props, feature_id in features:
+
+            if is_vtm_format:
+                if is_clipped:
+                    shape = shape.intersection(shape_padded_bounds)
+            else:
+                # for non vtm formats, we need to explicitly check if
+                # the geometry intersects with the unpadded bounds
+                if not shape_unpadded_bounds.intersects(shape):
+                    continue
+                # now we know that we should include the geometry, but
+                # if the geometry should be clipped, we'll clip to the
+                # unpadded bounds
+                if is_clipped:
+                    shape = shape.intersection(shape_unpadded_bounds)
+
+            # perform any simplification as necessary
+            tolerance = tolerances[coord.zoom]
+            layer_datum = feature_layer['layer_datum']
+            simplify_until = layer_datum['simplify_until']
+            suppress_simplification = layer_datum['suppress_simplification']
+            if (coord.zoom not in suppress_simplification and
+                    coord.zoom < simplify_until):
+                shape = shape.simplify(tolerance, preserve_topology=True)
+
+            # perform the format specific geometry transformations
+            shape = transform_fn(shape)
+            # the formatters all expect wkb
+            wkb = dumps(shape)
+            transformed_features.append((wkb, props, feature_id))
+
         transformed_feature_layer = dict(
             name=feature_layer['name'],
             features=transformed_features,
@@ -367,6 +373,11 @@ class RenderJob(object):
 
     def __call__(self):
         render_data = self.feature_fetcher(self.coord)
+        # sort based on formatter
+        # this is done to place the mapbox format last, as it mutates
+        # the properties to add a uid property
+        render_data.sort(key=lambda x: x.format.sort_key)
+
         async_jobs = []
         for render_datum in render_data:
             format = render_datum.format
@@ -374,7 +385,8 @@ class RenderJob(object):
             bounds = render_datum.bounds
 
             feature_layers = transform_feature_layers(
-                feature_layers, format, bounds, self.scale)
+                feature_layers, format, self.scale, bounds,
+                render_datum.padded_bounds, self.coord)
 
             tile_data_file = StringIO()
             format.format_tile(tile_data_file, feature_layers, self.coord,
@@ -405,8 +417,7 @@ class RenderJobCreator(object):
         # create a thread pool, shared between fetching features and
         # writing to s3
         n_layers = len(self.feature_fetcher.layer_data)
-        # we execute vtm queries concurrently
-        n_threads = n_layers * 2
+        n_threads = n_layers
         self.thread_pool = ThreadPool(n_threads)
 
         # process local initialization
@@ -428,8 +439,6 @@ def make_feature_fetcher(conn_info, tilestache_config, formats):
     layer_names = all_layer.provider.names
     layer_data = []
     for layer_name in layer_names:
-        # NOTE: obtain postgis connection information from first layer
-        # this assumes all connection info is exactly the same
         assert layer_name in layers, \
             ('Layer not found in config but found in all layers: %s'
              % layer_name)

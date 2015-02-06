@@ -114,3 +114,81 @@ class ThreadedConnectionPool(object):
             self.in_use.clear()
         finally:
             self.lock.release()
+
+
+class HostAffinityConnectionPool(object):
+
+    # conn_info is expected to have all connection information except
+    # for the host. For each host, n_conn_per_host connections will be
+    # made to it. If a connection to a particular host fails, a new
+    # one will be created to ensure that all connections are balanced.
+    def __init__(self, hosts, n_conn_per_host, conn_info):
+        self.hosts = hosts
+        self.conn_info = conn_info
+        self.lock = threading.Lock()
+
+        self.conns_by_host = {}
+        for host in hosts:
+            conn_info_with_host = dict(conn_info, host=host)
+            for i in range(n_conn_per_host):
+                conn = self._make_conn(conn_info_with_host)
+                self.conns_by_host.setdefault(host, []).append(conn)
+
+        self.host_conns_in_use = set()
+        self.host_conns_not_in_use = set(hosts)
+
+    def _make_conn(self, conn_info):
+        return psycopg2.connect(**conn_info)
+
+    def get_conns_for_host(self, host):
+        self.lock.acquire()
+        try:
+            assert host in self.conns_by_host, 'Unknown host: %s' % host
+            assert host in self.host_conns_not_in_use, \
+                'Connections already in use for host: %s' % host
+            self.host_conns_in_use.add(host)
+            self.host_conns_not_in_use.remove(host)
+            conns = self.conns_by_host[host]
+            return conns
+        finally:
+            self.lock.release()
+
+    def put_conns_for_host(self, host):
+        self.lock.acquire()
+        try:
+            assert host in self.conns_by_host, 'Unknown host: %s' % host
+            assert host in self.host_conns_in_use, \
+                'Connections not in use for host: %s' % host
+
+            # check if any connections have been closed
+            # those will need to be recreated before being returned to
+            # the rotation
+            conns_to_return = []
+            conns = self.conns_by_host.pop(host)
+            for conn in conns:
+                if conn.closed:
+                    conn = self._make_conn(dict(self.conn_info, host=host))
+                conns_to_return.append(conn)
+            self.conns_by_host[host] = conns_to_return
+
+            self.host_conns_in_use.remove(host)
+            self.host_conns_not_in_use.add(host)
+        finally:
+            self.lock.release()
+
+    def closeall(self):
+        self.lock.acquire()
+        try:
+            for host in self.hosts:
+                conns = self.conns_by_host[host]
+                for conn in conns:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+            self.conns_by_host.clear()
+            self.host_conns_in_use.clear()
+            self.host_conns_not_in_use.clear()
+            self.hosts = []
+        finally:
+            self.lock.release()

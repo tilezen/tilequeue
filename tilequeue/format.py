@@ -10,11 +10,12 @@ from TileStache.Goodies.VecTiles.topojson import merge as topojson_merge
 
 class OutputFormat(object):
 
-    def __init__(self, name, extension, mimetype, format_fn):
+    def __init__(self, name, extension, mimetype, format_fn, sort_key):
         self.name = name
         self.extension = extension
         self.mimetype = mimetype
         self.format_fn = format_fn
+        self.sort_key = sort_key
 
     def __repr__(self):
         return 'OutputFormat(%s, %s, %s)' % \
@@ -77,13 +78,13 @@ def format_vtm(fp, feature_layers, coord, bounds):
     vtm_merge(fp, feature_layers, coord)
 
 
-json_format = OutputFormat('JSON', 'json', 'application/json', format_json)
+json_format = OutputFormat('JSON', 'json', 'application/json', format_json, 1)
 topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json',
-                               format_topojson)
+                               format_topojson, 2)
 # TODO image/png mimetype? app doesn't work unless image/png?
-vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm)
+vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm, 3)
 mapbox_format = OutputFormat('Mapbox', 'mapbox', 'application/x-protobuf',
-                             format_mapbox)
+                             format_mapbox, 4)
 
 extension_to_format = dict(
     json=json_format,

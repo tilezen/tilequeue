@@ -60,13 +60,11 @@ class CliConfiguration(object):
             "postgresql 'host' option is unused, use 'hosts'"
         assert 'connection_factory' not in self.postgresql_conn_info, \
             'connection_factory postgresql option will be overridden'
-        hosts = self.postgresql_conn_info.pop('hosts')
+        hosts = self.postgresql_conn_info.get('hosts')
+        assert hosts is not None, 'Missing postgresql hosts'
         assert isinstance(hosts, (tuple, list)), \
             "Expecting postgresql 'hosts' to be a list"
         assert len(hosts) > 0, 'No postgresql hosts configured'
-        conn_info = dict(self.postgresql_conn_info)
-        conn_factory = RoundRobinConnectionFactory(conn_info, hosts)
-        self.postgresql_conn_info['connection_factory'] = conn_factory
 
         self.top_tiles = self.yml['tiles']['top-tiles']
         self.top_tiles_url = self.top_tiles['url']
