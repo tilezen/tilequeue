@@ -106,7 +106,7 @@ def default_yml_config():
             'host': 'localhost',
             'port': 6379,
             'db': 0,
-            'cache-set-key': 'tilestache.cache',
+            'cache-set-key': 'tilequeue.tiles-of-interest',
             'diff-set-key': None,
         },
         'postgresql': {

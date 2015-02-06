@@ -3,7 +3,8 @@ from ModestMaps.Core import Coordinate
 
 class RedisCacheIndex(object):
 
-    def __init__(self, redis_client, cache_set_key='tilestache.cache'):
+    def __init__(self, redis_client,
+                 cache_set_key='tilequeue.tiles-of-interest'):
         self.redis_client = redis_client
         self.redis_client.set_response_callback(
             'SMEMBERS',

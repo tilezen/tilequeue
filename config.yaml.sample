@@ -35,7 +35,7 @@ redis:
   host: localhost
   port: 6379
   db: 0
-  cache-set-key: tilestache.cache
+  cache-set-key: tilequeue.tiles-of-interest
 postgresql:
   # connections are round robin'ed between hosts
   hosts: [localhost]
