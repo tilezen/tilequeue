@@ -9,10 +9,11 @@ from redis import StrictRedis
 
 class SqsQueue(object):
 
-    def __init__(self, sqs_queue, redis_client):
+    def __init__(self, sqs_queue, redis_client, is_seeding=False):
         self.sqs_queue = sqs_queue
         self.redis_client = redis_client
         self.inflight_key = "tilequeue.in-flight"
+        self.is_seeding = is_seeding
 
     def enqueue(self, coord):
         if not self._inflight(coord):
@@ -35,7 +36,7 @@ class SqsQueue(object):
         self.redis_client.sadd(self.inflight_key, *values)
 
     def _inflight(self, coord):
-        return self.redis_client.sismember(
+        return (not self.is_seeding) and self.redis_client.sismember(
             self.inflight_key, serialize_coord_to_redis_value(coord))
 
     def _add_to_flight(self, coord):
@@ -106,11 +107,12 @@ class SqsQueue(object):
         pass
 
 
-def get_sqs_queue(cfg=None):
-    conn = connect_sqs(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-    queue = conn.get_queue(cfg.queue_name)
+def get_sqs_queue(queue_name, redis_host, redis_port, redis_db,
+                  aws_access_key_id=None, aws_secret_access_key=None):
+    conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
+    queue = conn.get_queue(queue_name)
     assert queue is not None, \
-        'Could not get sqs queue with name: %s' % cfg.queue_name
+        'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
+    redis_client = StrictRedis(redis_host, redis_port, redis_db)
     return SqsQueue(queue, redis_client)
