@@ -65,8 +65,7 @@ class ThreadedConnectionPool(object):
     def getconn(self, key=None):
         assert key is None, 'Keys not supported'
 
-        self.lock.acquire()
-        try:
+        with self.lock:
             if self.not_in_use:
                 conn_id, conn = self.not_in_use.popitem()
                 self.in_use[conn_id] = conn
@@ -79,14 +78,11 @@ class ThreadedConnectionPool(object):
                 conn = self._make_conn()
                 self.in_use[id(conn)] = conn
                 return conn
-        finally:
-            self.lock.release()
 
     def putconn(self, conn, key=None, close=False):
         assert key is None, 'Keys not supported'
 
-        self.lock.acquire()
-        try:
+        with self.lock:
             conn_id = id(conn)
             if conn_id not in self.in_use:
                 raise ValueError('Connection not part of pool')
@@ -98,12 +94,9 @@ class ThreadedConnectionPool(object):
                     pass
             if not conn.closed:
                 self.not_in_use[conn_id] = conn
-        finally:
-            self.lock.release()
 
     def closeall(self):
-        self.lock.acquire()
-        try:
+        with self.lock:
             for conn_id, conn in chain(self.not_in_use.iteritems(),
                                        self.in_use.iteritems()):
                 try:
@@ -112,8 +105,6 @@ class ThreadedConnectionPool(object):
                     pass
             self.not_in_use.clear()
             self.in_use.clear()
-        finally:
-            self.lock.release()
 
 
 class HostAffinityConnectionPool(object):
@@ -141,8 +132,7 @@ class HostAffinityConnectionPool(object):
         return psycopg2.connect(**conn_info)
 
     def get_conns_for_host(self, host):
-        self.lock.acquire()
-        try:
+        with self.lock:
             assert host in self.conns_by_host, 'Unknown host: %s' % host
             assert host in self.host_conns_not_in_use, \
                 'Connections already in use for host: %s' % host
@@ -150,12 +140,9 @@ class HostAffinityConnectionPool(object):
             self.host_conns_not_in_use.remove(host)
             conns = self.conns_by_host[host]
             return conns
-        finally:
-            self.lock.release()
 
     def put_conns_for_host(self, host):
-        self.lock.acquire()
-        try:
+        with self.lock:
             assert host in self.conns_by_host, 'Unknown host: %s' % host
             assert host in self.host_conns_in_use, \
                 'Connections not in use for host: %s' % host
@@ -173,12 +160,9 @@ class HostAffinityConnectionPool(object):
 
             self.host_conns_in_use.remove(host)
             self.host_conns_not_in_use.add(host)
-        finally:
-            self.lock.release()
 
     def closeall(self):
-        self.lock.acquire()
-        try:
+        with self.lock:
             for host in self.hosts:
                 conns = self.conns_by_host[host]
                 for conn in conns:
@@ -190,5 +174,3 @@ class HostAffinityConnectionPool(object):
             self.host_conns_in_use.clear()
             self.host_conns_not_in_use.clear()
             self.hosts = []
-        finally:
-            self.lock.release()
