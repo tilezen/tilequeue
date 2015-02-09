@@ -2,6 +2,7 @@ from collections import namedtuple
 from contextlib import closing
 from itertools import chain
 from Queue import Queue
+from threading import Lock
 from threading import Thread
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
@@ -172,7 +173,7 @@ def tilequeue_drain(cfg, peripherals):
 def tilequeue_intersect(cfg, peripherals):
     logger = make_logger(cfg, 'intersect')
     logger.info("Intersecting expired tiles with tiles of interest")
-    queue = peripherals.queue
+    sqs_queue = peripherals.queue
 
     assert cfg.expired_tiles_location, \
         'Missing tiles expired-location configuration'
@@ -194,6 +195,41 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Will process %d expired tile files.'
                 % len(expired_tile_paths))
 
+    lock = Lock()
+    totals = dict(enqueued=0, in_flight=0)
+    thread_queue_buffer_size = 1000
+    thread_queue = Queue(thread_queue_buffer_size)
+
+    # each thread will enqueue coords to sqs
+    def enqueue_coords():
+        buf = []
+        buf_size = 10
+        while True:
+            coord = thread_queue.get()
+            if coord is None:
+                break
+            buf.append(coord)
+            if len(buf) >= buf_size:
+                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+                with lock:
+                    totals['enqueued'] += n_queued
+                    totals['in_flight'] += n_in_flight
+                del buf[:]
+        if buf:
+            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+            with lock:
+                totals['enqueued'] += n_queued
+                totals['in_flight'] += n_in_flight
+
+    # clamp number of threads between 5 and 20
+    n_threads = max(min(len(expired_tile_paths), 20), 5)
+    # start up threads
+    threads = []
+    for i in range(n_threads):
+        thread = Thread(target=enqueue_coords)
+        thread.start()
+        threads.append(thread)
+
     for expired_tile_path in expired_tile_paths:
         stat_result = os.stat(expired_tile_path)
         file_size = stat_result.st_size
@@ -210,15 +246,29 @@ def tilequeue_intersect(cfg, peripherals):
             exploded_coords = deserialize_coords_redis_values(
                 exploded_serialized_coords)
 
+            # add work for threads
             coords_to_enqueue = peripherals.redis_cache_index.intersect(
                 exploded_coords, tiles_of_interest)
-            n_queued, n_in_flight = queue.enqueue_batch(coords_to_enqueue)
-            logger.info('Processing complete: %s' % expired_tile_path)
-            logger.info('%d tiles enqueued. %d tiles in flight.' %
-                        (n_queued, n_in_flight))
 
+            for coord in coords_to_enqueue:
+                thread_queue.put(coord)
+
+    for thread in threads:
+        # threads stop on None sentinel
+        thread_queue.put(None)
+
+    # wait for all threads to terminate
+    for thread in threads:
+        thread.join()
+
+    # print results
+    for expired_tile_path in expired_tile_paths:
+        logger.info('Processing complete: %s' % expired_tile_path)
         os.remove(expired_tile_path)
         logger.info('Removed: %s' % expired_tile_path)
+
+    logger.info('%d tiles enqueued. %d tiles in flight.' %
+                (totals['enqueued'], totals['in_flight']))
 
     logger.info('Intersection complete.')
 
