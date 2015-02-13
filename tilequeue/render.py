@@ -98,7 +98,8 @@ class RenderDataFetcher(object):
 
     def __init__(self, conn_info, layer_data, formats,
                  find_columns_for_queries=find_columns_for_queries):
-        self.conn_info = conn_info
+        # copy conn_info so we can pop hosts off
+        self.conn_info = dict(conn_info)
         self.formats = formats
         self.layer_data = layer_data
         self.spherical_mercator = SphericalMercator()
