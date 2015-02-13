@@ -90,7 +90,6 @@ def default_yml_config():
             'zoom-until': 0,
             'explode-until': 0,
             'daemon': False,
-            'expired': None,
             'expired-location': None,
         },
         'workers': 4,
@@ -107,7 +106,6 @@ def default_yml_config():
             'port': 6379,
             'db': 0,
             'cache-set-key': 'tilequeue.tiles-of-interest',
-            'diff-set-key': None,
         },
         'postgresql': {
             'hosts': ('localhost',),
