@@ -116,6 +116,7 @@ class HostAffinityConnectionPool(object):
     def __init__(self, hosts, n_conn_per_host, conn_info):
         self.hosts = hosts
         self.conn_info = conn_info
+        self.n_conn_per_host = n_conn_per_host
         self.lock = threading.Lock()
 
         self.conns_by_host = {}
@@ -136,9 +137,18 @@ class HostAffinityConnectionPool(object):
             assert host in self.conns_by_host, 'Unknown host: %s' % host
             assert host in self.host_conns_not_in_use, \
                 'Connections already in use for host: %s' % host
+            conns = self.conns_by_host[host]
+
+            if len(conns) < self.n_conn_per_host:
+                # we are short some connections
+                # create the connections that we expect to have available
+                conn_info_with_host = dict(self.conn_info, host=host)
+                for i in range(self.n_conn_per_host - len(conns)):
+                    conn = self._make_conn(conn_info_with_host)
+                    conns.append(conn)
+
             self.host_conns_in_use.add(host)
             self.host_conns_not_in_use.remove(host)
-            conns = self.conns_by_host[host]
             return conns
 
     def put_conns_for_host(self, host):
@@ -152,14 +162,26 @@ class HostAffinityConnectionPool(object):
             # the rotation
             conns_to_return = []
             conns = self.conns_by_host.pop(host)
-            for conn in conns:
-                if conn.closed:
-                    conn = self._make_conn(dict(self.conn_info, host=host))
-                conns_to_return.append(conn)
-            self.conns_by_host[host] = conns_to_return
-
-            self.host_conns_in_use.remove(host)
-            self.host_conns_not_in_use.add(host)
+            try:
+                conn_info_with_host = dict(self.conn_info, host=host)
+                for conn in conns:
+                    if conn.closed:
+                        try:
+                            conn = self._make_conn(conn_info_with_host)
+                        except:
+                            print 'Error creating new connection to host: %s' % \
+                                host
+                            # When connections are fecthed for this
+                            # host again, new ones will attempt to be
+                            # created at that point
+                        else:
+                            conns_to_return.append(conn)
+            finally:
+                # always add whatever connections we have available back
+                # and restore the host connection accounting
+                self.conns_by_host[host] = conns_to_return
+                self.host_conns_in_use.remove(host)
+                self.host_conns_not_in_use.add(host)
 
     def closeall(self):
         with self.lock:
