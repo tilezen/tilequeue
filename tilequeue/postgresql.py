@@ -174,8 +174,8 @@ class HostAffinityConnectionPool(object):
                             # When connections are fecthed for this
                             # host again, new ones will attempt to be
                             # created at that point
-                        else:
-                            conns_to_return.append(conn)
+                            continue
+                    conns_to_return.append(conn)
             finally:
                 # always add whatever connections we have available back
                 # and restore the host connection accounting
