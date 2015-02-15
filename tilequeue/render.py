@@ -14,6 +14,7 @@ from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import query_columns
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
+import sys
 
 
 class RenderData(object):
@@ -170,8 +171,22 @@ class RenderDataFetcher(object):
                 padded_bounds, columns_for_queries)
 
             feature_layers = []
+            async_exception = None
             for async_result in async_results:
-                rows, layer_datum = async_result.get()
+                try:
+                    rows, layer_datum = async_result.get()
+                except:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    async_exception = exc_value
+                    # iterate through all async results to give others
+                    # a chance to close any connections that yielded
+                    # exceptions
+                    continue
+
+                # don't continue processing if an error occurred on
+                # any results
+                if async_exception is not None:
+                    continue
 
                 geometry_types = layer_datum['geometry_types']
                 layer_name = layer_datum['name']
@@ -207,6 +222,10 @@ class RenderDataFetcher(object):
                 feature_layer = dict(name=layer_name, features=features,
                                      layer_datum=layer_datum)
                 feature_layers.append(feature_layer)
+
+            # bail if an error occurred
+            if async_exception is not None:
+                raise async_exception
 
             feature_layers.extend(empty_results)
             render_data = [
