@@ -42,8 +42,12 @@ class Worker(object):
                 except:
                     current_time = time.time()
                     exc_type, exc_value, exc_traceback = sys.exc_info()
-                    stacktrace = ''.join(traceback.format_exception(
-                        exc_type, exc_value, exc_traceback))
+                    exception_lines = traceback.format_exception(
+                        exc_type, exc_value, exc_traceback)
+                    # create a single line with the entire exception
+                    # to more easily capture in external systems
+                    stacktrace = ' | '.join([
+                        x.replace('\n', '') for x in exception_lines])
                     if isinstance(exc_value, TransactionRollbackError):
                         log_level = logging.WARNING
                     else:
