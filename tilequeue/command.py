@@ -226,22 +226,23 @@ def tilequeue_intersect(cfg, peripherals):
     def enqueue_coords():
         buf = []
         buf_size = 10
+
+        def _enqueue():
+            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+            with lock:
+                totals['enqueued'] += n_queued
+                totals['in_flight'] += n_in_flight
+
         while True:
             coord = thread_queue.get()
             if coord is None:
                 break
             buf.append(coord)
             if len(buf) >= buf_size:
-                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-                with lock:
-                    totals['enqueued'] += n_queued
-                    totals['in_flight'] += n_in_flight
+                _enqueue()
                 del buf[:]
         if buf:
-            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-            with lock:
-                totals['enqueued'] += n_queued
-                totals['in_flight'] += n_in_flight
+            _enqueue()
 
     # clamp number of threads between 5 and 20
     n_threads = max(min(len(expired_tile_paths), 20), 5)
