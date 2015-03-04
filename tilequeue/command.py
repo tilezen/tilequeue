@@ -263,6 +263,8 @@ def tilequeue_intersect(cfg, peripherals):
     # set. A set is used because if the same tile has been expired in
     # more than one file, we only process it once
     all_coord_ints_set = coord_ints_from_paths(expired_tile_paths)
+    logger.info('Unique expired tiles read to process: %d' %
+                len(all_coord_ints_set))
     for coord_int in explode_and_intersect(
             all_coord_ints_set, tiles_of_interest, until=cfg.explode_until):
         coord = deserialize_redis_value_to_coord(coord_int)
