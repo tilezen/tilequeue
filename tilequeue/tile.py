@@ -37,53 +37,6 @@ def parse_expired_coord_string(coord_string):
     return deserialize_coord(coord_string)
 
 
-def generate_parents(coord):
-    c = coord
-    while c.zoom > 0:
-        c = c.zoomTo(c.zoom-1).container()
-        yield c
-
-
-def explode_serialized_coords(serialized_coords, until,
-                              serialize_fn, deserialize_fn):
-    next_serialized_coords = serialized_coords
-    serialized_parents = set()
-    while True:
-        for serialized_coord in next_serialized_coords:
-            yield serialized_coord
-            coord = deserialize_fn(serialized_coord)
-            if coord.zoom > until:
-                parent_coord = coord.zoomTo(coord.zoom - 1).container()
-                serialized_parent_coord = serialize_fn(parent_coord)
-                serialized_parents.add(serialized_parent_coord)
-        if not serialized_parents:
-            return
-        next_serialized_coords = serialized_parents
-        serialized_parents = set()
-
-
-def explode_with_parents(coords, until=0):
-    next_coords = coords
-    coords_at_parent_zoom = set()
-    while True:
-        for coord in next_coords:
-            yield coord
-            if coord.zoom > until:
-                parent_coord = coord.zoomTo(coord.zoom - 1).container()
-                coords_at_parent_zoom.add(parent_coord)
-        if not coords_at_parent_zoom:
-            return
-        next_coords = coords_at_parent_zoom
-        coords_at_parent_zoom = set()
-
-
-def explode_with_parents_non_unique(coords, until=0):
-    for coord in coords:
-        while coord.zoom >= until:
-            yield coord
-            coord = coord.zoomTo(coord.zoom - 1).container()
-
-
 def n_tiles_in_zoom(zoom):
     assert zoom >= 0
     n = 0

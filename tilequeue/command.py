@@ -4,9 +4,11 @@ from itertools import chain
 from Queue import Queue
 from threading import Lock
 from threading import Thread
+from tilequeue.cache import coord_int_zoom_up
 from tilequeue.cache import deserialize_redis_value_to_coord
 from tilequeue.cache import RedisCacheIndex
 from tilequeue.cache import serialize_coord_to_redis_value
+from tilequeue.cache.redis_cache_index import zoom_mask
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
@@ -15,7 +17,6 @@ from tilequeue.queue import get_sqs_queue
 from tilequeue.render import make_feature_fetcher
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
-from tilequeue.tile import explode_serialized_coords
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
@@ -38,18 +39,6 @@ def create_command_parser(fn):
         parser.set_defaults(func=fn)
         return parser
     return create_parser_fn
-
-
-def serialize_coords_redis_values(coords):
-    for coord in coords:
-        serialized_coord = serialize_coord_to_redis_value(coord)
-        yield serialized_coord
-
-
-def deserialize_coords_redis_values(serialized_coords):
-    for serialized_coord in serialized_coords:
-        coord = deserialize_redis_value_to_coord(serialized_coord)
-        yield coord
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
@@ -170,6 +159,34 @@ def tilequeue_drain(cfg, peripherals):
     logger.info('Removed %d messages' % n)
 
 
+def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
+    next_coord_ints = coord_ints
+    coord_ints_at_parent_zoom = set()
+    while True:
+        for coord_int in next_coord_ints:
+            if coord_int in tiles_of_interest:
+                yield coord_int
+            zoom = zoom_mask & coord_int
+            if zoom > until:
+                parent_coord_int = coord_int_zoom_up(coord_int)
+                coord_ints_at_parent_zoom.add(parent_coord_int)
+        if not coord_ints_at_parent_zoom:
+            return
+        next_coord_ints = coord_ints_at_parent_zoom
+        coord_ints_at_parent_zoom = set()
+
+
+def coord_ints_from_paths(paths):
+    coord_set = set()
+    for path in paths:
+        with open(path) as fp:
+            coords = create_coords_generator_from_tiles_file(fp)
+            for coord in coords:
+                coord_int = serialize_coord_to_redis_value(coord)
+                coord_set.add(coord_int)
+    return coord_set
+
+
 def tilequeue_intersect(cfg, peripherals):
     logger = make_logger(cfg, 'intersect')
     logger.info("Intersecting expired tiles with tiles of interest")
@@ -185,6 +202,11 @@ def tilequeue_intersect(cfg, peripherals):
         logger.info('No expired tiles found, terminating.')
         return
     file_names.sort()
+    # cap the total number of files that we process in one shot
+    # this will limit memory usage, as well as keep progress moving
+    # along more consistently rather than bursts
+    expired_tile_files_cap = 20
+    file_names = file_names[:expired_tile_files_cap]
     expired_tile_paths = [os.path.join(cfg.expired_tiles_location, x)
                           for x in file_names]
 
@@ -236,22 +258,15 @@ def tilequeue_intersect(cfg, peripherals):
         file_size_in_kilobytes = file_size / 1024
         logger.info('Processing %s. Size: %dK' %
                     (expired_tile_path, file_size_in_kilobytes))
-        with open(expired_tile_path) as fp:
-            expired_tiles = create_coords_generator_from_tiles_file(fp)
-            serialized_coords = serialize_coords_redis_values(expired_tiles)
-            exploded_serialized_coords = explode_serialized_coords(
-                serialized_coords, cfg.explode_until,
-                serialize_fn=serialize_coord_to_redis_value,
-                deserialize_fn=deserialize_redis_value_to_coord)
-            exploded_coords = deserialize_coords_redis_values(
-                exploded_serialized_coords)
 
-            # add work for threads
-            coords_to_enqueue = peripherals.redis_cache_index.intersect(
-                exploded_coords, tiles_of_interest)
-
-            for coord in coords_to_enqueue:
-                thread_queue.put(coord)
+    # This will store all coords from all paths as integers in a
+    # set. A set is used because if the same tile has been expired in
+    # more than one file, we only process it once
+    all_coord_ints_set = coord_ints_from_paths(expired_tile_paths)
+    for coord_int in explode_and_intersect(
+            all_coord_ints_set, tiles_of_interest, until=cfg.explode_until):
+        coord = deserialize_redis_value_to_coord(coord_int)
+        thread_queue.put(coord)
 
     for thread in threads:
         # threads stop on None sentinel

@@ -88,11 +88,18 @@ class RedisCacheIndex(object):
 # 1 bit unused | 29 bits column | 29 bits row | 5 bits zoom
 zoom_bits = 5
 row_bits = 29
+col_bits = 29
 zoom_mask = int('1' * zoom_bits, 2)
 row_mask = int(('1' * row_bits), 2)
 col_mask = row_mask
 row_offset = zoom_bits
 col_offset = zoom_bits + row_bits
+
+# some additional masks to help with efficient zoom up operations
+all_but_zoom_mask = int('1' * 64, 2) << zoom_bits
+high_row_mask = int(('1' * (1 + col_bits)) +
+                    '0' +
+                    ('1' * (row_bits - 1 + zoom_bits)), 2)
 
 
 def serialize_coord_to_redis_value(coord):
@@ -110,3 +117,22 @@ def deserialize_redis_value_to_coord(redis_value):
     row = row_mask & (redis_value >> row_offset)
     column = col_mask & (redis_value >> col_offset)
     return Coordinate(column=column, row=row, zoom=zoom)
+
+
+# perform an efficient zoom up operation via the integer directly
+def coord_int_zoom_up(coord_int):
+    # First we'll update the row/col values both simultaneously by
+    # shifting all bits to the right in an attempt to divide both by
+    # 2. This is *almost* correct; we just need to account for the
+    # fact that the lowest bit of the column value can "leak" into the
+    # high bit of the row, which we do by zero'ing out just that bit
+    # via the high_row_mask.
+    coord_int_shifted = (coord_int >> 1) & high_row_mask
+
+    zoom = zoom_mask & coord_int
+    # Given that the row/col bits are now set correctly, all that
+    # remains is to update the zoom bits. This is done by applying a
+    # mask to zero out all the zoom bits, and then or'ing the new
+    # parent zoom bits into place
+    parent_coord_int = (coord_int_shifted & all_but_zoom_mask) | (zoom - 1)
+    return parent_coord_int
