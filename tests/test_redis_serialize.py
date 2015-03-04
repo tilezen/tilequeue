@@ -39,3 +39,36 @@ class RedisSerializeTest(unittest.TestCase):
                 coord,
                 deserialize_redis_value_to_coord(
                     serialize_coord_to_redis_value(coord)))
+
+
+class CoordIntZoomTest(unittest.TestCase):
+
+    def test_verify_low_seed_tiles(self):
+        from tilequeue.cache import coord_int_zoom_up
+        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.tile import seed_tiles
+        seed_coords = seed_tiles(1, 5)
+        for coord in seed_coords:
+            coord_int = serialize_coord_to_redis_value(coord)
+            parent_coord = coord.zoomTo(coord.zoom - 1).container()
+            exp_int = serialize_coord_to_redis_value(parent_coord)
+            act_int = coord_int_zoom_up(coord_int)
+            self.assertEquals(exp_int, act_int)
+
+    def test_verify_examples(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.cache import coord_int_zoom_up
+        from tilequeue.cache import serialize_coord_to_redis_value
+        test_coords = (
+            Coordinate(zoom=20, column=1002463, row=312816),
+            Coordinate(zoom=20, column=(2 ** 20)-1, row=(2 ** 20)-1),
+            Coordinate(zoom=10, column=(2 ** 10)-1, row=(2 ** 10)-1),
+            Coordinate(zoom=5, column=20, row=20),
+            Coordinate(zoom=1, column=0, row=0),
+        )
+        for coord in test_coords:
+            coord_int = serialize_coord_to_redis_value(coord)
+            parent_coord = coord.zoomTo(coord.zoom - 1).container()
+            exp_int = serialize_coord_to_redis_value(parent_coord)
+            act_int = coord_int_zoom_up(coord_int)
+            self.assertEquals(exp_int, act_int)

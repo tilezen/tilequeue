@@ -94,13 +94,16 @@ class TestUniquifyGenerator(unittest.TestCase):
         from tilequeue.command import tilequeue_intersect
         from ModestMaps.Core import Coordinate
         from tilequeue.tile import serialize_coord
+        from tilequeue.cache import serialize_coord_to_redis_value
         cfg_mock = MagicMock()
         cfg_mock.queue_type = 'sqs'
         periperals_mock = MagicMock()
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
+        coords = (c0, c1)
         periperals_mock.redis_cache_index = MagicMock(
-            intersect=lambda x, y: ([c0, c1]))
+            fetch_tiles_of_interest=lambda: set(
+                map(serialize_coord_to_redis_value, coords)))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue
@@ -110,7 +113,7 @@ class TestUniquifyGenerator(unittest.TestCase):
             expected_file = os.path.join(expired_tiles_location,
                                          'expire_list.txt')
             with open(expected_file, "w+") as fp:
-                fp.write(serialize_coord(c0) + "\n" + serialize_coord(c1))
+                fp.write('\n'.join(map(serialize_coord, coords)))
             cfg_mock.expired_tiles_location = expired_tiles_location
             cfg_mock.logconfig = None
             tilequeue_intersect(cfg_mock, periperals_mock)
