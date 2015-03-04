@@ -17,7 +17,6 @@ from tilequeue.queue import get_sqs_queue
 from tilequeue.render import make_feature_fetcher
 from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
-from tilequeue.tile import explode_serialized_coords
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
@@ -40,18 +39,6 @@ def create_command_parser(fn):
         parser.set_defaults(func=fn)
         return parser
     return create_parser_fn
-
-
-def serialize_coords_redis_values(coords):
-    for coord in coords:
-        serialized_coord = serialize_coord_to_redis_value(coord)
-        yield serialized_coord
-
-
-def deserialize_coords_redis_values(serialized_coords):
-    for serialized_coord in serialized_coords:
-        coord = deserialize_redis_value_to_coord(serialized_coord)
-        yield coord
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
