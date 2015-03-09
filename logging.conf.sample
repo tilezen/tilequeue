@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,intersect,drain
+keys=root,process,seed,intersect,drain,enqueue_tiles_of_interest
 
 [handlers]
 keys=consoleHandler
@@ -10,6 +10,12 @@ keys=simpleFormatter
 [logger_root]
 level=WARNING
 handlers=consoleHandler
+
+[logger_enqueue_tiles_of_interest]
+level=INFO
+handlers=consoleHandler
+qualName=enqueue_tiles_of_interest
+propagate=0
 
 [logger_process]
 level=INFO

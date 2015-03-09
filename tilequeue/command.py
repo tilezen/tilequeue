@@ -384,6 +384,92 @@ def tilequeue_seed(cfg, peripherals):
     logger.info('Sqs ... done')
 
 
+def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
+    logger = make_logger(cfg, 'enqueue_tiles_of_interest')
+    logger.info('Enqueueing tiles of interest')
+
+    sqs_queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    logger.info('Fetching tiles of interest ...')
+    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    logger.info('Fetching tiles of interest ... done')
+
+    thread_queue_buffer_size = 5000
+    thread_queue = Queue(thread_queue_buffer_size)
+    n_threads = 50
+
+    lock = Lock()
+    totals = dict(enqueued=0, in_flight=0)
+
+    def enqueue_coords_thread():
+        buf = []
+        buf_size = 10
+
+        def _enqueue():
+            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+            with lock:
+                totals['enqueued'] += n_queued
+                totals['in_flight'] += n_in_flight
+
+        while True:
+            coord = thread_queue.get()
+            if coord is None:
+                break
+            buf.append(coord)
+            if len(buf) >= buf_size:
+                _enqueue()
+                del buf[:]
+        if buf:
+            _enqueue()
+
+    logger.info('Starting %d enqueueing threads ...' % n_threads)
+    threads = []
+    for i in xrange(n_threads):
+        thread = Thread(target=enqueue_coords_thread)
+        thread.start()
+        threads.append(thread)
+    logger.info('Starting %d enqueueing threads ... done' % n_threads)
+
+    logger.info('Starting to enqueue coordinates - will process %d tiles'
+                % len(tiles_of_interest))
+
+    def log_totals():
+        with lock:
+            logger.info('%d processed - %d enqueued, %d in flight' % (
+                totals['enqueued'] + totals['in_flight'],
+                totals['enqueued'], totals['in_flight']))
+
+    progress_queue = Queue()
+    progress_interval_seconds = 120
+
+    def log_progress_thread():
+        while True:
+            try:
+                progress_queue.get(timeout=progress_interval_seconds)
+            except:
+                log_totals()
+            else:
+                break
+
+    progress_thread = Thread(target=log_progress_thread)
+    progress_thread.start()
+
+    for tile_of_interest_value in tiles_of_interest:
+        coord = deserialize_redis_value_to_coord(tile_of_interest_value)
+        thread_queue.put(coord)
+
+    for i in xrange(n_threads):
+        thread_queue.put(None)
+
+    for thread in threads:
+        thread.join()
+
+    progress_queue.put(None)
+    progress_thread.join()
+
+    logger.info('All tiles of interest processed')
+    log_totals()
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -403,6 +489,8 @@ def tilequeue_main(argv_args=None):
         ('seed', create_command_parser(tilequeue_seed)),
         ('drain', create_command_parser(tilequeue_drain)),
         ('intersect', create_command_parser(tilequeue_intersect)),
+        ('enqueue-tiles-of-interest',
+         create_command_parser(tilequeue_enqueue_tiles_of_interest)),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
