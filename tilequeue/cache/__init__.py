@@ -4,4 +4,4 @@ from redis_cache_index import RedisCacheIndex
 from redis_cache_index import serialize_coord_to_redis_value
 
 __all__ = [RedisCacheIndex, serialize_coord_to_redis_value,
-           deserialize_redis_value_to_coord]
+           deserialize_redis_value_to_coord, coord_int_zoom_up]
