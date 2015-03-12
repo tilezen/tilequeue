@@ -216,7 +216,9 @@ class DBAffinityConnections(object):
         self.lock = threading.Lock()
 
     def _make_conn(self, conn_info):
-        return psycopg2.connect(**conn_info)
+        conn = psycopg2.connect(**conn_info)
+        conn.set_session(readonly=True, autocommit=True)
+        return conn
 
     def get_conns_for_db(self, dbname):
         conn_info_with_db = dict(self.conn_info, dbname=dbname)
