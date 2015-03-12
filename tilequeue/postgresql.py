@@ -196,3 +196,53 @@ class HostAffinityConnectionPool(object):
             self.host_conns_in_use.clear()
             self.host_conns_not_in_use.clear()
             self.hosts = []
+
+
+class DBAffinityConnections(object):
+
+    # Designed to be used with pgbouncer
+    # It expects conn_info to have all connection information except
+    # for the dbname. The dbnames will get rotated in for each
+    # queryset.
+    # No connections are pooled here, but created on demand. This
+    # expects that pgbouncer will be performing all the connection
+    # pooling for us.
+
+    def __init__(self, dbnames, n_conn_per_db, conn_info):
+        self.dbnames = dbnames
+        self.n_conn_per_db = n_conn_per_db
+        self.conn_info = conn_info
+        self.db_to_conns = {}
+        self.lock = threading.Lock()
+
+    def _make_conn(self, conn_info):
+        return psycopg2.connect(**conn_info)
+
+    def get_conns_for_db(self, dbname):
+        conn_info_with_db = dict(self.conn_info, dbname=dbname)
+        conns = [self._make_conn(conn_info_with_db)
+                 for i in range(self.n_conn_per_db)]
+        with self.lock:
+            assert dbname not in self.db_to_conns, \
+                'already in db_to_conns: %s' % dbname
+            self.db_to_conns[dbname] = conns
+        return conns
+
+    def put_conns_for_db(self, dbname):
+        with self.lock:
+            conns = self.db_to_conns.pop(dbname)
+        for conn in conns:
+            try:
+                conn.close()
+            except:
+                pass
+
+    def closeall(self):
+        with self.lock:
+            for dbname, conns in self.db_to_conns.items():
+                for conn in conns:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+            self.db_to_conns.clear()

@@ -8,7 +8,7 @@ from tilequeue.format import json_format
 from tilequeue.format import mapbox_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
-from tilequeue.postgresql import HostAffinityConnectionPool
+from tilequeue.postgresql import DBAffinityConnections
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.ops import transform
 from TileStache.Goodies.VecTiles.server import query_columns
@@ -99,7 +99,7 @@ class RenderDataFetcher(object):
 
     def __init__(self, conn_info, layer_data, formats,
                  find_columns_for_queries=find_columns_for_queries):
-        # copy conn_info so we can pop hosts off
+        # copy conn_info so we can pop dbnames off
         self.conn_info = dict(conn_info)
         self.formats = formats
         self.layer_data = layer_data
@@ -107,8 +107,8 @@ class RenderDataFetcher(object):
         self.find_columns_for_queries = find_columns_for_queries
         self.thread_pool = None
         self._is_initialized = False
-        self.sql_hosts = None
-        self.sql_host_query_index = 0
+        self.dbnames = None
+        self.dbnames_query_index = 0
 
     def initialize(self, thread_pool):
         assert not self._is_initialized, 'Multiple initialization'
@@ -118,10 +118,10 @@ class RenderDataFetcher(object):
         n_layers = len(self.layer_data)
         n_conn = n_layers
 
-        self.sql_hosts = self.conn_info.pop('hosts')
-        self.sql_conn_pool = HostAffinityConnectionPool(
-            self.sql_hosts, n_conn, self.conn_info)
-        self.sql_host_query_index = 0
+        self.dbnames = self.conn_info.pop('dbnames')
+        self.sql_conn_pool = DBAffinityConnections(
+            self.dbnames, n_conn, self.conn_info)
+        self.dbnames_query_index = 0
 
         self._is_initialized = True
 
@@ -149,17 +149,17 @@ class RenderDataFetcher(object):
         )
         shape_padded_bounds = geometry.box(*padded_bounds)
 
-        sql_host = self.sql_hosts[self.sql_host_query_index]
-        self.sql_host_query_index += 1
-        if self.sql_host_query_index == len(self.sql_hosts):
-            self.sql_host_query_index = 0
+        dbname = self.dbnames[self.dbnames_query_index]
+        self.dbnames_query_index += 1
+        if self.dbnames_query_index == len(self.dbnames):
+            self.dbnames_query_index = 0
 
-        sql_conns = self.sql_conn_pool.get_conns_for_host(sql_host)
+        sql_conns = self.sql_conn_pool.get_conns_for_db(dbname)
         try:
             # first determine the columns for the queries
             # we currently perform the actual query and ask for no data
             # we also cache this per layer, per zoom
-            col_conn_info = dict(self.conn_info, host=sql_host)
+            col_conn_info = dict(self.conn_info, dbname=dbname)
             columns_for_queries = self.find_columns_for_queries(
                 col_conn_info, self.layer_data, zoom, padded_bounds)
 
@@ -236,7 +236,7 @@ class RenderDataFetcher(object):
             return render_data
 
         finally:
-            self.sql_conn_pool.put_conns_for_host(sql_host)
+            self.sql_conn_pool.put_conns_for_db(dbname)
 
 
 def execute_query(conn, query, layer_datum):

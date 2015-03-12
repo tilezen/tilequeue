@@ -35,15 +35,11 @@ class Configuration(object):
         self.workers = self.yml['workers']
         self.messages_at_once = self.yml['messages_at_once']
         self.postgresql_conn_info = self.yml['postgresql']
-        assert 'host' not in self.postgresql_conn_info, \
-            "postgresql 'host' option is unused, use 'hosts'"
-        assert 'connection_factory' not in self.postgresql_conn_info, \
-            'connection_factory postgresql option will be overridden'
-        hosts = self.postgresql_conn_info.get('hosts')
-        assert hosts is not None, 'Missing postgresql hosts'
-        assert isinstance(hosts, (tuple, list)), \
-            "Expecting postgresql 'hosts' to be a list"
-        assert len(hosts) > 0, 'No postgresql hosts configured'
+        dbnames = self.postgresql_conn_info.get('dbnames')
+        assert dbnames is not None, 'Missing postgresql dbnames'
+        assert isinstance(dbnames, (tuple, list)), \
+            "Expecting postgresql 'dbnames' to be a list"
+        assert len(dbnames) > 0, 'No postgresql dbnames configured'
 
         self.top_tiles = self.yml['tiles']['top-tiles']
         self.top_tiles_url = self.top_tiles['url']
@@ -108,9 +104,9 @@ def default_yml_config():
             'cache-set-key': 'tilequeue.tiles-of-interest',
         },
         'postgresql': {
-            'hosts': ('localhost',),
+            'host': 'localhost',
             'port': 5432,
-            'database': 'osm',
+            'dbnames': ('osm',),
             'user': 'osm',
             'password': None,
         },
