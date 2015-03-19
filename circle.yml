@@ -1,9 +1,9 @@
 dependencies:
   pre:
-    - pip install Shapely protobuf Pillow
-    - pip install git+https://github.com/mapzen/TileStache@integration-1
+    - pip install -U Shapely protobuf Pillow
+    - pip install -U git+https://github.com/mapzen/TileStache@integration-1
+    - pip install -U flake8
     - python setup.py develop
-    - pip install flake8
 
 test:
   override:
