@@ -366,8 +366,16 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
 
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
+
+            # apply any configured layer transformations
+            layer_transform_fn = layer_datum['transform_fn']
+            if layer_transform_fn is not None:
+                shape, props, feature_id = layer_transform_fn(
+                    shape, props, feature_id)
+
             # the formatters all expect wkb
             wkb = dumps(shape)
+
             transformed_features.append((wkb, props, feature_id))
 
         transformed_feature_layer = dict(
@@ -470,6 +478,7 @@ def make_feature_fetcher(conn_info, tilestache_config, formats):
             geometry_types=layer.provider.geometry_types,
             simplify_until=layer.provider.simplify_until,
             suppress_simplification=layer.provider.suppress_simplification,
+            transform_fn=layer.provider.transform_fn,
         )
         layer_data.append(layer_datum)
 
