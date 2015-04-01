@@ -337,7 +337,8 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
         features = feature_layer['features']
         transformed_features = []
 
-        is_clipped = feature_layer['layer_datum']['is_clipped']
+        layer_datum = feature_layer['layer_datum']
+        is_clipped = layer_datum['is_clipped']
 
         for shape, props, feature_id in features:
 
@@ -357,7 +358,6 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
 
             # perform any simplification as necessary
             tolerance = tolerances[coord.zoom]
-            layer_datum = feature_layer['layer_datum']
             simplify_until = layer_datum['simplify_until']
             suppress_simplification = layer_datum['suppress_simplification']
             if (coord.zoom not in suppress_simplification and
@@ -378,10 +378,14 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
 
             transformed_features.append((wkb, props, feature_id))
 
+        sort_fn = layer_datum['sort_fn']
+        if sort_fn:
+            transformed_features = sort_fn(transformed_features)
+
         transformed_feature_layer = dict(
             name=feature_layer['name'],
             features=transformed_features,
-            layer_datum=feature_layer['layer_datum'],
+            layer_datum=layer_datum,
         )
         transformed_feature_layers.append(transformed_feature_layer)
 
@@ -479,6 +483,7 @@ def make_feature_fetcher(conn_info, tilestache_config, formats):
             simplify_until=layer.provider.simplify_until,
             suppress_simplification=layer.provider.suppress_simplification,
             transform_fn=layer.provider.transform_fn,
+            sort_fn=layer.provider.sort_fn,
         )
         layer_data.append(layer_datum)
 
