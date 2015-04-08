@@ -6,10 +6,6 @@ class RedisCacheIndex(object):
     def __init__(self, redis_client,
                  cache_set_key='tilequeue.tiles-of-interest'):
         self.redis_client = redis_client
-        self.redis_client.set_response_callback(
-            'SMEMBERS',
-            lambda l: set((int(i) for i in l))
-        )
         self.cache_set_key = cache_set_key
 
     def intersect(self, coords, tiles_of_interest=None):
@@ -21,7 +17,12 @@ class RedisCacheIndex(object):
                 yield coord
 
     def fetch_tiles_of_interest(self):
-        return self.redis_client.smembers(self.cache_set_key)
+        raw_tiles_of_interest = self.redis_client.smembers(self.cache_set_key)
+        tiles_of_interest = set()
+        for raw_tile in raw_tiles_of_interest:
+            raw_tile_int = int(raw_tile)
+            tiles_of_interest.add(raw_tile_int)
+        return tiles_of_interest
 
     def index_coord(self, coord):
         self.index_coords([coord])

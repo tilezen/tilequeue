@@ -7,7 +7,6 @@ class RedisSerializeTest(unittest.TestCase):
         from tilequeue.cache import RedisCacheIndex
         from mock import MagicMock
         redis_client_mock = MagicMock()
-        redis_client_mock.set_response_callback = MagicMock()
         return RedisCacheIndex(redis_client_mock)
 
     def test_serialize_one(self):
