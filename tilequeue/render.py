@@ -190,6 +190,7 @@ class RenderDataFetcher(object):
 
                 geometry_types = layer_datum['geometry_types']
                 layer_name = layer_datum['name']
+                layer_transform_fn = layer_datum['transform_fn']
                 features = []
                 for row in rows:
                     assert '__geometry__' in row, \
@@ -204,10 +205,14 @@ class RenderDataFetcher(object):
                         continue
 
                     if geometry_types is not None:
-                        geom_type = shape.__geo_interface__['type']
-                        if geom_type not in geometry_types:
+                        if shape.type not in geometry_types:
                             continue
 
+                    # since a bounding box intersection is used, we
+                    # perform a more accurate check here to filter out
+                    # any extra features
+                    # the formatter specific transformations will take
+                    # care of any additional filtering
                     if not shape_padded_bounds.intersects(shape):
                         continue
 
@@ -215,9 +220,19 @@ class RenderDataFetcher(object):
                     props = dict((k, v) for k, v in row.items()
                                  if v is not None)
 
+                    # perform any specific layer transformations
+                    if layer_transform_fn is not None:
+                        shape, props, feature_id = layer_transform_fn(
+                            shape, props, feature_id)
+
                     # the shapely object itself is kept here, it gets
-                    # converted back to wkb during transformation
+                    # converted back to wkb during shape transformation
                     features.append((shape, props, feature_id))
+
+                # sort the features
+                sort_fn = layer_datum['sort_fn']
+                if sort_fn:
+                    features = sort_fn(features)
 
                 feature_layer = dict(name=layer_name, features=features,
                                      layer_datum=layer_datum)
@@ -228,6 +243,7 @@ class RenderDataFetcher(object):
                 raise async_exception
 
             feature_layers.extend(empty_results)
+
             render_data = [
                 RenderData(format, feature_layers, bounds, padded_bounds)
                 for format in self.formats
@@ -317,8 +333,8 @@ def apply_to_all_coords(fn):
     return lambda shape: transform(shape, fn)
 
 
-def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
-                             padded_bounds, coord):
+def transform_feature_layers_shape(feature_layers, format, scale,
+                                   unpadded_bounds, padded_bounds, coord):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
     elif format in (mapbox_format, vtm_format):
@@ -337,7 +353,8 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
         features = feature_layer['features']
         transformed_features = []
 
-        is_clipped = feature_layer['layer_datum']['is_clipped']
+        layer_datum = feature_layer['layer_datum']
+        is_clipped = layer_datum['is_clipped']
 
         for shape, props, feature_id in features:
 
@@ -357,7 +374,6 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
 
             # perform any simplification as necessary
             tolerance = tolerances[coord.zoom]
-            layer_datum = feature_layer['layer_datum']
             simplify_until = layer_datum['simplify_until']
             suppress_simplification = layer_datum['suppress_simplification']
             if (coord.zoom not in suppress_simplification and
@@ -367,12 +383,6 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
 
-            # apply any configured layer transformations
-            layer_transform_fn = layer_datum['transform_fn']
-            if layer_transform_fn is not None:
-                shape, props, feature_id = layer_transform_fn(
-                    shape, props, feature_id)
-
             # the formatters all expect wkb
             wkb = dumps(shape)
 
@@ -381,7 +391,7 @@ def transform_feature_layers(feature_layers, format, scale, unpadded_bounds,
         transformed_feature_layer = dict(
             name=feature_layer['name'],
             features=transformed_features,
-            layer_datum=feature_layer['layer_datum'],
+            layer_datum=layer_datum,
         )
         transformed_feature_layers.append(transformed_feature_layer)
 
@@ -412,7 +422,7 @@ class RenderJob(object):
             feature_layers = render_datum.feature_layers
             bounds = render_datum.bounds
 
-            feature_layers = transform_feature_layers(
+            feature_layers = transform_feature_layers_shape(
                 feature_layers, format, self.scale, bounds,
                 render_datum.padded_bounds, self.coord)
 
@@ -479,6 +489,7 @@ def make_feature_fetcher(conn_info, tilestache_config, formats):
             simplify_until=layer.provider.simplify_until,
             suppress_simplification=layer.provider.suppress_simplification,
             transform_fn=layer.provider.transform_fn,
+            sort_fn=layer.provider.sort_fn,
         )
         layer_data.append(layer_datum)
 
