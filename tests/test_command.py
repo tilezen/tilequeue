@@ -94,7 +94,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         from tilequeue.command import tilequeue_intersect
         from ModestMaps.Core import Coordinate
         from tilequeue.tile import serialize_coord
-        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.tile import coord_marshall_int
         cfg_mock = MagicMock()
         cfg_mock.queue_type = 'sqs'
         periperals_mock = MagicMock()
@@ -103,7 +103,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         coords = (c0, c1)
         periperals_mock.redis_cache_index = MagicMock(
             fetch_tiles_of_interest=lambda: set(
-                map(serialize_coord_to_redis_value, coords)))
+                map(coord_marshall_int, coords)))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
         queue_mock.enqueue = self.fake_enqueue

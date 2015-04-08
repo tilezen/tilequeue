@@ -34,10 +34,10 @@ class TestQueue(unittest.TestCase):
             self.values.append(value)
 
     def test_enqueue_should_check_if_pending_work(self):
-        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.tile import coord_marshall_int
         coord = Coordinate(row=1, column=1, zoom=1)
         self.sqs.enqueue(coord)
-        exp_value = serialize_coord_to_redis_value(coord)
+        exp_value = coord_marshall_int(coord)
         self.mockRedis.sismember.assert_called_once_with(self.sqs.inflight_key,
                                                          exp_value)
 
@@ -81,13 +81,13 @@ class TestQueue(unittest.TestCase):
         self.mockRedis.sadd = mock
         coord = Coordinate(row=1, column=1, zoom=1)
         self.sqs.enqueue(coord)
-        from tilequeue.cache import serialize_coord_to_redis_value
-        exp_value = serialize_coord_to_redis_value(coord)
+        from tilequeue.tile import coord_marshall_int
+        exp_value = coord_marshall_int(coord)
         self.mockRedis.sadd.assert_called_once_with(self.sqs.inflight_key,
                                                     exp_value)
 
     def test_enqueue_batch_adds_tiles_as_in_flight(self):
-        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.tile import coord_marshall_int
         coords = [Coordinate(row=1, column=1, zoom=1),
                   Coordinate(row=2, column=2, zoom=2)]
         mock = MagicMock()
@@ -96,7 +96,7 @@ class TestQueue(unittest.TestCase):
         self.mockRedis.sadd = self.fake_sadd
         self.sqs.enqueue_batch(coords)
         self.assertEqual(self.key_name, self.sqs.inflight_key)
-        exp_values = map(serialize_coord_to_redis_value, coords)
+        exp_values = map(coord_marshall_int, coords)
         self.assertEqual(exp_values, self.values)
 
     def test_job_done_removes_tile_from_in_flight(self):
@@ -105,13 +105,13 @@ class TestQueue(unittest.TestCase):
         message = RawMessage()
         message.set_body(payload)
         self.sqs.job_done(message)
-        from tilequeue.cache import serialize_coord_to_redis_value
-        exp_value = serialize_coord_to_redis_value(coord)
+        from tilequeue.tile import coord_marshall_int
+        exp_value = coord_marshall_int(coord)
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,
                                                     exp_value)
 
     def test_jobs_done_removes_tiles_from_in_flight(self):
-        from tilequeue.cache import serialize_coord_to_redis_value
+        from tilequeue.tile import coord_marshall_int
         coords = [Coordinate(row=1, column=1, zoom=1),
                   Coordinate(row=2, column=2, zoom=2)]
 
@@ -122,7 +122,7 @@ class TestQueue(unittest.TestCase):
             message.set_body(payload)
             messages.append(message)
         self.sqs.jobs_done(messages)
-        exp_values = map(serialize_coord_to_redis_value, coords)
+        exp_values = map(coord_marshall_int, coords)
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,
                                                     *exp_values)
 

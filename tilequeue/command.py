@@ -4,11 +4,11 @@ from itertools import chain
 from Queue import Queue
 from threading import Lock
 from threading import Thread
-from tilequeue.cache import coord_int_zoom_up
-from tilequeue.cache import deserialize_redis_value_to_coord
+from tilequeue.tile import coord_int_zoom_up
+from tilequeue.tile import coord_unmarshall_int
 from tilequeue.cache import RedisCacheIndex
-from tilequeue.cache import serialize_coord_to_redis_value
-from tilequeue.cache.redis_cache_index import zoom_mask
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import zoom_mask
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
@@ -183,7 +183,7 @@ def coord_ints_from_paths(paths):
         with open(path) as fp:
             coords = create_coords_generator_from_tiles_file(fp)
             for coord in coords:
-                coord_int = serialize_coord_to_redis_value(coord)
+                coord_int = coord_marshall_int(coord)
                 coord_set.add(coord_int)
     return coord_set
 
@@ -269,7 +269,7 @@ def tilequeue_intersect(cfg, peripherals):
                 len(all_coord_ints_set))
     for coord_int in explode_and_intersect(
             all_coord_ints_set, tiles_of_interest, until=cfg.explode_until):
-        coord = deserialize_redis_value_to_coord(coord_int)
+        coord = coord_unmarshall_int(coord_int)
         thread_queue.put(coord)
 
     for thread in threads:
@@ -455,7 +455,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     progress_thread.start()
 
     for tile_of_interest_value in tiles_of_interest:
-        coord = deserialize_redis_value_to_coord(tile_of_interest_value)
+        coord = coord_unmarshall_int(tile_of_interest_value)
         thread_queue.put(coord)
 
     for i in xrange(n_threads):

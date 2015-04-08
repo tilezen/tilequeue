@@ -1,6 +1,6 @@
 from boto import connect_sqs
 from boto.sqs.message import RawMessage
-from tilequeue.cache import serialize_coord_to_redis_value
+from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
@@ -30,18 +30,18 @@ class SqsQueue(object):
 
         for i, coord in enumerate(coords):
             msg_tuples.append((str(i), serialize_coord(coord), 0))
-            values.append(serialize_coord_to_redis_value(coord))
+            values.append(coord_marshall_int(coord))
 
         self.sqs_queue.write_batch(msg_tuples)
         self.redis_client.sadd(self.inflight_key, *values)
 
     def _inflight(self, coord):
         return (not self.is_seeding) and self.redis_client.sismember(
-            self.inflight_key, serialize_coord_to_redis_value(coord))
+            self.inflight_key, coord_marshall_int(coord))
 
     def _add_to_flight(self, coord):
         self.redis_client.sadd(self.inflight_key,
-                               serialize_coord_to_redis_value(coord))
+                               coord_marshall_int(coord))
 
     def enqueue_batch(self, coords):
         buffer = []
@@ -78,18 +78,18 @@ class SqsQueue(object):
     def job_done(self, message):
         coord_str = message.get_body()
         coord = deserialize_coord(coord_str)
-        coord_redis_value = serialize_coord_to_redis_value(coord)
-        self.redis_client.srem(self.inflight_key, coord_redis_value)
+        coord_int = coord_marshall_int(coord)
+        self.redis_client.srem(self.inflight_key, coord_int)
         self.sqs_queue.delete_message(message)
 
     def jobs_done(self, messages):
-        redis_values = []
+        coord_ints = []
         for message in messages:
             coord_str = message.get_body()
             coord = deserialize_coord(coord_str)
-            redis_value = serialize_coord_to_redis_value(coord)
-            redis_values.append(redis_value)
-        self.redis_client.srem(self.inflight_key, *redis_values)
+            coord_int = coord_marshall_int(coord)
+            coord_ints.append(coord_int)
+        self.redis_client.srem(self.inflight_key, *coord_ints)
         self.sqs_queue.delete_message_batch(messages)
 
     def clear(self):
