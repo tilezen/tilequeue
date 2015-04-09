@@ -1,29 +1,30 @@
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
-from Queue import Queue
-from threading import Lock
-from threading import Thread
-from tilequeue.tile import coord_int_zoom_up
-from tilequeue.tile import coord_unmarshall_int
+from multiprocessing.pool import ThreadPool
 from tilequeue.cache import RedisCacheIndex
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import zoom_mask
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
+from tilequeue.query import DataFetcher
 from tilequeue.queue import get_sqs_queue
-from tilequeue.render import make_feature_fetcher
-from tilequeue.render import RenderJobCreator
 from tilequeue.store import make_s3_store
+from tilequeue.tile import coord_int_zoom_up
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
+from tilequeue.tile import zoom_mask
 from tilequeue.top_tiles import parse_top_tiles
-from tilequeue.utils import trap_signal
-from tilequeue.worker import Worker
+from tilequeue.worker import DataFetch
+from tilequeue.worker import ProcessAndFormatData
+from tilequeue.worker import QueuePrint
+from tilequeue.worker import S3Storage
+from tilequeue.worker import SqsQueueReader
+from tilequeue.worker import SqsQueueWriter
 from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
@@ -31,7 +32,11 @@ import logging
 import logging.config
 import multiprocessing
 import os
+import Queue
+import signal
 import sys
+import threading
+import time
 
 
 def create_command_parser(fn):
@@ -218,10 +223,10 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Will process %d expired tile files.'
                 % len(expired_tile_paths))
 
-    lock = Lock()
+    lock = threading.Lock()
     totals = dict(enqueued=0, in_flight=0)
     thread_queue_buffer_size = 1000
-    thread_queue = Queue(thread_queue_buffer_size)
+    thread_queue = Queue.Queue(thread_queue_buffer_size)
 
     # each thread will enqueue coords to sqs
     def enqueue_coords():
@@ -250,7 +255,7 @@ def tilequeue_intersect(cfg, peripherals):
     # start up threads
     threads = []
     for i in range(n_threads):
-        thread = Thread(target=enqueue_coords)
+        thread = threading.Thread(target=enqueue_coords)
         thread.start()
         threads.append(thread)
 
@@ -292,38 +297,246 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Intersection complete.')
 
 
+def parse_layer_data(tilestache_config):
+    layers = tilestache_config.layers
+    all_layer = layers.get('all')
+    assert all_layer is not None, 'All layer is expected in tilestache config'
+    layer_names = all_layer.provider.names
+    layer_data = []
+    for layer_name in layer_names:
+        assert layer_name in layers, \
+            ('Layer not found in config but found in all layers: %s'
+             % layer_name)
+        layer = layers[layer_name]
+        layer_datum = dict(
+            name=layer_name,
+            queries=layer.provider.queries,
+            is_clipped=layer.provider.clip,
+            geometry_types=layer.provider.geometry_types,
+            simplify_until=layer.provider.simplify_until,
+            suppress_simplification=layer.provider.suppress_simplification,
+            transform_fn_names=layer.provider.transform_fn_names,
+            sort_fn_name=layer.provider.sort_fn_name,
+        )
+        layer_data.append(layer_datum)
+    return layer_data
+
+
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
+    logger.warn('tilequeue processing started')
 
     assert os.path.exists(cfg.tilestache_config), \
         'Invalid tilestache config path'
 
     formats = lookup_formats(cfg.output_formats)
 
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    sqs_queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
 
     tilestache_config = parseConfigfile(cfg.tilestache_config)
+    layer_data = parse_layer_data(tilestache_config)
 
     store = make_s3_store(
         cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
         path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
-    feature_fetcher = make_feature_fetcher(
-        cfg.postgresql_conn_info, tilestache_config, formats)
-    job_creator = RenderJobCreator(
-        tilestache_config, formats, store, feature_fetcher)
 
-    workers = []
-    for i in range(cfg.workers):
-        worker = Worker(queue, job_creator)
-        worker.logger = logger
-        worker.daemonized = cfg.daemon
-        p = multiprocessing.Process(target=worker.process,
-                                    args=(cfg.messages_at_once,))
-        workers.append(p)
-        p.start()
-    trap_signal()
+    sqs_messages_per_batch = 10
+    n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
+    if not n_simultaneous_query_sets:
+        # default to number of databases configured
+        n_simultaneous_query_sets = len(cfg.postgresql_conn_info['dbnames'])
+    assert n_simultaneous_query_sets > 0
+    default_queue_buffer_size = 256
+    n_layers = len(layer_data)
+    n_formats = len(formats)
+
+    # thread pool used for queries and uploading to s3
+    io_pool = ThreadPool((n_layers * n_simultaneous_query_sets) + n_formats)
+
+    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, layer_data,
+                                  io_pool)
+
+    # create all queues used to manage pipeline
+
+    sqs_input_queue_buffer_size = sqs_messages_per_batch
+    # holds coord messages from sqs
+    sqs_input_queue = Queue.Queue(sqs_input_queue_buffer_size)
+
+    # holds raw sql results - no filtering or processing done on them
+    sql_data_fetch_queue = multiprocessing.Queue(default_queue_buffer_size)
+
+    # holds data after it has been filtered and processed
+    # this is where the cpu intensive part of the operation will happen
+    # the results will be data that is formatted for each necessary format
+    processor_queue = multiprocessing.Queue(default_queue_buffer_size)
+
+    # holds data after it has been sent to s3
+    s3_store_queue = Queue.Queue(default_queue_buffer_size)
+
+    # create worker threads/processes
+    thread_sqs_queue_reader_stop = threading.Event()
+    sqs_queue_reader = SqsQueueReader(sqs_queue, sqs_input_queue, logger,
+                                      thread_sqs_queue_reader_stop)
+
+    data_fetch = DataFetch(
+        feature_fetcher, sqs_input_queue, sql_data_fetch_queue, logger)
+
+    data_processor = ProcessAndFormatData(formats, sql_data_fetch_queue,
+                                          processor_queue, logger)
+
+    thread_s3_storage_stop = threading.Event()
+    s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
+                           store, logger, thread_s3_storage_stop)
+
+    thread_sqs_writer_stop = threading.Event()
+    sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
+                                      thread_sqs_writer_stop)
+
+    def create_and_start_thread(fn, *args):
+        t = threading.Thread(target=fn, args=args)
+        t.start()
+        return t
+
+    thread_sqs_queue_reader = create_and_start_thread(sqs_queue_reader)
+
+    threads_data_fetch = []
+    threads_data_fetch_stop = []
+    for i in range(n_simultaneous_query_sets):
+        thread_data_fetch_stop = threading.Event()
+        thread_data_fetch = create_and_start_thread(data_fetch,
+                                                    thread_data_fetch_stop)
+        threads_data_fetch.append(thread_data_fetch)
+        threads_data_fetch_stop.append(thread_data_fetch_stop)
+
+    # create a data processor per cpu
+    n_data_processors = multiprocessing.cpu_count()
+    data_processors = []
+    data_processors_stop = []
+    for i in range(n_data_processors):
+        data_processor_stop = multiprocessing.Event()
+        process_data_processor = multiprocessing.Process(
+            target=data_processor, args=(data_processor_stop,))
+        process_data_processor.start()
+        data_processors.append(process_data_processor)
+        data_processors_stop.append(data_processor_stop)
+
+    thread_s3_storage = create_and_start_thread(s3_storage)
+
+    thread_sqs_writer = create_and_start_thread(sqs_queue_writer)
+
+    if cfg.log_queue_sizes:
+        assert(cfg.log_queue_sizes_interval_seconds > 0)
+        queue_data = (
+            (sqs_input_queue, 'sqs'),
+            (sql_data_fetch_queue, 'sql'),
+            (processor_queue, 'proc'),
+            (s3_store_queue, 's3'),
+        )
+        queue_printer_thread_stop = threading.Event()
+        queue_printer = QueuePrint(
+            cfg.log_queue_sizes_interval_seconds, queue_data, logger,
+            queue_printer_thread_stop)
+        queue_printer_thread = create_and_start_thread(queue_printer)
+    else:
+        queue_printer_thread = None
+        queue_printer_thread_stop = None
+
+    def stop_all_workers(signum, stack):
+        logger.warn('tilequeue processing shutdown ...')
+
+        logger.info('requesting all workers (threads and processes) stop ...')
+
+        # each worker guards its read loop with an event object
+        # ask all these to stop first
+
+        thread_sqs_queue_reader_stop.set()
+        for thread_data_fetch_stop in threads_data_fetch_stop:
+            thread_data_fetch_stop.set()
+        for data_processor_stop in data_processors_stop:
+            data_processor_stop.set()
+        thread_s3_storage_stop.set()
+        thread_sqs_writer_stop.set()
+        queue_printer_thread_stop.set()
+
+        logger.info('requesting all workers (threads and processes) stop ... '
+                    'done')
+
+        # Once workers receive a stop event, they will keep reading
+        # from their queues until they receive a sentinel value. This
+        # is mandatory so that no messages will remain on queues when
+        # asked to join. Otherwise, we never terminate.
+
+        logger.info('joining all workers ...')
+
+        logger.info('joining sqs queue reader ...')
+        thread_sqs_queue_reader.join()
+        logger.info('joining sqs queue reader ... done')
+        logger.info('enqueueing sentinels for data fetchers ...')
+        for i in range(len(threads_data_fetch)):
+            sqs_input_queue.put(None)
+        logger.info('enqueueing sentinels for data fetchers ... done')
+        logger.info('joining data fetchers ...')
+        for thread_data_fetch in threads_data_fetch:
+            thread_data_fetch.join()
+        logger.info('joining data fetchers ... done')
+        logger.info('enqueueing sentinels for data processors ...')
+        for i in range(len(data_processors)):
+            sql_data_fetch_queue.put(None)
+        logger.info('enqueueing sentinels for data processors ... done')
+        logger.info('joining data processors ...')
+        for data_processor in data_processors:
+            data_processor.join()
+        logger.info('joining data processors ... done')
+        logger.info('enqueueing sentinel for s3 storage ...')
+        processor_queue.put(None)
+        logger.info('enqueueing sentinel for s3 storage ... done')
+        logger.info('joining s3 storage ...')
+        thread_s3_storage.join()
+        logger.info('joining s3 storage ... done')
+        logger.info('enqueueing sentinel for sqs queue writer ...')
+        s3_store_queue.put(None)
+        logger.info('enqueueing sentinel for sqs queue writer ... done')
+        logger.info('joining sqs queue writer ...')
+        thread_sqs_writer.join()
+        logger.info('joining sqs queue writer ... done')
+        if queue_printer_thread:
+            logger.info('joining queue printer ...')
+            queue_printer_thread.join()
+            logger.info('joining queue printer ... done')
+
+        logger.info('joining all workers ... done')
+
+        logger.info('joining io pool ...')
+        io_pool.close()
+        io_pool.join()
+        logger.info('joining io pool ... done')
+
+        logger.info('joining multiprocess data fetch queue ...')
+        sql_data_fetch_queue.close()
+        sql_data_fetch_queue.join_thread()
+        logger.info('joining multiprocess data fetch queue ... done')
+
+        logger.info('joining multiprocess process queue ...')
+        processor_queue.close()
+        processor_queue.join_thread()
+        logger.info('joining multiprocess process queue ... done')
+
+        logger.warn('tilequeue processing shutdown ... done')
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, stop_all_workers)
+    signal.signal(signal.SIGINT, stop_all_workers)
+    signal.signal(signal.SIGQUIT, stop_all_workers)
+
+    logger.warn('all tilequeue threads and processes started')
+
+    # this is necessary for the main thread to receive signals
+    # when joining on threads/processes, the signal is never received
+    # http://www.luke.maurits.id.au/blog/post/threads-and-signals-in-python.html
+    while True:
+        time.sleep(1024)
 
 
 def queue_generator(queue):
@@ -346,8 +559,8 @@ def tilequeue_seed(cfg, peripherals):
         peripherals.redis_cache_index.index_coords(tile_gen)
 
     queue_buf_size = 1000
-    queue_sqs_coords = Queue(queue_buf_size)
-    queue_redis_coords = Queue(queue_buf_size)
+    queue_sqs_coords = Queue.Queue(queue_buf_size)
+    queue_redis_coords = Queue.Queue(queue_buf_size)
 
     # suppresses checking the in flight list while seeding
     queue.is_seeding = True
@@ -355,11 +568,11 @@ def tilequeue_seed(cfg, peripherals):
     # use multiple sqs threads
     n_sqs_threads = 3
 
-    sqs_threads = [Thread(target=sqs_enqueue,
-                          args=(queue_generator(queue_sqs_coords),))
+    sqs_threads = [threading.Thread(target=sqs_enqueue,
+                                    args=(queue_generator(queue_sqs_coords),))
                    for x in range(n_sqs_threads)]
-    thread_redis = Thread(target=redis_add,
-                          args=(queue_generator(queue_redis_coords),))
+    thread_redis = threading.Thread(
+        target=redis_add, args=(queue_generator(queue_redis_coords),))
 
     logger = make_logger(cfg, 'seed')
     logger.info('Sqs ... ')
@@ -395,10 +608,10 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('Fetching tiles of interest ... done')
 
     thread_queue_buffer_size = 5000
-    thread_queue = Queue(thread_queue_buffer_size)
+    thread_queue = Queue.Queue(thread_queue_buffer_size)
     n_threads = 50
 
-    lock = Lock()
+    lock = threading.Lock()
     totals = dict(enqueued=0, in_flight=0)
 
     def enqueue_coords_thread():
@@ -425,7 +638,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('Starting %d enqueueing threads ...' % n_threads)
     threads = []
     for i in xrange(n_threads):
-        thread = Thread(target=enqueue_coords_thread)
+        thread = threading.Thread(target=enqueue_coords_thread)
         thread.start()
         threads.append(thread)
     logger.info('Starting %d enqueueing threads ... done' % n_threads)
@@ -439,7 +652,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
                 totals['enqueued'] + totals['in_flight'],
                 totals['enqueued'], totals['in_flight']))
 
-    progress_queue = Queue()
+    progress_queue = Queue.Queue()
     progress_interval_seconds = 120
 
     def log_progress_thread():
@@ -451,7 +664,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
             else:
                 break
 
-    progress_thread = Thread(target=log_progress_thread)
+    progress_thread = threading.Thread(target=log_progress_thread)
     progress_thread.start()
 
     for tile_of_interest_value in tiles_of_interest:
@@ -486,14 +699,14 @@ def tilequeue_tile_sizes(cfg, peripherals):
     formats = lookup_formats(cfg.output_formats)
 
     work_buffer_size = 1000
-    work = Queue(work_buffer_size)
+    work = Queue.Queue(work_buffer_size)
 
     from boto import connect_s3
     from boto.s3.bucket import Bucket
     s3_conn = connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
     bucket = Bucket(s3_conn, bucket_name)
 
-    lock = Lock()
+    lock = threading.Lock()
 
     def new_total_count():
         return dict(
@@ -560,7 +773,7 @@ def tilequeue_tile_sizes(cfg, peripherals):
     n_threads = 50
     worker_threads = []
     for i in range(n_threads):
-        worker_thread = Thread(target=process_work_data)
+        worker_thread = threading.Thread(target=process_work_data)
         worker_thread.start()
         worker_threads.append(worker_thread)
 

@@ -32,8 +32,11 @@ class Configuration(object):
         self.redis_db = self._cfg('redis db')
         self.redis_cache_set_key = self._cfg('redis cache-set-key')
         self.explode_until = self._cfg('tiles explode-until')
-        self.workers = self.yml['workers']
-        self.messages_at_once = self.yml['messages_at_once']
+        self.n_simultaneous_query_sets = \
+            self.yml['process']['n-simultaneous-query-sets']
+        self.log_queue_sizes = self.yml['process']['log-queue-sizes']
+        self.log_queue_sizes_interval_seconds = \
+            self.yml['process']['log-queue-sizes-interval-seconds']
         self.postgresql_conn_info = self.yml['postgresql']
         dbnames = self.postgresql_conn_info.get('dbnames')
         assert dbnames is not None, 'Missing postgresql dbnames'
@@ -88,8 +91,11 @@ def default_yml_config():
             'daemon': False,
             'expired-location': None,
         },
-        'workers': 4,
-        'messages_at_once': 4,
+        'process': {
+            'n-simultaneous-query-sets': 0,
+            'log-queue-sizes': True,
+            'log-queue-sizes-interval-seconds': 1,
+        },
         'tilestache': {
             'config': None,
             'formats': ('json', 'vtm'),
