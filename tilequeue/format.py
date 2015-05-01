@@ -2,7 +2,7 @@ from cStringIO import StringIO
 from json import loads
 from TileStache.Goodies.VecTiles.geojson import encode as json_encode
 from TileStache.Goodies.VecTiles.geojson import merge as json_merge
-from TileStache.Goodies.VecTiles.mapbox import merge as mapbox_merge
+from TileStache.Goodies.VecTiles.mvt import merge as mvt_merge
 from TileStache.Goodies.VecTiles.oscimap import merge as vtm_merge
 from TileStache.Goodies.VecTiles.topojson import encode as topojson_encode
 from TileStache.Goodies.VecTiles.topojson import merge as topojson_merge
@@ -68,8 +68,8 @@ def format_topojson(fp, feature_layers, coord, bounds):
     topojson_merge(fp, names, layers, None, coord)
 
 
-def format_mapbox(fp, feature_layers, coord, bounds):
-    mapbox_merge(fp, feature_layers, coord)
+def format_mvt(fp, feature_layers, coord, bounds):
+    mvt_merge(fp, feature_layers, coord)
 
 
 def format_vtm(fp, feature_layers, coord, bounds):
@@ -81,21 +81,21 @@ topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json',
                                format_topojson, 2)
 # TODO image/png mimetype? app doesn't work unless image/png?
 vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm, 3)
-mapbox_format = OutputFormat('Mapbox', 'mapbox', 'application/x-protobuf',
-                             format_mapbox, 4)
+mvt_format = OutputFormat('MVT', 'mvt', 'application/x-protobuf',
+                          format_mvt, 4)
 
 extension_to_format = dict(
     json=json_format,
     topojson=topojson_format,
     vtm=vtm_format,
-    mapbox=mapbox_format,
+    mvt=mvt_format,
 )
 
 name_to_format = {
     'JSON': json_format,
     'OpenScienceMap': vtm_format,
     'TopoJSON': topojson_format,
-    'Mapbox': mapbox_format,
+    'MVT': mvt_format,
 }
 
 
