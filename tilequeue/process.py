@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 from shapely import geometry
 from shapely.wkb import loads
+from tilequeue.transform import mercator_point_to_wgs84
 from tilequeue.transform import transform_feature_layers_shape
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
@@ -69,6 +70,12 @@ def process_coord(coord, feature_layers, formats, unpadded_bounds,
                              layer_datum=layer_datum)
         processed_feature_layers.append(feature_layer)
 
+    # topojson formatter expects bounds to be in wgs84
+    unpadded_bounds_merc = unpadded_bounds
+    unpadded_bounds_wgs84 = (
+        mercator_point_to_wgs84(unpadded_bounds[:2]) +
+        mercator_point_to_wgs84(unpadded_bounds[2:4]))
+
     # now, perform the format specific transformations
     # and format the tile itself
     formatted_tiles = []
@@ -81,7 +88,7 @@ def process_coord(coord, feature_layers, formats, unpadded_bounds,
         # use the formatted to generate the tile
         tile_data_file = StringIO()
         format.format_tile(tile_data_file, transformed_feature_layers, coord,
-                           unpadded_bounds)
+                           unpadded_bounds_merc, unpadded_bounds_wgs84)
         tile = tile_data_file.getvalue()
 
         formatted_tile = dict(format=format, tile=tile)

@@ -30,12 +30,14 @@ class OutputFormat(object):
     def __eq__(self, other):
         return self.extension == other.extension
 
-    def format_tile(self, tile_data_file, feature_layers, coord, bounds):
-        self.format_fn(tile_data_file, feature_layers, coord, bounds)
+    def format_tile(self, tile_data_file, feature_layers, coord, bounds_merc,
+                    bounds_wgs84):
+        self.format_fn(tile_data_file, feature_layers, coord, bounds_merc,
+                       bounds_wgs84)
 
 
 # consistent facade around all tilestache formatters that we use
-def format_json(fp, feature_layers, coord, bounds):
+def format_json(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     # TODO a lot of serializing/deserializing can be reduced here
     # this is a faithful port for how it's done in tilestache now
     names = []
@@ -52,14 +54,14 @@ def format_json(fp, feature_layers, coord, bounds):
     json_merge(fp, names, layers, None, coord)
 
 
-def format_topojson(fp, feature_layers, coord, bounds):
+def format_topojson(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     # TODO ditto on the serialization as in format_json
     names = []
     layers = []
     for feature_layer in feature_layers:
         names.append(feature_layer['name'])
         out = StringIO()
-        topojson_encode(out, feature_layer['features'], bounds)
+        topojson_encode(out, feature_layer['features'], bounds_wgs84)
         # out now contains a json serialized result
         # now we deserialize it, so that it can be combined with the
         # merge function
@@ -68,11 +70,11 @@ def format_topojson(fp, feature_layers, coord, bounds):
     topojson_merge(fp, names, layers, None, coord)
 
 
-def format_mvt(fp, feature_layers, coord, bounds):
+def format_mvt(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     mvt_merge(fp, feature_layers, coord)
 
 
-def format_vtm(fp, feature_layers, coord, bounds):
+def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     vtm_merge(fp, feature_layers, coord)
 
 
