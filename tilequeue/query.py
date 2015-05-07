@@ -126,7 +126,7 @@ def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds, columns):
 
 class DataFetcher(object):
 
-    def __init__(self, conn_info, layer_data, io_pool, n_conn=7):
+    def __init__(self, conn_info, layer_data, io_pool, n_conn):
         self.conn_info = dict(conn_info)
         self.layer_data = layer_data
         self.spherical_mercator = SphericalMercator()

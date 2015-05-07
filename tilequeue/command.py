@@ -356,7 +356,7 @@ def tilequeue_process(cfg, peripherals):
     io_pool = ThreadPool((n_layers * n_simultaneous_query_sets) + n_formats)
 
     feature_fetcher = DataFetcher(cfg.postgresql_conn_info, layer_data,
-                                  io_pool)
+                                  io_pool, n_layers)
 
     # create all queues used to manage pipeline
 
