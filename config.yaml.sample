@@ -9,16 +9,18 @@ aws:
     aws_access_key_id: <aws_access_key_id>
     aws_secret_access_key: <aws_secret_access_key>
 tiles:
-  metro-extract:
-    url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
-    zoom-filter: 11
-  top-tiles:
-    url: https://gist.github.com/brunosan/b7ce3df8b48229a61b5b/raw/37e42e77f253bc204076111c92acc4d5e653edd2/top_50k_tiles.csv
-    zoom-start: 11
-    zoom-until: 20
-  unique: true
-  zoom-start: 0
-  zoom-until: 20
+  seed:
+    all:
+      zoom-start: 0
+      zoom-until: 10
+    metro-extract:
+      url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
+      zoom-start: 11
+      zoom-until: 15
+    top-tiles:
+      url: https://gist.github.com/brunosan/b7ce3df8b48229a61b5b/raw/37e42e77f253bc204076111c92acc4d5e653edd2/top_50k_tiles.csv
+      zoom-start: 11
+      zoom-until: 20
   explode-until: 0
   expired-location: <path/to/expired/tiles/list>
 process:

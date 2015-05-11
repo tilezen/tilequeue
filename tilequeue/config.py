@@ -20,11 +20,21 @@ class Configuration(object):
         self.tilestache_config = self._cfg('tilestache config')
         self.expired_tiles_location = self.yml['tiles']['expired-location']
         self.output_formats = self._cfg('tilestache formats')
-        self.zoom_start = self._cfg('tiles zoom-start')
-        self.zoom_until = self._cfg('tiles zoom-until')
-        self.unique_tiles = self._cfg('tiles unique')
-        self.filter_metro_zoom = self._cfg('tiles metro-extract zoom-filter')
-        self.metro_extract_url = self._cfg('tiles metro-extract url')
+
+        seed_cfg = self.yml['tiles']['seed']
+        self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
+        self.seed_all_zoom_until = seed_cfg['all']['zoom-until']
+
+        seed_metro_cfg = seed_cfg['metro-extract']
+        self.seed_metro_extract_url = seed_metro_cfg['url']
+        self.seed_metro_extract_zoom_start = seed_metro_cfg['zoom-start']
+        self.seed_metro_extract_zoom_until = seed_metro_cfg['zoom-until']
+
+        seed_top_tiles_cfg = seed_cfg['top-tiles']
+        self.seed_top_tiles_url = seed_top_tiles_cfg['url']
+        self.seed_top_tiles_zoom_start = seed_top_tiles_cfg['zoom-start']
+        self.seed_top_tiles_zoom_until = seed_top_tiles_cfg['zoom-until']
+
         self.logconfig = self._cfg('logging config')
         self.redis_host = self._cfg('redis host')
         self.redis_port = self._cfg('redis port')
@@ -42,11 +52,6 @@ class Configuration(object):
         assert isinstance(dbnames, (tuple, list)), \
             "Expecting postgresql 'dbnames' to be a list"
         assert len(dbnames) > 0, 'No postgresql dbnames configured'
-
-        self.top_tiles = self.yml['tiles']['top-tiles']
-        self.top_tiles_url = self.top_tiles['url']
-        self.top_tiles_zoom_start = self.top_tiles['zoom-start']
-        self.top_tiles_zoom_until = self.top_tiles['zoom-until']
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
@@ -74,18 +79,22 @@ def default_yml_config():
             }
         },
         'tiles': {
-            'metro-extract': {
-                'url': None,
-                'zoom-filter': 0,
+            'seed': {
+                'all': {
+                    'zoom-start': None,
+                    'zoom-until': None,
+                },
+                'metro-extract': {
+                    'url': None,
+                    'zoom-start': None,
+                    'zoom-until': None,
+                },
+                'top-tiles': {
+                    'url': None,
+                    'zoom-start': None,
+                    'zoom-until': None,
+                },
             },
-            'top-tiles': {
-                'url': None,
-                'zoom-start': 0,
-                'zoom-until': 0
-            },
-            'unique': False,
-            'zoom-start': 0,
-            'zoom-until': 0,
             'explode-until': 0,
             'expired-location': None,
         },

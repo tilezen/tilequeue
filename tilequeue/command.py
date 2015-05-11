@@ -112,46 +112,38 @@ def make_logger(cfg, logger_name):
 
 
 def make_seed_tile_generator(cfg):
-    if cfg.metro_extract_url:
-        assert cfg.filter_metro_zoom is not None, \
-            '--filter-metro-zoom is required when specifying a ' \
-            'metro extract url'
-        assert cfg.filter_metro_zoom <= cfg.zoom_until
-        with closing(urlopen(cfg.metro_extract_url)) as fp:
+    if cfg.seed_all_zoom_start is not None:
+        assert cfg.seed_all_zoom_until is not None
+        all_tiles = seed_tiles(cfg.seed_all_zoom_start,
+                               cfg.seed_all_zoom_until)
+    else:
+        all_tiles = ()
+
+    if cfg.seed_metro_extract_url:
+        assert cfg.seed_metro_extract_zoom_start is not None
+        assert cfg.seed_metro_extract_zoom_until is not None
+        with closing(urlopen(cfg.seed_metro_extract_url)) as fp:
             # will raise a MetroExtractParseError on failure
             metro_extracts = parse_metro_extract(fp)
         multiple_bounds = city_bounds(metro_extracts)
-        filtered_tiles = tile_generator_for_multiple_bounds(
-            multiple_bounds, cfg.filter_metro_zoom, cfg.zoom_until)
-        # unique tiles will force storing a set in memory
-        if cfg.unique_tiles:
-            filtered_tiles = uniquify_generator(filtered_tiles)
-        unfiltered_end_zoom = cfg.filter_metro_zoom - 1
+        metro_extract_tiles = tile_generator_for_multiple_bounds(
+            multiple_bounds, cfg.seed_metro_extract_zoom_start,
+            cfg.seed_metro_extract_zoom_until)
     else:
-        assert not cfg.filter_metro_zoom, \
-            '--metro-extract-url is required when specifying ' \
-            '--filter-metro-zoom'
-        filtered_tiles = ()
-        unfiltered_end_zoom = cfg.zoom_until
+        metro_extract_tiles = ()
 
-    if cfg.top_tiles_url:
-        assert cfg.top_tiles_zoom_start, 'Missing top tiles zoom start'
-        assert cfg.top_tiles_zoom_until, 'Missing top tiles zoom until'
-        with closing(urlopen(cfg.top_tiles_url)) as fp:
+    if cfg.seed_top_tiles_url:
+        assert cfg.seed_top_tiles_zoom_start is not None
+        assert cfg.seed_top_tiles_zoom_until is not None
+        with closing(urlopen(cfg.seed_top_tiles_url)) as fp:
             top_tiles = parse_top_tiles(
-                fp, cfg.top_tiles_zoom_start, cfg.top_tiles_zoom_until)
+                fp, cfg.seed_top_tiles_zoom_start,
+                cfg.seed_top_tiles_zoom_until)
     else:
         top_tiles = ()
 
-    assert cfg.zoom_start <= unfiltered_end_zoom
-
-    unfiltered_tiles = seed_tiles(cfg.zoom_start, unfiltered_end_zoom)
-
-    dynamic_tiles = chain(filtered_tiles, top_tiles)
-    if cfg.unique_tiles:
-        dynamic_tiles = uniquify_generator(dynamic_tiles)
-
-    tile_generator = chain(unfiltered_tiles, dynamic_tiles)
+    combined_tiles = chain(all_tiles, metro_extract_tiles, top_tiles)
+    tile_generator = uniquify_generator(combined_tiles)
 
     return tile_generator
 
