@@ -21,6 +21,7 @@ tiles:
       url: https://gist.github.com/brunosan/b7ce3df8b48229a61b5b/raw/37e42e77f253bc204076111c92acc4d5e653edd2/top_50k_tiles.csv
       zoom-start: 11
       zoom-until: 20
+    should-add-to-tiles-of-interest: true
   explode-until: 0
   expired-location: <path/to/expired/tiles/list>
 process:

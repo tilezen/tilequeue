@@ -35,6 +35,9 @@ class Configuration(object):
         self.seed_top_tiles_zoom_start = seed_top_tiles_cfg['zoom-start']
         self.seed_top_tiles_zoom_until = seed_top_tiles_cfg['zoom-until']
 
+        self.seed_should_add_to_tiles_of_interest = \
+            seed_cfg['should-add-to-tiles-of-interest']
+
         self.logconfig = self._cfg('logging config')
         self.redis_host = self._cfg('redis host')
         self.redis_port = self._cfg('redis port')
@@ -94,6 +97,7 @@ def default_yml_config():
                     'zoom-start': None,
                     'zoom-until': None,
                 },
+                'should-add-to-tiles-of-interest': True,
             },
             'explode-until': 0,
             'expired-location': None,

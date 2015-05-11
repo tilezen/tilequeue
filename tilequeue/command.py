@@ -568,23 +568,28 @@ def tilequeue_seed(cfg, peripherals):
 
     logger = make_logger(cfg, 'seed')
     logger.info('Sqs ... ')
-    logger.info('Tiles of interest ...')
+    if cfg.seed_should_add_to_tiles_of_interest:
+        logger.info('Tiles of interest ...')
 
     for thread_sqs in sqs_threads:
         thread_sqs.start()
-    thread_redis.start()
+    if cfg.seed_should_add_to_tiles_of_interest:
+        thread_redis.start()
 
     for tile in tile_generator:
         queue_sqs_coords.put(tile)
-        queue_redis_coords.put(tile)
+        if cfg.seed_should_add_to_tiles_of_interest:
+            queue_redis_coords.put(tile)
 
     # None is sentinel value
     for i in range(n_sqs_threads):
         queue_sqs_coords.put(None)
-    queue_redis_coords.put(None)
+    if cfg.seed_should_add_to_tiles_of_interest:
+        queue_redis_coords.put(None)
 
-    thread_redis.join()
-    logger.info('Tiles of interest ... done')
+    if cfg.seed_should_add_to_tiles_of_interest:
+        thread_redis.join()
+        logger.info('Tiles of interest ... done')
     for thread_sqs in sqs_threads:
         thread_sqs.join()
     logger.info('Sqs ... done')
