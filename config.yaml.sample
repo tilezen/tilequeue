@@ -20,7 +20,6 @@ tiles:
   zoom-start: 0
   zoom-until: 20
   explode-until: 0
-  daemon: false
   expired-location: <path/to/expired/tiles/list>
 process:
   n-simultaneous-query-sets: 1

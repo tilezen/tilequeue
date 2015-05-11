@@ -25,7 +25,6 @@ class Configuration(object):
         self.unique_tiles = self._cfg('tiles unique')
         self.filter_metro_zoom = self._cfg('tiles metro-extract zoom-filter')
         self.metro_extract_url = self._cfg('tiles metro-extract url')
-        self.daemon = self._cfg('tiles daemon')
         self.logconfig = self._cfg('logging config')
         self.redis_host = self._cfg('redis host')
         self.redis_port = self._cfg('redis port')
@@ -88,7 +87,6 @@ def default_yml_config():
             'zoom-start': 0,
             'zoom-until': 0,
             'explode-until': 0,
-            'daemon': False,
             'expired-location': None,
         },
         'process': {
