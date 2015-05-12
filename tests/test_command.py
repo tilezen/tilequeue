@@ -119,3 +119,24 @@ class TestUniquifyGenerator(unittest.TestCase):
             tilequeue_intersect(cfg_mock, periperals_mock)
         self.assertIn(c0, self.enqueued_list)
         self.assertIn(c1, self.enqueued_list)
+
+    def test_tilequeue_explode_and_intersect(self):
+        from tilequeue.command import explode_and_intersect
+        from tilequeue.tile import coord_marshall_int
+        from tilequeue.tile import coord_unmarshall_int
+        from ModestMaps.Core import Coordinate
+        sample_coord = Coordinate(zoom=14, column=250, row=250)
+        sample_coord_int = coord_marshall_int(sample_coord)
+        tiles_of_interest = [sample_coord_int]
+        for i in (10, 11, 12, 13):
+            coord = sample_coord.zoomTo(i)
+            coord_int = coord_marshall_int(coord)
+            tiles_of_interest.append(coord_int)
+        exploded = explode_and_intersect([sample_coord_int], tiles_of_interest,
+                                         until=11)
+        coord_ints = list(exploded)
+        for coord_int in coord_ints:
+            coord = coord_unmarshall_int(coord_int)
+            self.failUnless(coord.zoom > 10)
+
+        self.assertEqual(4, len(coord_ints))
