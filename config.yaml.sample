@@ -22,8 +22,9 @@ tiles:
       zoom-start: 11
       zoom-until: 20
     should-add-to-tiles-of-interest: true
-  explode-until: 0
-  expired-location: <path/to/expired/tiles/list>
+  intersect:
+    expired-location: <path/to/expired/tiles/list>
+    parent-zoom-until: 0
 process:
   n-simultaneous-query-sets: 1
   log-queue-sizes: false

@@ -190,12 +190,12 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info("Intersecting expired tiles with tiles of interest")
     sqs_queue = peripherals.queue
 
-    assert cfg.expired_tiles_location, \
+    assert cfg.intersect_expired_tiles_location, \
         'Missing tiles expired-location configuration'
-    assert os.path.isdir(cfg.expired_tiles_location), \
+    assert os.path.isdir(cfg.intersect_expired_tiles_location), \
         'tiles expired-location is not a directory'
 
-    file_names = os.listdir(cfg.expired_tiles_location)
+    file_names = os.listdir(cfg.intersect_expired_tiles_location)
     if not file_names:
         logger.info('No expired tiles found, terminating.')
         return
@@ -205,7 +205,7 @@ def tilequeue_intersect(cfg, peripherals):
     # along more consistently rather than bursts
     expired_tile_files_cap = 20
     file_names = file_names[:expired_tile_files_cap]
-    expired_tile_paths = [os.path.join(cfg.expired_tiles_location, x)
+    expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
                           for x in file_names]
 
     logger.info('Fetching tiles of interest ...')
@@ -265,7 +265,8 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Unique expired tiles read to process: %d' %
                 len(all_coord_ints_set))
     for coord_int in explode_and_intersect(
-            all_coord_ints_set, tiles_of_interest, until=cfg.explode_until):
+            all_coord_ints_set, tiles_of_interest,
+            until=cfg.intersect_zoom_until):
         coord = coord_unmarshall_int(coord_int)
         thread_queue.put(coord)
 

@@ -18,7 +18,6 @@ class Configuration(object):
         self.s3_reduced_redundancy = self._cfg('aws s3 reduced-redundancy')
         self.s3_path = self._cfg('aws s3 path')
         self.tilestache_config = self._cfg('tilestache config')
-        self.expired_tiles_location = self.yml['tiles']['expired-location']
         self.output_formats = self._cfg('tilestache formats')
 
         seed_cfg = self.yml['tiles']['seed']
@@ -38,12 +37,16 @@ class Configuration(object):
         self.seed_should_add_to_tiles_of_interest = \
             seed_cfg['should-add-to-tiles-of-interest']
 
+        intersect_cfg = self.yml['tiles']['intersect']
+        self.intersect_expired_tiles_location = (
+            intersect_cfg['expired-location'])
+        self.intersect_zoom_until = intersect_cfg['parent-zoom-until']
+
         self.logconfig = self._cfg('logging config')
         self.redis_host = self._cfg('redis host')
         self.redis_port = self._cfg('redis port')
         self.redis_db = self._cfg('redis db')
         self.redis_cache_set_key = self._cfg('redis cache-set-key')
-        self.explode_until = self._cfg('tiles explode-until')
         self.n_simultaneous_query_sets = \
             self.yml['process']['n-simultaneous-query-sets']
         self.log_queue_sizes = self.yml['process']['log-queue-sizes']
@@ -99,8 +102,10 @@ def default_yml_config():
                 },
                 'should-add-to-tiles-of-interest': True,
             },
-            'explode-until': 0,
-            'expired-location': None,
+            'intersect': {
+                'expired-location': None,
+                'parent-zoom-until': None,
+            },
         },
         'process': {
             'n-simultaneous-query-sets': 0,
