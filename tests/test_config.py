@@ -73,8 +73,8 @@ class TestCliConfiguration(unittest.TestCase):
         self._assert_cfg(cfg,
                          dict(s3_path='osm',
                               output_formats=('json', 'vtm'),
-                              zoom_start=0,
-                              zoom_until=0))
+                              seed_all_zoom_start=None,
+                              seed_all_zoom_until=None))
 
     def test_config_osm_path_modified(self):
         cfg = self._call_fut(
@@ -83,5 +83,5 @@ class TestCliConfiguration(unittest.TestCase):
         self._assert_cfg(cfg,
                          dict(s3_path='custompath',
                               output_formats=('json', 'vtm'),
-                              zoom_start=0,
-                              zoom_until=0))
+                              seed_all_zoom_start=None,
+                              seed_all_zoom_until=None))

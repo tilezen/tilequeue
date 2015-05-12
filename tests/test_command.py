@@ -55,7 +55,7 @@ class TestUniquifyGenerator(unittest.TestCase):
             expected_file = os.path.join(expired_tiles_location,
                                          'expire_list.txt')
             shutil.copy2(sample_file, expected_file)
-            cfg_mock.expired_tiles_location = expired_tiles_location
+            cfg_mock.intersect_expired_tiles_location = expired_tiles_location
             cfg_mock.logconfig = None
             self.assertTrue(os.path.isfile(expected_file))
             tilequeue_intersect(cfg_mock, periperals_mock)
@@ -83,7 +83,7 @@ class TestUniquifyGenerator(unittest.TestCase):
                                          'expire_list.txt')
             with open(expected_file, "w+") as fp:
                 fp.write(serialize_coord(c0) + "\n" + serialize_coord(c1))
-            cfg_mock.expired_tiles_location = expired_tiles_location
+            cfg_mock.intersect_expired_tiles_location = expired_tiles_location
             cfg_mock.logconfig = None
             tilequeue_intersect(cfg_mock, periperals_mock)
         self.assertNotIn(c0, self.enqueued_list)
@@ -114,7 +114,7 @@ class TestUniquifyGenerator(unittest.TestCase):
                                          'expire_list.txt')
             with open(expected_file, "w+") as fp:
                 fp.write('\n'.join(map(serialize_coord, coords)))
-            cfg_mock.expired_tiles_location = expired_tiles_location
+            cfg_mock.intersect_expired_tiles_location = expired_tiles_location
             cfg_mock.logconfig = None
             tilequeue_intersect(cfg_mock, periperals_mock)
         self.assertIn(c0, self.enqueued_list)
