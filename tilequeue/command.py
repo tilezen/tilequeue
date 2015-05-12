@@ -224,23 +224,19 @@ def tilequeue_intersect(cfg, peripherals):
     def enqueue_coords():
         buf = []
         buf_size = 10
-
-        def _enqueue():
-            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-            with lock:
-                totals['enqueued'] += n_queued
-                totals['in_flight'] += n_in_flight
-
-        while True:
+        done = False
+        while not done:
             coord = thread_queue.get()
             if coord is None:
-                break
-            buf.append(coord)
-            if len(buf) >= buf_size:
-                _enqueue()
+                done = True
+            else:
+                buf.append(coord)
+            if len(buf) >= buf_size or (done and buf):
+                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+                with lock:
+                    totals['enqueued'] += n_queued
+                    totals['in_flight'] += n_in_flight
                 del buf[:]
-        if buf:
-            _enqueue()
 
     # clamp number of threads between 5 and 20
     n_threads = max(min(len(expired_tile_paths), 20), 5)
@@ -620,23 +616,19 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     def enqueue_coords_thread():
         buf = []
         buf_size = 10
-
-        def _enqueue():
-            n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-            with lock:
-                totals['enqueued'] += n_queued
-                totals['in_flight'] += n_in_flight
-
-        while True:
+        done = False
+        while not done:
             coord = thread_queue.get()
             if coord is None:
-                break
-            buf.append(coord)
-            if len(buf) >= buf_size:
-                _enqueue()
+                done = True
+            else:
+                buf.append(coord)
+            if len(buf) >= buf_size or (done and buf):
+                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
+                with lock:
+                    totals['enqueued'] += n_queued
+                    totals['in_flight'] += n_in_flight
                 del buf[:]
-        if buf:
-            _enqueue()
 
     logger.info('Starting %d enqueueing threads ...' % n_threads)
     threads = []
