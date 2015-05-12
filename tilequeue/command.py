@@ -541,6 +541,7 @@ def queue_generator(queue):
 
 
 def tilequeue_seed(cfg, peripherals):
+    logger.info('Seeding tiles ...')
     queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
     tile_generator = make_seed_tile_generator(cfg)
 
@@ -577,7 +578,9 @@ def tilequeue_seed(cfg, peripherals):
     if cfg.seed_should_add_to_tiles_of_interest:
         thread_redis.start()
 
+    n_tiles = 0
     for tile in tile_generator:
+        n_tiles += 1
         queue_sqs_coords.put(tile)
         if cfg.seed_should_add_to_tiles_of_interest:
             queue_redis_coords.put(tile)
@@ -594,6 +597,8 @@ def tilequeue_seed(cfg, peripherals):
     for thread_sqs in sqs_threads:
         thread_sqs.join()
     logger.info('Sqs ... done')
+    logger.info('Seeding tiles ... done')
+    logger.info('%d tiles enqueued' % n_tiles)
 
 
 def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
