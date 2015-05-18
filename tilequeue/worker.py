@@ -305,8 +305,15 @@ class SqsQueueWriter(object):
 
             metadata = data['metadata']
             sqs_handle = metadata['sqs_handle']
+            coord = data['coord']
 
-            self.sqs_queue.job_done(sqs_handle)
+            try:
+                self.sqs_queue.job_done(sqs_handle)
+            except:
+                stacktrace = format_stacktrace_one_line()
+                self.logger.error('Error acknowledging: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
+                continue
 
             timing = metadata['timing']
             sqs_timestamp_millis = float(
@@ -314,16 +321,13 @@ class SqsQueueWriter(object):
             sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
             time_in_queue = time.time() - sqs_timestamp_seconds
 
-            coord = data['coord']
-            coord_str = serialize_coord(coord)
-
             self.logger.info(
                 '%s '
                 'fetch(%.2fs) '
                 'process(%.2fs) '
                 'upload(%.2fs) '
                 'sqs(%.2fs) ' % (
-                    coord_str,
+                    serialize_coord(coord),
                     timing['fetch_seconds'],
                     timing['process_seconds'],
                     timing['s3_seconds'],
