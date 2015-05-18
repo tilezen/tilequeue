@@ -37,6 +37,9 @@ def process_coord(coord, feature_layers, formats, unpadded_bounds,
             if shape.is_empty:
                 continue
 
+            if not shape.is_valid:
+                continue
+
             if geometry_types is not None:
                 if shape.type not in geometry_types:
                     continue
