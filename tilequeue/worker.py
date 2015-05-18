@@ -129,7 +129,8 @@ class DataFetch(object):
                     log_level = logging.WARNING
                 else:
                     log_level = logging.ERROR
-                self.logger.log(log_level, stacktrace)
+                self.logger.log(log_level, 'Error fetching: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
                 continue
 
             metadata = data['metadata']
@@ -190,7 +191,8 @@ class ProcessAndFormatData(object):
                     unpadded_bounds, padded_bounds)
             except:
                 stacktrace = format_stacktrace_one_line()
-                self.logger.error(stacktrace)
+                self.logger.error('Error processing: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
                 continue
 
             metadata = data['metadata']
@@ -261,7 +263,8 @@ class S3Storage(object):
 
             if async_exc_info:
                 stacktrace = format_stacktrace_one_line(async_exc_info)
-                self.logger.error(stacktrace)
+                self.logger.error('Error storing: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
                 continue
 
             metadata = data['metadata']
