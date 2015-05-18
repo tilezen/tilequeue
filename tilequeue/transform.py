@@ -4,8 +4,8 @@ from tilequeue.format import json_format
 from tilequeue.format import mvt_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
+from tilequeue.tile import tolerance_for_zoom
 from TileStache.Goodies.VecTiles.ops import transform
-from TileStache.Goodies.VecTiles.server import tolerances
 import math
 
 
@@ -76,7 +76,7 @@ def transform_feature_layers_shape(feature_layers, format, scale,
 
         for shape, props, feature_id in features:
             # perform any simplification as necessary
-            tolerance = tolerances[coord.zoom]
+            tolerance = tolerance_for_zoom(coord.zoom)
             simplify_until = layer_datum['simplify_until']
             suppress_simplification = layer_datum['suppress_simplification']
             should_simplify = coord.zoom not in suppress_simplification and \

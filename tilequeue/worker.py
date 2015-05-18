@@ -1,6 +1,8 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
+from tilequeue.tile import coord_children
+from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
@@ -102,10 +104,13 @@ class SqsQueueReader(object):
 
 class DataFetch(object):
 
-    def __init__(self, fetcher, input_queue, output_queue, logger):
+    def __init__(self, fetcher, input_queue, output_queue, io_pool,
+                 redis_cache_index, logger):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
+        self.io_pool = io_pool
+        self.redis_cache_index = redis_cache_index
         self.logger = logger
 
     def __call__(self, stop):
@@ -140,12 +145,52 @@ class DataFetch(object):
             metadata = data['metadata']
             metadata['timing']['fetch_seconds'] = time.time() - start
 
+            # if we are at zoom level 18, it will serve as a metatile
+            # to derive the tiles underneath it
+            cut_coords = None
+            if coord.zoom == 18:
+                cut_coords = []
+                cut_zooms = (19, 20)
+                async_jobs = []
+                # ask redis if there are any tiles underneath in the
+                # tiles of interest set
+                rci = self.redis_cache_index
+                async_fn = rci.is_coord_int_in_tiles_of_interest
+                children_to_process = [coord]
+                for cut_zoom in cut_zooms:
+                    next_children = []
+                    for child_to_process in children_to_process:
+                        children = coord_children(child_to_process)
+                        for child in children:
+                            zoomed_coord_int = coord_marshall_int(child)
+                            async_result = self.io_pool.apply_async(
+                                async_fn, (zoomed_coord_int,))
+                            async_jobs.append((child, async_result))
+                            next_children.append(child)
+                    children_to_process = next_children
+
+                async_exc_info = None
+                for async_job in async_jobs:
+                    zoomed_coord, async_result = async_job
+                    try:
+                        is_coord_in_tiles_of_interest = async_result.get()
+                    except:
+                        async_exc_info = sys.exc_info()
+                        stacktrace = format_stacktrace_one_line(async_exc_info)
+                        self.logger.error(stacktrace)
+                    else:
+                        if is_coord_in_tiles_of_interest:
+                            cut_coords.append(zoomed_coord)
+                if async_exc_info:
+                    continue
+
             data = dict(
                 metadata=metadata,
                 coord=coord,
                 feature_layers=fetch_data['feature_layers'],
                 unpadded_bounds=fetch_data['unpadded_bounds'],
                 padded_bounds=fetch_data['padded_bounds'],
+                cut_coords=cut_coords,
             )
 
             while not _non_blocking_put(self.output_queue, data):
@@ -186,13 +231,14 @@ class ProcessAndFormatData(object):
             feature_layers = data['feature_layers']
             padded_bounds = data['padded_bounds']
             unpadded_bounds = data['unpadded_bounds']
+            cut_coords = data['cut_coords']
 
             start = time.time()
 
             try:
                 formatted_tiles = process_coord(
                     coord, feature_layers, self.formats,
-                    unpadded_bounds, padded_bounds)
+                    unpadded_bounds, padded_bounds, cut_coords)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
@@ -245,9 +291,14 @@ class S3Storage(object):
             for formatted_tile in data['formatted_tiles']:
 
                 async_result = self.io_pool.apply_async(
-                    self.store.write_tile,
-                    (formatted_tile['tile'], coord, formatted_tile['format'])
-                )
+                    self.store.write_tile, (
+                        formatted_tile['tile'],
+                        # important to use the coord from the
+                        # formatted tile here, because we could have
+                        # cut children tiles that have separate zooms
+                        # too
+                        formatted_tile['coord'],
+                        formatted_tile['format']))
                 async_jobs.append(async_result)
 
             async_exc_info = None

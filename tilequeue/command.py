@@ -418,7 +418,8 @@ def tilequeue_process(cfg, peripherals):
                                       thread_sqs_queue_reader_stop)
 
     data_fetch = DataFetch(
-        feature_fetcher, sqs_input_queue, sql_data_fetch_queue, logger)
+        feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
+        peripherals.redis_cache_index, logger)
 
     data_processor = ProcessAndFormatData(formats, sql_data_fetch_queue,
                                           processor_queue, logger)

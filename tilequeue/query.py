@@ -1,9 +1,9 @@
 from psycopg2.extras import RealDictCursor
 from threading import Lock
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
-from TileStache.Geography import SphericalMercator
+from tilequeue.tile import coord_to_mercator_bounds
+from tilequeue.tile import pad_bounds_for_zoom
 from TileStache.Goodies.VecTiles.server import query_columns
-from TileStache.Goodies.VecTiles.server import tolerances
 import sys
 
 
@@ -128,7 +128,6 @@ class DataFetcher(object):
     def __init__(self, conn_info, layer_data, io_pool, n_conn):
         self.conn_info = dict(conn_info)
         self.layer_data = layer_data
-        self.spherical_mercator = SphericalMercator()
         self.find_columns_for_queries = find_columns_for_queries
         self.io_pool = io_pool
 
@@ -138,25 +137,12 @@ class DataFetcher(object):
             self.dbnames, n_conn, self.conn_info)
 
     def __call__(self, coord):
-        ul = self.spherical_mercator.coordinateProj(coord)
-        lr = self.spherical_mercator.coordinateProj(coord.down().right())
-        minx = min(ul.x, lr.x)
-        miny = min(ul.y, lr.y)
-        maxx = max(ul.x, lr.x)
-        maxy = max(ul.y, lr.y)
-
         zoom = coord.zoom
-        tolerance = tolerances[zoom]
-        padding = 5 * tolerance
-
+        unpadded_bounds = coord_to_mercator_bounds(coord)
         # the vtm renderer needs features a little surrounding the
         # bounding box as well, these padded bounds are used in the
         # queries
-        padded_bounds = (
-            minx - padding, miny - padding,
-            maxx + padding, maxy + padding,
-        )
-        unpadded_bounds = minx, miny, maxx, maxy
+        padded_bounds = pad_bounds_for_zoom(unpadded_bounds, zoom)
 
         sql_conns, conn_info = self.sql_conn_pool.get_conns()
         try:

@@ -40,6 +40,9 @@ class RedisCacheIndex(object):
         if buf:
             self.redis_client.sadd(self.cache_set_key, *buf)
 
+    def is_coord_int_in_tiles_of_interest(self, coord_int):
+        return self.redis_client.sismember(self.cache_set_key, coord_int)
+
     def write_coords_redis_protocol(self, out, set_key, coords):
         # coords is expected to be an iterable of coord objects
         # this is meant to be called with out sent to stdout and then piped to
