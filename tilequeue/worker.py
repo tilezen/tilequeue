@@ -82,6 +82,7 @@ class SqsQueueReader(object):
                         fetch_seconds=None,
                         process_seconds=None,
                         s3_seconds=None,
+                        ack_seconds=None,
                     ),
                     sqs_handle=msg.message_handle,
                 )
@@ -307,6 +308,7 @@ class SqsQueueWriter(object):
             sqs_handle = metadata['sqs_handle']
             coord = data['coord']
 
+            start = time.time()
             try:
                 self.sqs_queue.job_done(sqs_handle)
             except:
@@ -316,21 +318,26 @@ class SqsQueueWriter(object):
                 continue
 
             timing = metadata['timing']
+            now = time.time()
+            timing['ack_seconds'] = now - start
+
             sqs_timestamp_millis = float(
                 sqs_handle.attributes.get('SentTimestamp'))
             sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-            time_in_queue = time.time() - sqs_timestamp_seconds
+            time_in_queue = now - sqs_timestamp_seconds
 
             self.logger.info(
                 '%s '
                 'fetch(%.2fs) '
                 'process(%.2fs) '
                 'upload(%.2fs) '
+                'ack(%.2fs) '
                 'sqs(%.2fs) ' % (
                     serialize_coord(coord),
                     timing['fetch_seconds'],
                     timing['process_seconds'],
                     timing['s3_seconds'],
+                    timing['ack_seconds'],
                     time_in_queue,
                 ))
 
