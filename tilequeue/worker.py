@@ -12,7 +12,7 @@ import time
 
 # long enough to not fight with other threads, but not long enough
 # that it prevents a timely stop
-timeout_seconds = 2
+timeout_seconds = 5
 
 
 def _non_blocking_put(q, data):
