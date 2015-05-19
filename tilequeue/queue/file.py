@@ -23,9 +23,6 @@ class OutputFileQueue(object):
     def job_done(self, message):
         raise NotImplementedError
 
-    def jobs_done(self, messages):
-        raise NotImplementedError
-
     def clear(self):
         self.fp.truncate()
         return -1

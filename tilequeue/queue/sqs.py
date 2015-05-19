@@ -82,16 +82,6 @@ class SqsQueue(object):
         self.redis_client.srem(self.inflight_key, coord_int)
         self.sqs_queue.delete_message(message)
 
-    def jobs_done(self, messages):
-        coord_ints = []
-        for message in messages:
-            coord_str = message.get_body()
-            coord = deserialize_coord(coord_str)
-            coord_int = coord_marshall_int(coord)
-            coord_ints.append(coord_int)
-        self.redis_client.srem(self.inflight_key, *coord_ints)
-        self.sqs_queue.delete_message_batch(messages)
-
     def clear(self):
         self.redis_client.delete(self.inflight_key)
         n = 0

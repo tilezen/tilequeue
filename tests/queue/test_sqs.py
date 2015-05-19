@@ -110,22 +110,6 @@ class TestQueue(unittest.TestCase):
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,
                                                     exp_value)
 
-    def test_jobs_done_removes_tiles_from_in_flight(self):
-        from tilequeue.tile import coord_marshall_int
-        coords = [Coordinate(row=1, column=1, zoom=1),
-                  Coordinate(row=2, column=2, zoom=2)]
-
-        messages = []
-        for coord in coords:
-            payload = serialize_coord(coord)
-            message = RawMessage()
-            message.set_body(payload)
-            messages.append(message)
-        self.sqs.jobs_done(messages)
-        exp_values = map(coord_marshall_int, coords)
-        self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,
-                                                    *exp_values)
-
     def test_clear_removes_in_flight(self):
         self.mockQueue.get_messages = MagicMock(return_value=[])
         self.sqs.clear()
