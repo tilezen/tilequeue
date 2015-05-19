@@ -61,7 +61,8 @@ def build_query(srid, subquery, subcolumns, bounds):
               FROM (
                 %(subquery)s
                 ) AS q
-              WHERE q.__geometry__ && %(bbox)s''' % locals()
+              WHERE ST_IsValid(q.__geometry__) AND
+                    q.__geometry__ && %(bbox)s''' % locals()
 
 
 def build_feature_queries(bounds, layer_data, zoom, columns_for_queries):
