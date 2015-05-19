@@ -330,9 +330,9 @@ class SqsQueueWriter(object):
 
             self.logger.info(
                 '%s '
-                'fetch(%.2fs) '
-                'process(%.2fs) '
-                'upload(%.2fs) '
+                'data(%.2fs) '
+                'proc(%.2fs) '
+                's3(%.2fs) '
                 'ack(%.2fs) '
                 'sqs(%.2fs) ' % (
                     serialize_coord(coord),
