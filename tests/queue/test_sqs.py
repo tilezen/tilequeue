@@ -100,11 +100,13 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(exp_values, self.values)
 
     def test_job_done_removes_tile_from_in_flight(self):
+        from tilequeue.tile import CoordMessage
         coord = Coordinate(row=1, column=1, zoom=1)
         payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
-        self.sqs.job_done(message)
+        coord_message = CoordMessage(coord, message)
+        self.sqs.job_done(coord_message)
         from tilequeue.tile import coord_marshall_int
         exp_value = coord_marshall_int(coord)
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,

@@ -20,7 +20,7 @@ class OutputFileQueue(object):
     def read(self, max_to_read=1, timeout_seconds=20):
         raise NotImplementedError
 
-    def job_done(self, message):
+    def job_done(self, coord_message):
         raise NotImplementedError
 
     def clear(self):

@@ -1,6 +1,7 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
+from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
 import logging
@@ -307,10 +308,11 @@ class SqsQueueWriter(object):
             metadata = data['metadata']
             sqs_handle = metadata['sqs_handle']
             coord = data['coord']
+            coord_message = CoordMessage(coord, sqs_handle)
 
             start = time.time()
             try:
-                self.sqs_queue.job_done(sqs_handle)
+                self.sqs_queue.job_done(coord_message)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (

@@ -20,7 +20,7 @@ class MemoryQueue(object):
         self.q, coords = self.q[max_to_read:], self.q[:max_to_read]
         return [CoordMessage(coord, None) for coord in coords]
 
-    def job_done(self, message):
+    def job_done(self, coord_message):
         pass
 
     def clear(self):

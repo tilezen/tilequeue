@@ -75,12 +75,10 @@ class SqsQueue(object):
             coord_messages.append(coord_message)
         return coord_messages
 
-    def job_done(self, message):
-        coord_str = message.get_body()
-        coord = deserialize_coord(coord_str)
-        coord_int = coord_marshall_int(coord)
+    def job_done(self, coord_message):
+        coord_int = coord_marshall_int(coord_message.coord)
         self.redis_client.srem(self.inflight_key, coord_int)
-        self.sqs_queue.delete_message(message)
+        self.sqs_queue.delete_message(coord_message.message_handle)
 
     def clear(self):
         self.redis_client.delete(self.inflight_key)
