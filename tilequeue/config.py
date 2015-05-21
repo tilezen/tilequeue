@@ -110,7 +110,7 @@ def default_yml_config():
         'process': {
             'n-simultaneous-query-sets': 0,
             'log-queue-sizes': True,
-            'log-queue-sizes-interval-seconds': 1,
+            'log-queue-sizes-interval-seconds': 10,
         },
         'tilestache': {
             'config': None,
