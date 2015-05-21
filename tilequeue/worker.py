@@ -217,19 +217,17 @@ class ProcessAndFormatData(object):
 
 class S3Storage(object):
 
-    def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 stop):
+    def __init__(self, input_queue, output_queue, io_pool, store, logger):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
-        self.stop = stop
 
-    def __call__(self):
+    def __call__(self, stop):
         saw_sentinel = False
 
-        while not self.stop.is_set():
+        while not stop.is_set():
             try:
                 data = self.input_queue.get(timeout=timeout_seconds)
             except Queue.Empty:
@@ -278,7 +276,7 @@ class S3Storage(object):
             )
 
             while not _non_blocking_put(self.output_queue, data):
-                if self.stop.is_set():
+                if stop.is_set():
                     break
 
         if not saw_sentinel:

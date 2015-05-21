@@ -331,6 +331,7 @@ def tilequeue_process(cfg, peripherals):
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
+    n_cpu = multiprocessing.cpu_count()
     sqs_messages_per_batch = 10
     n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
     if not n_simultaneous_query_sets:
@@ -340,9 +341,18 @@ def tilequeue_process(cfg, peripherals):
     default_queue_buffer_size = 256
     n_layers = len(layer_data)
     n_formats = len(formats)
+    n_simultaneous_s3_storage = cfg.n_simultaneous_s3_storage
+    if not n_simultaneous_s3_storage:
+        n_simultaneous_s3_storage = max(n_cpu / 2, 1)
+    assert n_simultaneous_s3_storage > 0
 
     # thread pool used for queries and uploading to s3
-    io_pool = ThreadPool((n_layers * n_simultaneous_query_sets) + n_formats)
+    n_total_needed_query = n_layers * n_simultaneous_query_sets
+    n_total_needed_s3 = n_formats * n_simultaneous_s3_storage
+    n_total_needed = n_total_needed_query + n_total_needed_s3
+    n_max_io_workers = 50
+    n_io_workers = min(n_total_needed, n_max_io_workers)
+    io_pool = ThreadPool(n_io_workers)
 
     feature_fetcher = DataFetcher(cfg.postgresql_conn_info, layer_data,
                                   io_pool, n_layers)
@@ -375,9 +385,8 @@ def tilequeue_process(cfg, peripherals):
     data_processor = ProcessAndFormatData(formats, sql_data_fetch_queue,
                                           processor_queue, logger)
 
-    thread_s3_storage_stop = threading.Event()
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
-                           store, logger, thread_s3_storage_stop)
+                           store, logger)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
@@ -400,7 +409,7 @@ def tilequeue_process(cfg, peripherals):
         threads_data_fetch_stop.append(thread_data_fetch_stop)
 
     # create a data processor per cpu
-    n_data_processors = multiprocessing.cpu_count()
+    n_data_processors = n_cpu
     data_processors = []
     data_processors_stop = []
     for i in range(n_data_processors):
@@ -411,7 +420,14 @@ def tilequeue_process(cfg, peripherals):
         data_processors.append(process_data_processor)
         data_processors_stop.append(data_processor_stop)
 
-    thread_s3_storage = create_and_start_thread(s3_storage)
+    threads_s3_storage = []
+    threads_s3_storage_stop = []
+    for i in range(n_simultaneous_s3_storage):
+        thread_s3_storage_stop = threading.Event()
+        thread_s3_storage = create_and_start_thread(s3_storage,
+                                                    thread_s3_storage_stop)
+        threads_s3_storage.append(thread_s3_storage)
+        threads_s3_storage_stop.append(thread_s3_storage_stop)
 
     thread_sqs_writer = create_and_start_thread(sqs_queue_writer)
 
@@ -445,7 +461,8 @@ def tilequeue_process(cfg, peripherals):
             thread_data_fetch_stop.set()
         for data_processor_stop in data_processors_stop:
             data_processor_stop.set()
-        thread_s3_storage_stop.set()
+        for thread_s3_storage_stop in threads_s3_storage_stop:
+            thread_s3_storage_stop.set()
         thread_sqs_writer_stop.set()
         queue_printer_thread_stop.set()
 
@@ -478,11 +495,13 @@ def tilequeue_process(cfg, peripherals):
         for data_processor in data_processors:
             data_processor.join()
         logger.info('joining data processors ... done')
-        logger.info('enqueueing sentinel for s3 storage ...')
-        processor_queue.put(None)
-        logger.info('enqueueing sentinel for s3 storage ... done')
+        logger.info('enqueueing sentinels for s3 storage ...')
+        for i in range(len(threads_s3_storage)):
+            processor_queue.put(None)
+        logger.info('enqueueing sentinels for s3 storage ... done')
         logger.info('joining s3 storage ...')
-        thread_s3_storage.join()
+        for thread_s3_storage in threads_s3_storage:
+            thread_s3_storage.join()
         logger.info('joining s3 storage ... done')
         logger.info('enqueueing sentinel for sqs queue writer ...')
         s3_store_queue.put(None)

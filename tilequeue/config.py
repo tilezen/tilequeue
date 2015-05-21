@@ -49,6 +49,8 @@ class Configuration(object):
         self.redis_cache_set_key = self._cfg('redis cache-set-key')
         self.n_simultaneous_query_sets = \
             self.yml['process']['n-simultaneous-query-sets']
+        self.n_simultaneous_s3_storage = \
+            self.yml['process']['n-simultaneous-s3-storage']
         self.log_queue_sizes = self.yml['process']['log-queue-sizes']
         self.log_queue_sizes_interval_seconds = \
             self.yml['process']['log-queue-sizes-interval-seconds']
@@ -109,6 +111,7 @@ def default_yml_config():
         },
         'process': {
             'n-simultaneous-query-sets': 0,
+            'n-simultaneous-s3-storage': 0,
             'log-queue-sizes': True,
             'log-queue-sizes-interval-seconds': 10,
         },
