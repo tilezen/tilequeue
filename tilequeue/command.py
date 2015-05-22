@@ -41,7 +41,8 @@ import time
 
 def create_command_parser(fn):
     def create_parser_fn(parser):
-        parser.add_argument('--config')
+        parser.add_argument('--config', required=True,
+                            help='The path to the tilequeue config file.')
         parser.set_defaults(func=fn)
         return parser
     return create_parser_fn
@@ -907,6 +908,8 @@ def tilequeue_main(argv_args=None):
         parser_func(subparser)
 
     args = parser.parse_args(argv_args)
+    assert os.path.exists(args.config), \
+        'Config file {} does not exist!'.format(args.config)
     cfg = make_config_from_argparse(args.config)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
     peripherals = Peripherals(make_redis_cache_index(cfg),
