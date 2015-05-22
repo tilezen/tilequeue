@@ -18,14 +18,25 @@ class OutputFileQueue(object):
         return n, 0
 
     def read(self, max_to_read=1, timeout_seconds=20):
-        raise NotImplementedError
+        coords = []
+        for _ in range(max_to_read):
+            try:
+                coords.append(next(self.fp))
+            except StopIteration:
+                break
+
+        return coords
 
     def job_done(self, coord_message):
-        raise NotImplementedError
+        pass
 
     def clear(self):
+        self.fp.seek(0)
         self.fp.truncate()
         return -1
 
     def close(self):
+        remaining_queue = "".join([ln for ln in self.fp])
+        self.clear()
+        self.fp.write(remaining_queue)
         self.fp.close()
