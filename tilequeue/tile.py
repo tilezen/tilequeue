@@ -3,14 +3,17 @@ from ModestMaps.Core import Coordinate
 import math
 
 
+# TODO: use a namedtuple instead
 class CoordMessage(object):
 
-    def __init__(self, coord, message_handle):
+    def __init__(self, coord, message_handle, timestamp):
         self.coord = coord
         self.message_handle = message_handle
+        self.timestamp = timestamp
 
     def __repr__(self):
-        return 'CoordMessage(%s, %s)' % (self.coord, self.message_handle)
+        return 'CoordMessage(%s, %s, %s)' % (self.coord, self.message_handle,
+                                             self.timestamp)
 
 
 def serialize_coord(coord):
