@@ -86,6 +86,7 @@ class SqsQueueReader(object):
                         ack_seconds=None,
                     ),
                     sqs_handle=msg.message_handle,
+                    timestamp=msg.timestamp
                 )
                 data = dict(
                     metadata=metadata,
@@ -321,8 +322,7 @@ class SqsQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            sqs_timestamp_millis = float(
-                sqs_handle.attributes.get('SentTimestamp'))
+            sqs_timestamp_millis = metadata['timestamp']
             sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
             time_in_queue = now - sqs_timestamp_seconds
 
