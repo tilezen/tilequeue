@@ -1,10 +1,12 @@
+queue:
+  type: file
+  name: queue
+store:
+  type: directory
+  name: tiles
+  path: osm
+  reduced-redundancy: true
 aws:
-  sqs:
-    name: <queue name>
-  s3:
-    bucket: <name-of-bucket>
-    path: osm
-    reduced-redundancy: true
   credentials:
     aws_access_key_id: <aws_access_key_id>
     aws_secret_access_key: <aws_secret_access_key>

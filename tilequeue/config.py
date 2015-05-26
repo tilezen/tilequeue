@@ -12,11 +12,15 @@ class Configuration(object):
         self.aws_access_key_id = self._cfg('aws credentials aws_access_key_id')
         self.aws_secret_access_key = self._cfg('aws credentials '
                                                'aws_secret_access_key')
-        self.queue_name = self._cfg('aws sqs name')
-        self.queue_type = 'sqs'
-        self.s3_bucket = self._cfg('aws s3 bucket')
-        self.s3_reduced_redundancy = self._cfg('aws s3 reduced-redundancy')
-        self.s3_path = self._cfg('aws s3 path')
+
+        self.queue_name = self._cfg('queue name')
+        self.queue_type = self._cfg('queue type')
+
+        self.store_type = self._cfg('store type')
+        self.s3_bucket = self._cfg('store bucket')
+        self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
+        self.s3_path = self._cfg('store path')
+
         self.tilestache_config = self._cfg('tilestache config')
         self.output_formats = self._cfg('tilestache formats')
 
@@ -71,16 +75,17 @@ class Configuration(object):
 
 def default_yml_config():
     return {
+        'queue': {
+            'type': 'sqs',
+            'timeout-seconds': 20
+        },
+        'store': {
+            'type': 's3',
+            'bucket': None,
+            'path': 'osm',
+            'reduced-redundancy': False
+        },
         'aws': {
-            'sqs': {
-                'name': None,
-                'timeout-seconds': 20,
-            },
-            's3': {
-                'bucket': None,
-                'path': 'osm',
-                'reduced-redundancy': False,
-            },
             'credentials': {
                 'aws_access_key_id': None,
                 'aws_secret_access_key': None,
