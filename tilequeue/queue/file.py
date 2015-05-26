@@ -6,10 +6,10 @@ class OutputFileQueue(object):
 
     def __init__(self, fp):
         self.fp = fp
-        self._lock = threading.RLock()
+        self.lock = threading.RLock()
 
     def enqueue(self, coord):
-        with self._lock:
+        with self.lock:
             payload = serialize_coord(coord)
             self.fp.write(payload + '\n')
 
@@ -21,7 +21,7 @@ class OutputFileQueue(object):
         return n, 0
 
     def read(self, max_to_read=1, timeout_seconds=20):
-        with self._lock:
+        with self.lock:
             coords = []
             for _ in range(max_to_read):
                 try:
@@ -36,13 +36,13 @@ class OutputFileQueue(object):
         pass
 
     def clear(self):
-        with self._lock:
+        with self.lock:
             self.fp.seek(0)
             self.fp.truncate()
             return -1
 
     def close(self):
-        with self._lock:
+        with self.lock:
             remaining_queue = "".join([ln for ln in self.fp])
             self.clear()
             self.fp.write(remaining_queue)
