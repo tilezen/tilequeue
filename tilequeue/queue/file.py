@@ -43,7 +43,6 @@ class OutputFileQueue(object):
 
     def close(self):
         with self.lock:
-            remaining_queue = ''.join([ln for ln in self.fp])
             self.clear()
-            self.fp.write(remaining_queue)
+            self.fp.write(self.fp.read())
             self.fp.close()
