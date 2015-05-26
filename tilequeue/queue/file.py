@@ -1,14 +1,17 @@
-from tilequeue.tile import serialize_coord
+from tilequeue.tile import serialize_coord, deserialize_coord, CoordMessage
+import threading
 
 
 class OutputFileQueue(object):
 
     def __init__(self, fp):
         self.fp = fp
+        self.lock = threading.RLock()
 
     def enqueue(self, coord):
-        payload = serialize_coord(coord)
-        self.fp.write(payload + '\n')
+        with self.lock:
+            payload = serialize_coord(coord)
+            self.fp.write(payload + '\n')
 
     def enqueue_batch(self, coords):
         n = 0
@@ -18,12 +21,15 @@ class OutputFileQueue(object):
         return n, 0
 
     def read(self, max_to_read=1, timeout_seconds=20):
-        coords = []
-        for _ in range(max_to_read):
-            try:
-                coords.append(next(self.fp))
-            except StopIteration:
-                break
+        with self.lock:
+            coords = []
+            for _ in range(max_to_read):
+                try:
+                    coord = next(self.fp)
+                except StopIteration:
+                    break
+                coords.append(CoordMessage(deserialize_coord(coord),
+                                           None, None))
 
         return coords
 
@@ -31,12 +37,14 @@ class OutputFileQueue(object):
         pass
 
     def clear(self):
-        self.fp.seek(0)
-        self.fp.truncate()
-        return -1
+        with self.lock:
+            self.fp.seek(0)
+            self.fp.truncate()
+            return -1
 
     def close(self):
-        remaining_queue = "".join([ln for ln in self.fp])
-        self.clear()
-        self.fp.write(remaining_queue)
-        self.fp.close()
+        with self.lock:
+            remaining_queue = "".join([ln for ln in self.fp])
+            self.clear()
+            self.fp.write(remaining_queue)
+            self.fp.close()
