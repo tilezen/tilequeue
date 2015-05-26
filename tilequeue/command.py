@@ -465,7 +465,9 @@ def tilequeue_process(cfg, peripherals):
         for thread_s3_storage_stop in threads_s3_storage_stop:
             thread_s3_storage_stop.set()
         thread_sqs_writer_stop.set()
-        queue_printer_thread_stop.set()
+
+        if queue_printer_thread_stop:
+            queue_printer_thread_stop.set()
 
         logger.info('requesting all workers (threads and processes) stop ... '
                     'done')
