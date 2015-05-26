@@ -71,7 +71,8 @@ class SqsQueue(object):
             if coord is None:
                 # log?
                 continue
-            coord_message = CoordMessage(coord, message)
+            timestamp = sqs_handle.attributes.get('SentTimestamp')
+            coord_message = CoordMessage(coord, message, timestamp)
             coord_messages.append(coord_message)
         return coord_messages
 

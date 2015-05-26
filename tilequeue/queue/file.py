@@ -28,8 +28,7 @@ class OutputFileQueue(object):
                     coord = next(self.fp)
                 except StopIteration:
                     break
-                coords.append(CoordMessage(deserialize_coord(coord),
-                                           None, None))
+                coords.append(CoordMessage(deserialize_coord(coord), None))
 
         return coords
 

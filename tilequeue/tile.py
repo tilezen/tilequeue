@@ -6,7 +6,7 @@ import math
 # TODO: use a namedtuple instead
 class CoordMessage(object):
 
-    def __init__(self, coord, message_handle, timestamp):
+    def __init__(self, coord, message_handle, timestamp=None):
         self.coord = coord
         self.message_handle = message_handle
         self.timestamp = timestamp
