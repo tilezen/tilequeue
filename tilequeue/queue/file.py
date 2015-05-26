@@ -24,11 +24,11 @@ class OutputFileQueue(object):
         with self.lock:
             coords = []
             for _ in range(max_to_read):
-                try:
-                    coord = next(self.fp)
-                except StopIteration:
+                coord = self.fp.readline()
+                if coord:
+                    coords.append(CoordMessage(deserialize_coord(coord), None))
+                else:
                     break
-                coords.append(CoordMessage(deserialize_coord(coord), None))
 
         return coords
 
@@ -43,7 +43,7 @@ class OutputFileQueue(object):
 
     def close(self):
         with self.lock:
-            remaining_queue = "".join([ln for ln in self.fp])
+            remaining_queue = ''.join([ln for ln in self.fp])
             self.clear()
             self.fp.write(remaining_queue)
             self.fp.close()
