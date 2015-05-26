@@ -3,6 +3,15 @@ import threading
 
 
 class OutputFileQueue(object):
+    """
+    A local, file-based queue for storing the coordinates of tiles to render.
+    Can be used as a drop-in replacement for `tilequeue.queue.sqs.SqsQueue`.
+    Note that it doesn't support reading/writing from multiple `tilequeue`
+    instances; you *can* `seed` and `process` at the same time, but you *can't*
+    run more than one `seed` or `write` instance at the same time. This is
+    primarily meant for development/debugging, so adding multi-process locking
+    probably isn't worth the complexity.
+    """
 
     def __init__(self, fp):
         self.fp = fp
@@ -44,5 +53,8 @@ class OutputFileQueue(object):
     def close(self):
         with self.lock:
             self.clear()
+
+            # `self.fp` has already been advanced in `self.read()`, so
+            # `fp.read()` will return the remainder of the file.
             self.fp.write(self.fp.read())
             self.fp.close()
