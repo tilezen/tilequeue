@@ -9,7 +9,6 @@ from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
 from tilequeue.queue import get_sqs_queue
-from tilequeue.store import make_s3_store
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
@@ -85,10 +84,22 @@ def make_queue(queue_type, queue_name, cfg):
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
     elif queue_type == 'file':
-        # only support file queues for writing
-        # useful for testing
         from tilequeue.queue import OutputFileQueue
-        fp = open(queue_name, 'w')
+        if os.path.exists(queue_name):
+            assert os.path.isfile(queue_name), \
+                'Could not create file queue. `./{}` is not a file!'.format(
+                    queue_name)
+        else:
+            # Create the file.
+            with open(queue_name, 'w'):
+                pass
+
+        # The mode here is important: if `tilequeue seed` is being run, then
+        # new tile coordinates will get appended to the queue file due to the
+        # `a`. Otherwise, if it's something like `tilequeue process`,
+        # coordinates will be read from the beginning of the file thanks to the
+        # `+`.
+        fp = open(queue_name, 'a+')
         return OutputFileQueue(fp)
     elif queue_type == 'stdout':
         # only support writing
@@ -311,6 +322,19 @@ def parse_layer_data(tilestache_config):
         layer_data.append(layer_datum)
     return layer_data
 
+def make_store(store_type, store_name, cfg):
+    if store_type == 'directory':
+        from tilequeue.store import make_tile_file_store
+        return make_tile_file_store(store_name)
+
+    elif store_type == 's3':
+        from tilequeue.store import make_s3_store
+        return make_s3_store(
+            cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
+            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
+
+    else:
+        raise ValueError('Unrecognized store type: `{}`'.format(store_type))
 
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
@@ -326,9 +350,7 @@ def tilequeue_process(cfg, peripherals):
     tilestache_config = parseConfigfile(cfg.tilestache_config)
     layer_data = parse_layer_data(tilestache_config)
 
-    store = make_s3_store(
-        cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
-        path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
