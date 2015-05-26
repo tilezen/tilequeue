@@ -76,6 +76,7 @@ class Configuration(object):
 def default_yml_config():
     return {
         'queue': {
+            'name': None,
             'type': 'sqs',
             'timeout-seconds': 20
         },
