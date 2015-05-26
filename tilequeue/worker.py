@@ -96,6 +96,7 @@ class SqsQueueReader(object):
                     if self.stop.is_set():
                         break
 
+        self.sqs_queue.close()
         self.logger.debug('sqs queue reader stopped')
 
 
