@@ -150,7 +150,7 @@ def make_seed_tile_generator(cfg):
 
 
 def tilequeue_drain(cfg, peripherals):
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    queue = peripherals.queue
     logger = make_logger(cfg, 'drain')
     logger.info('Draining queue ...')
     n = queue.clear()
@@ -321,7 +321,7 @@ def tilequeue_process(cfg, peripherals):
 
     formats = lookup_formats(cfg.output_formats)
 
-    sqs_queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    sqs_queue = peripherals.queue
 
     tilestache_config = parseConfigfile(cfg.tilestache_config)
     layer_data = parse_layer_data(tilestache_config)
@@ -561,7 +561,7 @@ def queue_generator(queue):
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
-    queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    queue = peripherals.queue
     tile_generator = make_seed_tile_generator(cfg)
 
     # updating sqs and updating redis happen in background threads
@@ -623,7 +623,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'enqueue_tiles_of_interest')
     logger.info('Enqueueing tiles of interest')
 
-    sqs_queue = make_queue(cfg.queue_type, cfg.queue_name, cfg)
+    sqs_queue = peripherals.queue
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
     logger.info('Fetching tiles of interest ... done')
