@@ -3,7 +3,6 @@
 from boto import connect_s3
 from boto.s3.bucket import Bucket
 from TileStache.S3 import tile_key
-import sys
 import os
 
 

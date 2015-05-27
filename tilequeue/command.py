@@ -322,6 +322,7 @@ def parse_layer_data(tilestache_config):
         layer_data.append(layer_datum)
     return layer_data
 
+
 def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
@@ -335,6 +336,7 @@ def make_store(store_type, store_name, cfg):
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
+
 
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
