@@ -2,9 +2,9 @@ from yaml import load
 
 
 class Configuration(object):
-    """
+    '''
     Flatten configuration from yaml
-    """
+    '''
 
     def __init__(self, yml):
         self.yml = yml

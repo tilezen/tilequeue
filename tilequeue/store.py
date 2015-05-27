@@ -35,9 +35,9 @@ class StubLayer(object):
 
 
 class TileDirectory(object):
-    """
+    '''
     Writes tiles to individual files in a local directory.
-    """
+    '''
 
     def __init__(self, dir_path):
         if os.path.exists(dir_path):
@@ -59,7 +59,7 @@ class TileDirectory(object):
 
 def make_tile_file_store(dir_path=None):
     if dir_path is None:
-        dir_path = "tiles"
+        dir_path = 'tiles'
     return TileDirectory(dir_path)
 
 
