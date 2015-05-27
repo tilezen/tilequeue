@@ -8,6 +8,7 @@ from ModestMaps.Core import Coordinate
 import unittest
 import StringIO
 
+
 class TestQueue(unittest.TestCase):
 
     def setUp(self):

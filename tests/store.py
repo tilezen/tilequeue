@@ -8,6 +8,7 @@ from tilequeue import format
 from ModestMaps.Core import Coordinate
 import os
 
+
 class TestTileDirectory(unittest.TestCase):
 
     def test_write_tile(self):
