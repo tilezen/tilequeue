@@ -17,7 +17,7 @@ class Configuration(object):
         self.queue_type = self._cfg('queue type')
 
         self.store_type = self._cfg('store type')
-        self.s3_bucket = self._cfg('store bucket')
+        self.s3_bucket = self._cfg('store name')
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
 
@@ -82,7 +82,7 @@ def default_yml_config():
         },
         'store': {
             'type': 's3',
-            'bucket': None,
+            'name': None,
             'path': 'osm',
             'reduced-redundancy': False
         },
