@@ -89,10 +89,6 @@ def make_queue(queue_type, queue_name, cfg):
             assert os.path.isfile(queue_name), \
                 'Could not create file queue. `./{}` is not a file!'.format(
                     queue_name)
-        else:
-            # Create the file.
-            with open(queue_name, 'w'):
-                pass
 
         # The mode here is important: if `tilequeue seed` is being run, then
         # new tile coordinates will get appended to the queue file due to the
