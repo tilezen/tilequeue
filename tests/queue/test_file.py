@@ -28,7 +28,7 @@ class TestQueue(unittest.TestCase):
         self.queue = OutputFileQueue(self.tiles_fp)
 
     def test_read(self):
-        self._write_tiles_to_file()
+        self._write_str_to_file(self.tile_coords_str)
 
         # Test `.read() for multiple records.`
         num_to_read = 3
@@ -64,7 +64,7 @@ class TestQueue(unittest.TestCase):
             'Contents of file do not match expected')
 
     def test_clear(self):
-        self._write_tiles_to_file()
+        self._write_str_to_file(self.tile_coords_str)
         self.assertEqual(
             self.queue.clear(), -1,
             'Return value of `clear()` does not match expected.')
@@ -79,6 +79,6 @@ class TestQueue(unittest.TestCase):
         self.queue.close()
         self.assertTrue(self.tiles_fp.closed, 'File pointer was not closed!')
 
-    def _write_tiles_to_file(self):
-        self.tiles_fp.write(self.tile_coords_str)
+    def _write_str_to_file(self, string):
+        self.tiles_fp.write(string)
         self.tiles_fp.seek(0)
