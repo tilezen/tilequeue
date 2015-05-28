@@ -7,21 +7,23 @@ from tilequeue import store
 from tilequeue import format
 from ModestMaps.Core import Coordinate
 import os
+import tempfile
 
 
 class TestTileDirectory(unittest.TestCase):
 
+    def setUp(self):
+        self.dir_path = tempfile.mkdtemp()
+
+    def tearDown(self):
+        os.rmdir(self.dir_path)
+
     def test_write_tile(self):
-        dir_path = 'tests/fixtures/tiles_dir'
 
         # Verify that the `TileDirectory` directory gets created.
-        self.assertFalse(
-            os.path.exists(dir_path),
-            'The directory path used for testing `TileDirectory` already '
-            'exists, but it shouldn\'t')
-        tile_dir = store.TileDirectory(dir_path)
+        tile_dir = store.TileDirectory(self.dir_path)
         self.assertTrue(
-            os.path.isdir(dir_path),
+            os.path.isdir(self.dir_path),
             'The directory path passed to `TileDirectory()` wasn\'t created '
             'during initialization')
 
@@ -39,7 +41,7 @@ class TestTileDirectory(unittest.TestCase):
 
             expected_filename = '{0}-{1}-{2}.{3}'.format(
                 coords_obj.zoom, coords_obj.column, coords_obj.row, fmt)
-            expected_path = os.path.join(dir_path, expected_filename)
+            expected_path = os.path.join(self.dir_path, expected_filename)
             self.assertTrue(
                 os.path.isfile(expected_path),
                 'Tile data must not have been written to the right location, '
@@ -51,5 +53,3 @@ class TestTileDirectory(unittest.TestCase):
                     'Tile data written to file does not match the input data')
 
             os.remove(expected_path)
-
-        os.rmdir(dir_path)
