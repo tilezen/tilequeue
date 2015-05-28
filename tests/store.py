@@ -32,8 +32,8 @@ class TestTileDirectory(unittest.TestCase):
             ('tile3', (2, 6, 0), 'vtm')
         ]
 
-        for tile_data, coords, fmt in tiles_to_write:
-            coords_obj = Coordinate(*coords)
+        for tile_data, (z, c, r), fmt in tiles_to_write:
+            coords_obj = Coordinate(row=r, column=c, zoom=z)
             format_obj = format.OutputFormat(fmt, fmt, None, None, None)
             tile_dir.write_tile(tile_data, coords_obj, format_obj)
 

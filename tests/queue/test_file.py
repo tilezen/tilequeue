@@ -20,7 +20,8 @@ class TestQueue(unittest.TestCase):
             (4, 7, 1)
         ]
         self.test_tile_objs = [
-            Coordinate(*coords) for coords in self.test_tile_coords]
+            Coordinate(row=r, column=c, zoom=z)
+            for (z, c, r) in self.test_tile_coords]
         self.tile_coords_str = '\n'.join(
             map(tile.serialize_coord, self.test_tile_objs)) + '\n'
         self.tiles_fp = StringIO.StringIO()
