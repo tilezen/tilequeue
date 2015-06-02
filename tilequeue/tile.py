@@ -1,16 +1,20 @@
 from itertools import chain
 from ModestMaps.Core import Coordinate
 import math
+import time
 
 
+# TODO: use a namedtuple instead
 class CoordMessage(object):
 
-    def __init__(self, coord, message_handle):
+    def __init__(self, coord, message_handle, timestamp=None):
         self.coord = coord
         self.message_handle = message_handle
+        self.timestamp = time.time() if timestamp is None else timestamp
 
     def __repr__(self):
-        return 'CoordMessage(%s, %s)' % (self.coord, self.message_handle)
+        return 'CoordMessage(%s, %s, %s)' % (self.coord, self.message_handle,
+                                             self.timestamp)
 
 
 def serialize_coord(coord):

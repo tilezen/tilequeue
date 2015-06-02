@@ -3,7 +3,7 @@
 from boto import connect_s3
 from boto.s3.bucket import Bucket
 from TileStache.S3 import tile_key
-import sys
+import os
 
 
 class S3(object):
@@ -34,19 +34,33 @@ class StubLayer(object):
         return self.layer_name
 
 
-class TileFile(object):
+class TileDirectory(object):
+    '''
+    Writes tiles to individual files in a local directory.
+    '''
 
-    def __init__(self, fp):
-        self.fp = fp
+    def __init__(self, dir_path):
+        if os.path.exists(dir_path):
+            if not os.path.isdir(dir_path):
+                raise IOError(
+                    '`{}` exists and is not a directory!'.format(dir_path))
+        else:
+            os.makedirs(dir_path)
+
+        self.dir_path = dir_path
 
     def write_tile(self, tile_data, coord, format):
-        self.fp.write(tile_data)
+        filename = '{0}/{1}-{2}-{3}.{4}'.format(
+            self.dir_path, coord.zoom, coord.column, coord.row,
+            format.extension)
+        with open(filename, 'w') as tile_fp:
+            tile_fp.write(tile_data)
 
 
-def make_tile_file_store(fp=None):
-    if fp is None:
-        fp = sys.stdout
-    return TileFile(fp)
+def make_tile_file_store(dir_path=None):
+    if dir_path is None:
+        dir_path = 'tiles'
+    return TileDirectory(dir_path)
 
 
 class Memory(object):

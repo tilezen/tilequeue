@@ -79,7 +79,7 @@ class TestCliConfiguration(unittest.TestCase):
     def test_config_osm_path_modified(self):
         cfg = self._call_fut(
             self._args(dict(config='config')),
-            dict(aws=dict(s3=dict(path='custompath'))))
+            dict(store=dict(path='custompath')))
         self._assert_cfg(cfg,
                          dict(s3_path='custompath',
                               output_formats=('json', 'vtm'),
