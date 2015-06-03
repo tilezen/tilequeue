@@ -21,6 +21,11 @@ tiles:
       url: https://raw.githubusercontent.com/mapzen/metroextractor-cities/master/cities.json
       zoom-start: 11
       zoom-until: 15
+
+      # Can be set to an array of metro-extract city names, like
+      # 'new-york_new-york', to only seed tiles from those areas rather than
+      # all of them.
+      cities: Null
     top-tiles:
       url: https://gist.github.com/brunosan/b7ce3df8b48229a61b5b/raw/37e42e77f253bc204076111c92acc4d5e653edd2/top_50k_tiles.csv
       zoom-start: 11

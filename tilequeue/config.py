@@ -32,6 +32,7 @@ class Configuration(object):
         self.seed_metro_extract_url = seed_metro_cfg['url']
         self.seed_metro_extract_zoom_start = seed_metro_cfg['zoom-start']
         self.seed_metro_extract_zoom_until = seed_metro_cfg['zoom-until']
+        self.seed_metro_extract_cities = seed_metro_cfg['cities']
 
         seed_top_tiles_cfg = seed_cfg['top-tiles']
         self.seed_top_tiles_url = seed_top_tiles_cfg['url']
@@ -102,6 +103,7 @@ def default_yml_config():
                     'url': None,
                     'zoom-start': None,
                     'zoom-until': None,
+                    'cities': None
                 },
                 'top-tiles': {
                     'url': None,
