@@ -69,6 +69,7 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
 
+        simplify_before_intersect = layer_datum['simplify_before_intersect']
         for shape, props, feature_id in features:
             # perform any simplification as necessary
             tolerance = tolerances[coord.zoom]
@@ -77,10 +78,8 @@ def transform_feature_layers_shape(feature_layers, format, scale,
             should_simplify = coord.zoom not in suppress_simplification and \
                 coord.zoom < simplify_until
 
-            simplify_before_intersect = feature_layer['name'] in ['water', 'earth']
-
             if should_simplify and simplify_before_intersect:
-                min_x, min_y, max_x, max_y = format_padded_bounds
+                min_x, min_y, max_x, max_y = format_padded_bounds.bounds
                 gutter_bbox_size = (max_x - min_x) * 0.1
                 gutter_bbox = geometry.box(
                     min_x - gutter_bbox_size,
