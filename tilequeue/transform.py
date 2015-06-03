@@ -58,8 +58,8 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         transform_fn = lambda shape: shape
 
     is_vtm_format = format == vtm_format
-    shape_unpadded_bounds = geometry.box(*unpadded_bounds)
-    shape_padded_bounds = geometry.box(*padded_bounds)
+    shape_bounds = geometry.box(
+        *(padded_bounds if is_vtm_format else unpadded_bounds))
 
     transformed_feature_layers = []
     for feature_layer in feature_layers:
@@ -80,22 +80,30 @@ def transform_feature_layers_shape(feature_layers, format, scale,
             simplify_before_intersect = feature_layer['name'] in ['water', 'earth']
 
             if should_simplify and simplify_before_intersect:
-                shape = shape.simplify(tolerance, preserve_topology=True)
+                min_x, min_y, max_x, max_y = shape_bounds
+                gutter_bbox_size = (max_x - min_x) * 0.1
+                gutter_bbox = geometry.box(
+                    min_x - gutter_bbox_size,
+                    min_y - gutter_bbox_size,
+                    max_x + gutter_bbox_size,
+                    max_y + gutter_bbox_size)
+                shape = shape.intersection(gutter_bbox).simplify(
+                    tolerance, preserve_topology=True)
                 shape = shape.buffer(0)
 
             if is_vtm_format:
                 if is_clipped:
-                    shape = shape.intersection(shape_padded_bounds)
+                    shape = shape.intersection(shape_bounds)
             else:
                 # for non vtm formats, we need to explicitly check if
                 # the geometry intersects with the unpadded bounds
-                if not shape_unpadded_bounds.intersects(shape):
+                if not shape_bounds.intersects(shape):
                     continue
                 # now we know that we should include the geometry, but
                 # if the geometry should be clipped, we'll clip to the
                 # unpadded bounds
                 if is_clipped:
-                    shape = shape.intersection(shape_unpadded_bounds)
+                    shape = shape.intersection(shape_bounds)
 
             if should_simplify and not simplify_before_intersect:
                 shape = shape.simplify(tolerance, preserve_topology=True)
