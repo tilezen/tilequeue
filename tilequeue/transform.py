@@ -69,7 +69,11 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
 
+        # The logic behind simplifying before intersecting rather than the
+        # other way around is extensively explained here:
+        # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
         simplify_before_intersect = layer_datum['simplify_before_intersect']
+
         for shape, props, feature_id in features:
             # perform any simplification as necessary
             tolerance = tolerances[coord.zoom]
@@ -79,6 +83,12 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                 coord.zoom < simplify_until
 
             if should_simplify and simplify_before_intersect:
+                # To reduce the performance hit of simplifying potentially huge
+                # geometries to extract only a small portion of them when
+                # cutting out the actual tile, we cut out a slightly larger
+                # bounding box first. See here for an explanation:
+                # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
+
                 min_x, min_y, max_x, max_y = format_padded_bounds.bounds
                 gutter_bbox_size = (max_x - min_x) * 0.1
                 gutter_bbox = geometry.box(
