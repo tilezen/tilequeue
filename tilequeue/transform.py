@@ -70,6 +70,18 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         is_clipped = layer_datum['is_clipped']
 
         for shape, props, feature_id in features:
+            # perform any simplification as necessary
+            tolerance = tolerances[coord.zoom]
+            simplify_until = layer_datum['simplify_until']
+            suppress_simplification = layer_datum['suppress_simplification']
+            should_simplify = coord.zoom not in suppress_simplification and \
+                coord.zoom < simplify_until
+
+            simplify_before_intersect = feature_layer['name'] in ['water', 'earth']
+
+            if should_simplify and simplify_before_intersect:
+                shape = shape.simplify(tolerance, preserve_topology=True)
+                shape = shape.buffer(0)
 
             if is_vtm_format:
                 if is_clipped:
@@ -85,12 +97,7 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                 if is_clipped:
                     shape = shape.intersection(shape_unpadded_bounds)
 
-            # perform any simplification as necessary
-            tolerance = tolerances[coord.zoom]
-            simplify_until = layer_datum['simplify_until']
-            suppress_simplification = layer_datum['suppress_simplification']
-            if (coord.zoom not in suppress_simplification and
-                    coord.zoom < simplify_until):
+            if should_simplify and not simplify_before_intersect:
                 shape = shape.simplify(tolerance, preserve_topology=True)
 
             # perform the format specific geometry transformations
