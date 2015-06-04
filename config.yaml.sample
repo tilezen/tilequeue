@@ -25,7 +25,7 @@ tiles:
       # Can be set to an array of metro-extract city names, like
       # 'new-york_new-york', to only seed tiles from those areas rather than
       # all of them.
-      cities: Null
+      cities:
     top-tiles:
       url: https://gist.github.com/brunosan/b7ce3df8b48229a61b5b/raw/37e42e77f253bc204076111c92acc4d5e653edd2/top_50k_tiles.csv
       zoom-start: 11
@@ -38,7 +38,7 @@ tiles:
 
       # Must be set to an array of bounding boxes in `[left, bottom, right,
       # top]` (or `[min lon, min lat, max lon, max lat]`) format
-      bboxes: [[-74.501, 40.345, -73.226, 41.097]]
+      bboxes:
     should-add-to-tiles-of-interest: true
   intersect:
     expired-location: <path/to/expired/tiles/list>

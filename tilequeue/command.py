@@ -157,9 +157,14 @@ def make_seed_tile_generator(cfg):
     else:
         top_tiles = ()
 
-    custom_tiles = tile_generator_for_multiple_bounds(
-        cfg.seed_custom_bboxes, cfg.seed_custom_zoom_start,
-        cfg.seed_custom_zoom_until)
+    if cfg.seed_custom_bboxes:
+        assert cfg.seed_custom_zoom_start is not None
+        assert cfg.seed_custom_zoom_until is not None
+        custom_tiles = tile_generator_for_multiple_bounds(
+            cfg.seed_custom_bboxes, cfg.seed_custom_zoom_start,
+            cfg.seed_custom_zoom_until)
+    else:
+        custom_tiles = ()
 
     combined_tiles = chain(
         all_tiles, metro_extract_tiles, top_tiles, custom_tiles)

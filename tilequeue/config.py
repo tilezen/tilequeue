@@ -46,15 +46,16 @@ class Configuration(object):
         self.seed_custom_zoom_start = seed_custom['zoom-start']
         self.seed_custom_zoom_until = seed_custom['zoom-until']
         self.seed_custom_bboxes = seed_custom['bboxes']
-        for bbox in self.seed_custom_bboxes:
-            assert len(bbox) == 4, (
-                'Seed config: custom bbox {} does not have exactly '
-                'four elements!').format(bbox)
-            min_x, min_y, max_x, max_y = bbox
-            assert min_x < max_x, \
-                'Invalid bbox. {} not less than {}'.format(min_x, max_x)
-            assert min_y < max_y, \
-                'Invalid bbox. {} not less than {}'.format(min_y, max_y)
+        if self.seed_custom_bboxes:
+            for bbox in self.seed_custom_bboxes:
+                assert len(bbox) == 4, (
+                    'Seed config: custom bbox {} does not have exactly '
+                    'four elements!').format(bbox)
+                min_x, min_y, max_x, max_y = bbox
+                assert min_x < max_x, \
+                    'Invalid bbox. {} not less than {}'.format(min_x, max_x)
+                assert min_y < max_y, \
+                    'Invalid bbox. {} not less than {}'.format(min_y, max_y)
 
         intersect_cfg = self.yml['tiles']['intersect']
         self.intersect_expired_tiles_location = (
