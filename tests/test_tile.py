@@ -97,3 +97,31 @@ class TestTileGeneration(unittest.TestCase):
         self.assertEqual(10, len(tiles))
         self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))
         self.assertEqual(8, len(filter(self._is_zoom(2), tiles)))
+
+    def test_tiles_children(self):
+        from tilequeue.tile import coord_children
+        from ModestMaps.Core import Coordinate
+        coord = Coordinate(0, 0, 0)
+        children = coord_children(coord)
+        self.assertEqual(4, len(children))
+        self.assertEqual(Coordinate(0, 0, 1), children[0])
+        self.assertEqual(Coordinate(1, 0, 1), children[1])
+        self.assertEqual(Coordinate(0, 1, 1), children[2])
+        self.assertEqual(Coordinate(1, 1, 1), children[3])
+
+    def test_tiles_children_range(self):
+        from tilequeue.tile import coord_children
+        from tilequeue.tile import coord_children_range
+        from ModestMaps.Core import Coordinate
+        coord = Coordinate(3, 4, 2)
+        actual = list(coord_children_range(coord, 4))
+        self.assertEqual(20, len(actual))
+        children = list(coord_children(coord))
+        grandchildren_list = map(coord_children, children)
+        from itertools import chain
+        grandchildren = list(chain(*grandchildren_list))
+        exp = children + grandchildren
+        actual.sort()
+        exp.sort()
+        for actual_child, exp_child in zip(actual, exp):
+            self.assertEqual(exp_child, actual_child)

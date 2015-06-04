@@ -1,7 +1,7 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
-from tilequeue.tile import coord_children
+from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
@@ -150,24 +150,18 @@ class DataFetch(object):
             cut_coords = None
             if coord.zoom == 18:
                 cut_coords = []
-                cut_zooms = (19, 20)
                 async_jobs = []
+                children_until = 20
                 # ask redis if there are any tiles underneath in the
                 # tiles of interest set
                 rci = self.redis_cache_index
                 async_fn = rci.is_coord_int_in_tiles_of_interest
-                children_to_process = [coord]
-                for cut_zoom in cut_zooms:
-                    next_children = []
-                    for child_to_process in children_to_process:
-                        children = coord_children(child_to_process)
-                        for child in children:
-                            zoomed_coord_int = coord_marshall_int(child)
-                            async_result = self.io_pool.apply_async(
-                                async_fn, (zoomed_coord_int,))
-                            async_jobs.append((child, async_result))
-                            next_children.append(child)
-                    children_to_process = next_children
+
+                for child in coord_children_range(coord, children_until):
+                    zoomed_coord_int = coord_marshall_int(child)
+                    async_result = self.io_pool.apply_async(
+                        async_fn, (zoomed_coord_int,))
+                    async_jobs.append((child, async_result))
 
                 async_exc_info = None
                 for async_job in async_jobs:

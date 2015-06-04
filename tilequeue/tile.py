@@ -251,6 +251,21 @@ def coord_children(coord):
         first_child.right().down())
 
 
+def coord_children_range(coord, zoom_until):
+    assert zoom_until > coord.zoom
+    children_to_process = [coord]
+    cur_zoom = coord.zoom
+    while cur_zoom < zoom_until:
+        next_children = []
+        for child_to_process in children_to_process:
+            children = coord_children(child_to_process)
+            for child in children:
+                yield child
+                next_children.append(child)
+        children_to_process = next_children
+        cur_zoom += 1
+
+
 def tolerance_for_zoom(zoom):
     assert zoom >= 0 and zoom <= 20
     tolerance = tolerances[zoom]
