@@ -58,8 +58,8 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         transform_fn = lambda shape: shape
 
     is_vtm_format = format == vtm_format
-    shape_unpadded_bounds = geometry.box(*unpadded_bounds)
-    shape_padded_bounds = geometry.box(*padded_bounds)
+    format_padded_bounds = geometry.box(
+        *(padded_bounds if is_vtm_format else unpadded_bounds))
 
     transformed_feature_layers = []
     for feature_layer in feature_layers:
@@ -69,28 +69,52 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
 
+        # The logic behind simplifying before intersecting rather than the
+        # other way around is extensively explained here:
+        # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
+        simplify_before_intersect = layer_datum['simplify_before_intersect']
+
         for shape, props, feature_id in features:
+            # perform any simplification as necessary
+            tolerance = tolerances[coord.zoom]
+            simplify_until = layer_datum['simplify_until']
+            suppress_simplification = layer_datum['suppress_simplification']
+            should_simplify = coord.zoom not in suppress_simplification and \
+                coord.zoom < simplify_until
+
+            if should_simplify and simplify_before_intersect:
+                # To reduce the performance hit of simplifying potentially huge
+                # geometries to extract only a small portion of them when
+                # cutting out the actual tile, we cut out a slightly larger
+                # bounding box first. See here for an explanation:
+                # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
+
+                min_x, min_y, max_x, max_y = format_padded_bounds.bounds
+                gutter_bbox_size = (max_x - min_x) * 0.1
+                gutter_bbox = geometry.box(
+                    min_x - gutter_bbox_size,
+                    min_y - gutter_bbox_size,
+                    max_x + gutter_bbox_size,
+                    max_y + gutter_bbox_size)
+                shape = shape.intersection(gutter_bbox).simplify(
+                    tolerance, preserve_topology=True)
+                shape = shape.buffer(0)
 
             if is_vtm_format:
                 if is_clipped:
-                    shape = shape.intersection(shape_padded_bounds)
+                    shape = shape.intersection(format_padded_bounds)
             else:
                 # for non vtm formats, we need to explicitly check if
                 # the geometry intersects with the unpadded bounds
-                if not shape_unpadded_bounds.intersects(shape):
+                if not format_padded_bounds.intersects(shape):
                     continue
                 # now we know that we should include the geometry, but
                 # if the geometry should be clipped, we'll clip to the
                 # unpadded bounds
                 if is_clipped:
-                    shape = shape.intersection(shape_unpadded_bounds)
+                    shape = shape.intersection(format_padded_bounds)
 
-            # perform any simplification as necessary
-            tolerance = tolerances[coord.zoom]
-            simplify_until = layer_datum['simplify_until']
-            suppress_simplification = layer_datum['suppress_simplification']
-            if (coord.zoom not in suppress_simplification and
-                    coord.zoom < simplify_until):
+            if should_simplify and not simplify_before_intersect:
                 shape = shape.simplify(tolerance, preserve_topology=True)
 
             # perform the format specific geometry transformations

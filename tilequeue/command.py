@@ -330,6 +330,7 @@ def parse_layer_data(tilestache_config):
             suppress_simplification=layer.provider.suppress_simplification,
             transform_fn_names=layer.provider.transform_fn_names,
             sort_fn_name=layer.provider.sort_fn_name,
+            simplify_before_intersect=layer.provider.simplify_before_intersect
         )
         layer_data.append(layer_datum)
     return layer_data
