@@ -140,7 +140,6 @@ def make_seed_tile_generator(cfg):
                 city for city in metro_extracts if city.city in city_filter]
 
         multiple_bounds = city_bounds(metro_extracts)
-
         metro_extract_tiles = tile_generator_for_multiple_bounds(
             multiple_bounds, cfg.seed_metro_extract_zoom_start,
             cfg.seed_metro_extract_zoom_until)
