@@ -32,6 +32,7 @@ class Configuration(object):
         self.seed_metro_extract_url = seed_metro_cfg['url']
         self.seed_metro_extract_zoom_start = seed_metro_cfg['zoom-start']
         self.seed_metro_extract_zoom_until = seed_metro_cfg['zoom-until']
+        self.seed_metro_extract_cities = seed_metro_cfg['cities']
 
         seed_top_tiles_cfg = seed_cfg['top-tiles']
         self.seed_top_tiles_url = seed_top_tiles_cfg['url']
@@ -40,6 +41,21 @@ class Configuration(object):
 
         self.seed_should_add_to_tiles_of_interest = \
             seed_cfg['should-add-to-tiles-of-interest']
+
+        seed_custom = seed_cfg['custom']
+        self.seed_custom_zoom_start = seed_custom['zoom-start']
+        self.seed_custom_zoom_until = seed_custom['zoom-until']
+        self.seed_custom_bboxes = seed_custom['bboxes']
+        if self.seed_custom_bboxes:
+            for bbox in self.seed_custom_bboxes:
+                assert len(bbox) == 4, (
+                    'Seed config: custom bbox {} does not have exactly '
+                    'four elements!').format(bbox)
+                min_x, min_y, max_x, max_y = bbox
+                assert min_x < max_x, \
+                    'Invalid bbox. {} not less than {}'.format(min_x, max_x)
+                assert min_y < max_y, \
+                    'Invalid bbox. {} not less than {}'.format(min_y, max_y)
 
         intersect_cfg = self.yml['tiles']['intersect']
         self.intersect_expired_tiles_location = (
@@ -102,13 +118,19 @@ def default_yml_config():
                     'url': None,
                     'zoom-start': None,
                     'zoom-until': None,
+                    'cities': None
                 },
                 'top-tiles': {
                     'url': None,
                     'zoom-start': None,
                     'zoom-until': None,
                 },
-                'should-add-to-tiles-of-interest': True,
+                'custom': {
+                    'zoom-start': None,
+                    'zoom-until': None,
+                    'bboxes': []
+                },
+                'should-add-to-tiles-of-interest': True
             },
             'intersect': {
                 'expired-location': None,

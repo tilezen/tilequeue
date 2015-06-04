@@ -133,6 +133,12 @@ def make_seed_tile_generator(cfg):
         with closing(urlopen(cfg.seed_metro_extract_url)) as fp:
             # will raise a MetroExtractParseError on failure
             metro_extracts = parse_metro_extract(fp)
+
+        city_filter = cfg.seed_metro_extract_cities
+        if city_filter is not None:
+            metro_extracts = [
+                city for city in metro_extracts if city.city in city_filter]
+
         multiple_bounds = city_bounds(metro_extracts)
         metro_extract_tiles = tile_generator_for_multiple_bounds(
             multiple_bounds, cfg.seed_metro_extract_zoom_start,
@@ -150,7 +156,17 @@ def make_seed_tile_generator(cfg):
     else:
         top_tiles = ()
 
-    combined_tiles = chain(all_tiles, metro_extract_tiles, top_tiles)
+    if cfg.seed_custom_bboxes:
+        assert cfg.seed_custom_zoom_start is not None
+        assert cfg.seed_custom_zoom_until is not None
+        custom_tiles = tile_generator_for_multiple_bounds(
+            cfg.seed_custom_bboxes, cfg.seed_custom_zoom_start,
+            cfg.seed_custom_zoom_until)
+    else:
+        custom_tiles = ()
+
+    combined_tiles = chain(
+        all_tiles, metro_extract_tiles, top_tiles, custom_tiles)
     tile_generator = uniquify_generator(combined_tiles)
 
     return tile_generator
