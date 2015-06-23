@@ -1,5 +1,7 @@
 from itertools import chain
 from ModestMaps.Core import Coordinate
+from TileStache.Geography import SphericalMercator
+from TileStache.Goodies.VecTiles.server import tolerances
 import math
 import time
 
@@ -92,6 +94,19 @@ def coord_to_bounds(coord):
 
     bounds = (minx, miny, maxx, maxy)
     return bounds
+
+
+spherical_mercator = SphericalMercator()
+
+
+def coord_to_mercator_bounds(coord):
+    ul = spherical_mercator.coordinateProj(coord)
+    lr = spherical_mercator.coordinateProj(coord.down().right())
+    minx = min(ul.x, lr.x)
+    miny = min(ul.y, lr.y)
+    maxx = max(ul.x, lr.x)
+    maxy = max(ul.y, lr.y)
+    return minx, miny, maxx, maxy
 
 
 def bounds_to_coords(bounds, zoom):
@@ -225,3 +240,44 @@ def coord_int_zoom_up(coord_int):
     # parent zoom bits into place
     parent_coord_int = (coord_int_shifted & all_but_zoom_mask) | (zoom - 1)
     return parent_coord_int
+
+
+def coord_children(coord):
+    first_child = coord.zoomBy(1)
+    return (
+        first_child,
+        first_child.down(),
+        first_child.right(),
+        first_child.right().down())
+
+
+def coord_children_range(coord, zoom_until):
+    assert zoom_until > coord.zoom
+    children_to_process = [coord]
+    cur_zoom = coord.zoom
+    while cur_zoom < zoom_until:
+        next_children = []
+        for child_to_process in children_to_process:
+            children = coord_children(child_to_process)
+            for child in children:
+                yield child
+                next_children.append(child)
+        children_to_process = next_children
+        cur_zoom += 1
+
+
+def tolerance_for_zoom(zoom):
+    assert zoom >= 0 and zoom <= 20
+    tolerance = tolerances[zoom]
+    return tolerance
+
+
+def pad_bounds_for_zoom(bounds, zoom):
+    minx, miny, maxx, maxy = bounds
+    tolerance = tolerance_for_zoom(zoom)
+    padding = 5 * tolerance
+    padded_bounds = (
+        minx - padding, miny - padding,
+        maxx + padding, maxy + padding,
+    )
+    return padded_bounds
