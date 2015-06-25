@@ -8,7 +8,7 @@ from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
-from tilequeue.queue import get_sqs_queue
+from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
@@ -75,11 +75,10 @@ def uniquify_generator(generator):
         yield tile
 
 
-def make_queue(queue_type, queue_name, cfg):
+def make_queue(queue_type, queue_name, redis_client, cfg):
     if queue_type == 'sqs':
-        return get_sqs_queue(cfg.queue_name,
-                             cfg.redis_host, cfg.redis_port, cfg.redis_db,
-                             cfg.aws_access_key_id, cfg.aws_secret_access_key)
+        return make_sqs_queue(queue_name, redis_client,
+                              cfg.aws_access_key_id, cfg.aws_secret_access_key)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -101,13 +100,20 @@ def make_queue(queue_type, queue_name, cfg):
         # only support writing
         from tilequeue.queue import OutputFileQueue
         return OutputFileQueue(sys.stdout)
+    elif queue_type == 'redis':
+        from tilequeue.queue import make_redis_queue
+        return make_redis_queue(redis_client, queue_name)
     else:
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
-def make_redis_cache_index(cfg):
+def make_redis_client(cfg):
     from redis import StrictRedis
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
+    return redis_client
+
+
+def make_redis_cache_index(redis_client, cfg):
     redis_cache_index = RedisCacheIndex(redis_client, cfg.redis_cache_set_key)
     return redis_cache_index
 
@@ -951,7 +957,9 @@ def tilequeue_main(argv_args=None):
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
     cfg = make_config_from_argparse(args.config)
+    redis_client = make_redis_client(cfg)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
-    peripherals = Peripherals(make_redis_cache_index(cfg),
-                              make_queue(cfg.queue_type, cfg.queue_name, cfg))
+    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg),
+                              make_queue(cfg.queue_type, cfg.queue_name,
+                                         redis_client, cfg))
     args.func(cfg, peripherals)

@@ -4,7 +4,6 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
-from redis import StrictRedis
 
 
 class SqsQueue(object):
@@ -96,12 +95,11 @@ class SqsQueue(object):
         pass
 
 
-def get_sqs_queue(queue_name, redis_host, redis_port, redis_db,
-                  aws_access_key_id=None, aws_secret_access_key=None):
+def make_sqs_queue(queue_name, redis_client,
+                   aws_access_key_id=None, aws_secret_access_key=None):
     conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
     queue = conn.get_queue(queue_name)
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    redis_client = StrictRedis(redis_host, redis_port, redis_db)
     return SqsQueue(queue, redis_client)

@@ -1,11 +1,11 @@
 queue:
-  type: sqs # Can also be `file`, which would use an on-disk file-based queue.
-  name: <sqs queue/queue file name>
+  # type can be `sqs`, `file`, or `redis`
+  type: sqs
+  name: <sqs queue/queue file name/redis key>
 store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>
-
-  # The following properties are s3 specific.
+  # The following store properties are s3 specific.
   path: osm
   reduced-redundancy: true
 aws:
