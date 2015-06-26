@@ -34,33 +34,51 @@ class StubLayer(object):
         return self.layer_name
 
 
+def make_dir_path(base_path, coord):
+    path = os.path.join(base_path,
+                        str(int(coord.zoom)), str(int(coord.column)))
+    return path
+
+
+def make_file_path(base_path, coord, extension):
+    basefile_path = os.path.join(
+        base_path,
+        str(int(coord.zoom)), str(int(coord.column)), str(int(coord.row)))
+    ext_str = '.%s' % extension
+    full_path = basefile_path + ext_str
+    return full_path
+
+
 class TileDirectory(object):
     '''
     Writes tiles to individual files in a local directory.
     '''
 
-    def __init__(self, dir_path):
-        if os.path.exists(dir_path):
-            if not os.path.isdir(dir_path):
+    def __init__(self, base_path):
+        if os.path.exists(base_path):
+            if not os.path.isdir(base_path):
                 raise IOError(
-                    '`{}` exists and is not a directory!'.format(dir_path))
+                    '`{}` exists and is not a directory!'.format(base_path))
         else:
-            os.makedirs(dir_path)
+            os.makedirs(base_path)
 
-        self.dir_path = dir_path
+        self.base_path = base_path
 
     def write_tile(self, tile_data, coord, format):
-        filename = '{0}/{1}-{2}-{3}.{4}'.format(
-            self.dir_path, coord.zoom, coord.column, coord.row,
-            format.extension)
-        with open(filename, 'w') as tile_fp:
+        dir_path = make_dir_path(self.base_path, coord)
+        try:
+            os.makedirs(dir_path)
+        except OSError:
+            pass
+        file_path = make_file_path(self.base_path, coord, format.extension)
+        with open(file_path, 'w') as tile_fp:
             tile_fp.write(tile_data)
 
 
-def make_tile_file_store(dir_path=None):
-    if dir_path is None:
-        dir_path = 'tiles'
-    return TileDirectory(dir_path)
+def make_tile_file_store(base_path=None):
+    if base_path is None:
+        base_path = 'tiles'
+    return TileDirectory(base_path)
 
 
 class Memory(object):

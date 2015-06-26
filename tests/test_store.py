@@ -7,6 +7,7 @@ from tilequeue import store
 from tilequeue import format
 from ModestMaps.Core import Coordinate
 import os
+import shutil
 import tempfile
 
 
@@ -16,7 +17,7 @@ class TestTileDirectory(unittest.TestCase):
         self.dir_path = tempfile.mkdtemp()
 
     def tearDown(self):
-        os.rmdir(self.dir_path)
+        shutil.rmtree(self.dir_path)
 
     def test_write_tile(self):
 
@@ -31,7 +32,8 @@ class TestTileDirectory(unittest.TestCase):
         tiles_to_write = [
             ('tile1', (1, 2, 3), 'json'),
             ('tile2', (8, 4, 9), 'mvt'),
-            ('tile3', (2, 6, 0), 'vtm')
+            ('tile3', (2, 6, 0), 'vtm'),
+            ('tile4', (2, 6, 1), 'topojson'),
         ]
 
         for tile_data, (z, c, r), fmt in tiles_to_write:
@@ -39,7 +41,7 @@ class TestTileDirectory(unittest.TestCase):
             format_obj = format.OutputFormat(fmt, fmt, None, None, None)
             tile_dir.write_tile(tile_data, coords_obj, format_obj)
 
-            expected_filename = '{0}-{1}-{2}.{3}'.format(
+            expected_filename = '{0}/{1}/{2}.{3}'.format(
                 coords_obj.zoom, coords_obj.column, coords_obj.row, fmt)
             expected_path = os.path.join(self.dir_path, expected_filename)
             self.assertTrue(
