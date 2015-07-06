@@ -34,8 +34,8 @@ def rescale_point(bounds, scale):
 
         xfac = scale / (maxx - minx)
         yfac = scale / (maxy - miny)
-        x = x * xfac - minx * xfac
-        y = y * yfac - miny * yfac
+        x = xfac * (x - minx)
+        y = yfac * (y - miny)
 
         return x, y
 
