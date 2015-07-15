@@ -40,6 +40,9 @@ class OutputFormat(object):
 def format_json(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     # TODO a lot of serializing/deserializing can be reduced here
     # this is a faithful port for how it's done in tilestache now
+    if len(feature_layers) == 1:
+        json_encode(fp, feature_layers[0]['features'], coord.zoom)
+        return
     names = []
     layers = []
     for feature_layer in feature_layers:
@@ -56,6 +59,9 @@ def format_json(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
 
 def format_topojson(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
     # TODO ditto on the serialization as in format_json
+    if len(feature_layers) == 1:
+        topojson_encode(fp, feature_layers[0]['features'], bounds_wgs84)
+        return
     names = []
     layers = []
     for feature_layer in feature_layers:
