@@ -136,7 +136,9 @@ class DataFetcher(object):
         self.sql_conn_pool = DBAffinityConnectionsNoLimit(
             self.dbnames, n_conn, self.conn_info)
 
-    def __call__(self, coord):
+    def __call__(self, coord, layer_data=None):
+        if layer_data is None:
+            layer_data = self.layer_data
         zoom = coord.zoom
         unpadded_bounds = coord_to_mercator_bounds(coord)
         # the vtm renderer needs features a little surrounding the
@@ -151,13 +153,13 @@ class DataFetcher(object):
             # we also cache this per layer, per zoom
 
             columns_for_queries = self.find_columns_for_queries(
-                conn_info, self.layer_data, zoom, padded_bounds)
+                conn_info, layer_data, zoom, padded_bounds)
 
             # the padded bounds are used here in order to only have to
             # issue a single set of queries to the database for all
             # formats
             empty_results, async_results = enqueue_queries(
-                sql_conns, self.io_pool, self.layer_data, zoom,
+                sql_conns, self.io_pool, layer_data, zoom,
                 padded_bounds, columns_for_queries)
 
             feature_layers = []
