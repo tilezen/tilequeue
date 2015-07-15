@@ -8,4 +8,4 @@ dependencies:
 test:
   override:
     - python setup.py test
-    - find . -name '*.py' | xargs flake8
+    - find . -not -path '*/.eggs/*' -name '*.py' | xargs flake8
