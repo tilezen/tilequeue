@@ -316,16 +316,12 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Intersection complete.')
 
 
-def parse_layer_data(tilestache_config):
+def parse_layer_data_layers(tilestache_config, layer_names):
     layers = tilestache_config.layers
-    all_layer = layers.get('all')
-    assert all_layer is not None, 'All layer is expected in tilestache config'
-    layer_names = all_layer.provider.names
     layer_data = []
     for layer_name in layer_names:
         assert layer_name in layers, \
-            ('Layer not found in config but found in all layers: %s'
-             % layer_name)
+            ('Layer not found in config: %s' % layer_name)
         layer = layers[layer_name]
         layer_datum = dict(
             name=layer_name,
@@ -339,6 +335,15 @@ def parse_layer_data(tilestache_config):
             simplify_before_intersect=layer.provider.simplify_before_intersect
         )
         layer_data.append(layer_datum)
+    return layer_data
+
+
+def parse_layer_data(tilestache_config):
+    layers = tilestache_config.layers
+    all_layer = layers.get('all')
+    assert all_layer is not None, 'All layer is expected in tilestache config'
+    layer_names = all_layer.provider.names
+    layer_data = parse_layer_data_layers(tilestache_config, layer_names)
     return layer_data
 
 
