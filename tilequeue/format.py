@@ -77,7 +77,24 @@ def format_topojson(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
 
 
 def format_mvt(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
-    mvt_merge(fp, feature_layers, coord)
+    decoded_feature_layers = []
+    for feature_layer in feature_layers:
+        decoded_features = []
+        for feature in feature_layer['features']:
+            wkb, properties, fid = feature
+            decoded_properties = {}
+            for k, v in properties.items():
+                decoded_key = k.decode('utf-8')
+                new_val = v.decode('utf-8') if isinstance(v, str) else v
+                decoded_properties[decoded_key] = new_val
+            decoded_feature = wkb, decoded_properties, fid
+            decoded_features.append(decoded_feature)
+        decoded_feature_layer = dict(
+            name=feature_layer['name'],
+            features=decoded_features,
+            )
+        decoded_feature_layers.append(decoded_feature_layer)
+    mvt_merge(fp, decoded_feature_layers, coord)
 
 
 def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
