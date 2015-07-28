@@ -104,14 +104,14 @@ def _process_feature_layers(feature_layers, coord, formats, unpadded_bounds,
             for feature in features:
                 shape, props, feature_id = feature
                 shape, props, feature_id = layer_transform_fn(
-                    shape, props, feature_id)
+                    shape, props, feature_id, coord.zoom)
                 transformed_feature = shape, props, feature_id
                 processed_features.append(transformed_feature)
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
             sort_fn = loadClassPath(sort_fn_name)
-            processed_features = sort_fn(processed_features)
+            processed_features = sort_fn(processed_features, coord.zoom)
 
         feature_layer = dict(name=layer_name, features=processed_features,
                              layer_datum=layer_datum)
