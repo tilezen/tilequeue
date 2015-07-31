@@ -156,7 +156,7 @@ def process_coord(coord, feature_layers, formats, unpadded_bounds,
         for cut_coord in cut_coords:
             unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
             padded_cut_bounds = pad_bounds_for_zoom(unpadded_cut_bounds,
-                                                    coord.zoom)
+                                                    cut_coord.zoom)
 
             shape_cut_padded_bounds = geometry.box(*padded_cut_bounds)
             child_feature_layers = _cut_coord(feature_layers,
