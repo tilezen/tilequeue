@@ -267,8 +267,8 @@ def coord_children_range(coord, zoom_until):
 
 
 def tolerance_for_zoom(zoom):
-    assert zoom >= 0 and zoom <= 20
-    tolerance = tolerances[zoom]
+    tol_idx = zoom if 0 <= zoom < len(tolerances) else -1
+    tolerance = tolerances[tol_idx]
     return tolerance
 
 
