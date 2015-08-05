@@ -96,9 +96,10 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                     min_y - gutter_bbox_size,
                     max_x + gutter_bbox_size,
                     max_y + gutter_bbox_size)
-                shape = shape.intersection(gutter_bbox).simplify(
+                clipped_shape = shape.intersection(gutter_bbox)
+                simplified_shape = clipped_shape.simplify(
                     tolerance, preserve_topology=True)
-                shape = shape.buffer(0)
+                shape = simplified_shape
 
             if is_vtm_format:
                 if is_clipped:
