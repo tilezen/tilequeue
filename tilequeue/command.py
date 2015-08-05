@@ -735,7 +735,9 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
 
     for tile_of_interest_value in tiles_of_interest:
         coord = coord_unmarshall_int(tile_of_interest_value)
-        thread_queue.put(coord)
+        # don't enqueue coords with zoom > 18
+        if coord.zoom <= 18:
+            thread_queue.put(coord)
 
     for i in xrange(n_threads):
         thread_queue.put(None)
