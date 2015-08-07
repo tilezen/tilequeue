@@ -46,6 +46,20 @@ def apply_to_all_coords(fn):
     return lambda shape: transform(shape, fn)
 
 
+def make_valid_if_necessary(shape):
+    """
+    attempt to correct invalid shapes if necessary
+
+    After simplification, even when preserving topology, invalid
+    shapes can be returned. This appears to only occur with polygon
+    types. As an optimization, we only check if the polygon types are
+    valid.
+    """
+    if shape.type in ('Polygon', 'MultiPolygon') and not shape.is_valid:
+        shape = shape.buffer(0)
+    return shape
+
+
 def transform_feature_layers_shape(feature_layers, format, scale,
                                    unpadded_bounds, padded_bounds, coord):
     if format in (json_format, topojson_format):
@@ -99,7 +113,7 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                 clipped_shape = shape.intersection(gutter_bbox)
                 simplified_shape = clipped_shape.simplify(
                     tolerance, preserve_topology=True)
-                shape = simplified_shape
+                shape = make_valid_if_necessary(simplified_shape)
 
             if is_vtm_format:
                 if is_clipped:
@@ -116,7 +130,9 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                     shape = shape.intersection(format_padded_bounds)
 
             if should_simplify and not simplify_before_intersect:
-                shape = shape.simplify(tolerance, preserve_topology=True)
+                simplified_shape = shape.simplify(tolerance,
+                                                  preserve_topology=True)
+                shape = make_valid_if_necessary(simplified_shape)
 
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
