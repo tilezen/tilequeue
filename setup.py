@@ -32,6 +32,7 @@ setup(name='tilequeue',
       install_requires=[
           'boto',
           'hiredis',
+          'Jinja2',
           'ModestMaps',
           'TileStache',
           'PyYAML',

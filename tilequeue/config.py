@@ -21,9 +21,6 @@ class Configuration(object):
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
 
-        self.tilestache_config = self._cfg('tilestache config')
-        self.output_formats = self._cfg('tilestache formats')
-
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
         self.seed_all_zoom_until = seed_cfg['all']['zoom-until']
@@ -67,13 +64,20 @@ class Configuration(object):
         self.redis_port = self._cfg('redis port')
         self.redis_db = self._cfg('redis db')
         self.redis_cache_set_key = self._cfg('redis cache-set-key')
+
+        process_cfg = self.yml['process']
         self.n_simultaneous_query_sets = \
-            self.yml['process']['n-simultaneous-query-sets']
+            process_cfg['n-simultaneous-query-sets']
         self.n_simultaneous_s3_storage = \
-            self.yml['process']['n-simultaneous-s3-storage']
-        self.log_queue_sizes = self.yml['process']['log-queue-sizes']
+            process_cfg['n-simultaneous-s3-storage']
+        self.log_queue_sizes = process_cfg['log-queue-sizes']
         self.log_queue_sizes_interval_seconds = \
-            self.yml['process']['log-queue-sizes-interval-seconds']
+            process_cfg['log-queue-sizes-interval-seconds']
+        self.query_cfg = process_cfg['query-config']
+        self.template_path = process_cfg['template-path']
+        self.reload_templates = process_cfg['reload-templates']
+        self.output_formats = process_cfg['formats']
+
         self.postgresql_conn_info = self.yml['postgresql']
         dbnames = self.postgresql_conn_info.get('dbnames')
         assert dbnames is not None, 'Missing postgresql dbnames'
@@ -142,10 +146,10 @@ def default_yml_config():
             'n-simultaneous-s3-storage': 0,
             'log-queue-sizes': True,
             'log-queue-sizes-interval-seconds': 10,
-        },
-        'tilestache': {
-            'config': None,
-            'formats': ('json', 'vtm'),
+            'query-config': None,
+            'template-path': None,
+            'reload-templates': False,
+            'formats': ('json',),
         },
         'logging': {
             'config': None

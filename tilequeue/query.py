@@ -1,84 +1,58 @@
 from psycopg2.extras import RealDictCursor
-from threading import Lock
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import pad_bounds_for_zoom
-from TileStache.Goodies.VecTiles.server import query_columns
 import sys
 
 
-# stores the sql columns needed per layer, zoom
-# accesses need to be protected by a lock
-column_name_cache = {}
-column_name_cache_lock = Lock()
+def generate_query(start_zoom, template, bounds, zoom):
+    if zoom < start_zoom:
+        return None
+    query = template.render(bounds=bounds, zoom=zoom)
+    return query
 
 
-def columns_for_query(conn_info, layer_name, zoom, bounds, query):
-    srid = 900913
-    key = (layer_name, zoom)
-    with column_name_cache_lock:
-        columns = column_name_cache.get(key)
-    if columns:
-        return columns
-    columns = query_columns(conn_info, srid, query, bounds)
-    with column_name_cache_lock:
-        column_name_cache[key] = columns
-    return columns
+class JinjaQueryGenerator(object):
+
+    def __init__(self, template, start_zoom):
+        self.template = template
+        self.start_zoom = start_zoom
+
+    def __call__(self, bounds, zoom):
+        return generate_query(self.start_zoom, self.template, bounds, zoom)
 
 
-def find_columns_for_queries(conn_info, layer_data, zoom, bounds):
-    columns_for_queries = []
-    for layer_datum in layer_data:
-        queries = layer_datum['queries']
-        query = queries[min(zoom, len(queries) - 1)]
-        if query is None:
-            cols = None
-        else:
-            cols = columns_for_query(
-                conn_info, layer_datum['name'], zoom, bounds, query)
-        columns_for_queries.append(cols)
-    return columns_for_queries
+class DevJinjaQueryGenerator(object):
+
+    def __init__(self, environment, template_name, start_zoom):
+        self.environment = environment
+        self.template_name = template_name
+        self.start_zoom = start_zoom
+
+    def __call__(self, bounds, zoom):
+        template = self.environment.get_template(self.template_name)
+        return generate_query(self.start_zoom, template, bounds, zoom)
 
 
-def build_query(srid, subquery, subcolumns, bounds):
-    ''' Build and return an PostGIS query.
-    '''
-    bbox = ('ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
-            '             ST_MakePoint(%.12f, %.12f))' % bounds)
-    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
-    geom = 'q.__geometry__'
-
-    subquery = subquery.replace('!bbox!', bbox)
-    columns = ['q."%s"' % c for c in subcolumns if c != '__geometry__']
-
-    if '__geometry__' not in subcolumns:
-        raise Exception("There's supposed to be a __geometry__ column.")
-
-    columns = ', '.join(columns)
-
-    return '''SELECT %(columns)s,
-                     ST_AsBinary(%(geom)s) AS __geometry__
-              FROM (
-                %(subquery)s
-                ) AS q
-              WHERE q.__geometry__ && %(bbox)s''' % locals()
+def jinja_filter_geometry(value):
+    return 'ST_AsBinary(%s)' % value
 
 
-def build_feature_queries(bounds, layer_data, zoom, columns_for_queries):
-    srid = 900913
+def jinja_filter_bbox_filter(bounds, geometry_col_name, srid=900913):
+    min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
+    max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
+    bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
+    bbox = 'ST_SetSrid(%s, %d)' % (bbox_no_srid, srid)
+    bbox_filter = '%s && %s' % (geometry_col_name, bbox)
+    return bbox_filter
+
+
+def build_feature_queries(bounds, layer_data, zoom):
     queries_to_execute = []
-    for layer_datum, columns in zip(layer_data, columns_for_queries):
-        queries = layer_datum['queries']
-        subquery = queries[min(zoom, len(queries) - 1)]
-        if subquery is None:
-            query = None
-        else:
-            query = build_query(srid, subquery, columns, bounds)
-
-        layer_datum_no_queries = dict((k, v) for k, v in layer_datum.items()
-                                      if k != 'queries')
-        queries_to_execute.append((layer_datum_no_queries, query))
-
+    for layer_datum in layer_data:
+        query_generator = layer_datum['query_generator']
+        query = query_generator(bounds, zoom)
+        queries_to_execute.append((layer_datum, query))
     return queries_to_execute
 
 
@@ -100,10 +74,16 @@ def execute_query(conn, query, layer_datum):
         raise
 
 
-def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds, columns):
+def trim_layer_datum(layer_datum):
+    layer_datum_result = dict([(k, v) for k, v in layer_datum.items()
+                               if k != 'query_generator'])
+    return layer_datum_result
+
+
+def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds):
 
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom, columns)
+        bounds, layer_data, zoom)
 
     empty_results = []
     async_results = []
@@ -112,7 +92,7 @@ def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds, columns):
             empty_feature_layer = dict(
                 name=layer_datum['name'],
                 features=[],
-                layer_datum=layer_datum,
+                layer_datum=trim_layer_datum(layer_datum),
             )
             empty_results.append(empty_feature_layer)
         else:
@@ -128,7 +108,6 @@ class DataFetcher(object):
     def __init__(self, conn_info, layer_data, io_pool, n_conn):
         self.conn_info = dict(conn_info)
         self.layer_data = layer_data
-        self.find_columns_for_queries = find_columns_for_queries
         self.io_pool = io_pool
 
         self.dbnames = self.conn_info.pop('dbnames')
@@ -148,19 +127,12 @@ class DataFetcher(object):
 
         sql_conns, conn_info = self.sql_conn_pool.get_conns()
         try:
-            # first determine the columns for the queries
-            # we currently perform the actual query and ask for no data
-            # we also cache this per layer, per zoom
-
-            columns_for_queries = self.find_columns_for_queries(
-                conn_info, layer_data, zoom, padded_bounds)
-
             # the padded bounds are used here in order to only have to
             # issue a single set of queries to the database for all
             # formats
             empty_results, async_results = enqueue_queries(
                 sql_conns, self.io_pool, layer_data, zoom,
-                padded_bounds, columns_for_queries)
+                padded_bounds)
 
             feature_layers = []
             async_exception = None
@@ -186,8 +158,11 @@ class DataFetcher(object):
                     geometry_bytes = bytes(row.pop('__geometry__'))
                     row['__geometry__'] = geometry_bytes
 
+                # trim off query generator key
+                layer_datum_result = trim_layer_datum(layer_datum)
+
                 feature_layer = dict(name=layer_datum['name'], features=rows,
-                                     layer_datum=layer_datum)
+                                     layer_datum=layer_datum_result)
                 feature_layers.append(feature_layer)
 
             # bail if an error occurred
