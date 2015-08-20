@@ -154,15 +154,23 @@ class DataFetcher(object):
 
                 # read the bytes out of each row, otherwise the pickle
                 # will fail because the geometry is a read buffer
+                read_rows = []
                 for row in rows:
-                    geometry_bytes = bytes(row.pop('__geometry__'))
+                    geometry = row.pop('__geometry__')
+                    if geometry is None:
+                        # there are cases when the geometry comes back as None
+                        # eg when they are unioned together
+                        continue
+                    geometry_bytes = bytes(geometry)
                     row['__geometry__'] = geometry_bytes
+                    read_rows.append(row)
 
                 # trim off query generator key
                 layer_datum_result = trim_layer_datum(layer_datum)
 
-                feature_layer = dict(name=layer_datum['name'], features=rows,
-                                     layer_datum=layer_datum_result)
+                feature_layer = dict(
+                    name=layer_datum['name'], features=read_rows,
+                    layer_datum=layer_datum_result)
                 feature_layers.append(feature_layer)
 
             # bail if an error occurred
