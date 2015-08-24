@@ -91,10 +91,8 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         for shape, props, feature_id in features:
             # perform any simplification as necessary
             tolerance = tolerance_for_zoom(coord.zoom)
-            simplify_until = layer_datum['simplify_until']
-            suppress_simplification = layer_datum['suppress_simplification']
-            should_simplify = coord.zoom not in suppress_simplification and \
-                coord.zoom < simplify_until
+            simplify_until = 16
+            should_simplify = coord.zoom < simplify_until
 
             if should_simplify and simplify_before_intersect:
                 # To reduce the performance hit of simplifying potentially huge

@@ -1,6 +1,8 @@
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
+from jinja2 import Environment
+from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
 from tilequeue.cache import RedisCacheIndex
 from tilequeue.config import make_config_from_argparse
@@ -8,6 +10,8 @@ from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
+from tilequeue.query import jinja_filter_bbox_filter
+from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
@@ -24,7 +28,6 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
-from TileStache import parseConfigfile
 from urllib2 import urlopen
 import argparse
 import logging
@@ -36,6 +39,7 @@ import signal
 import sys
 import threading
 import time
+import yaml
 
 
 def create_command_parser(fn):
@@ -316,37 +320,6 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Intersection complete.')
 
 
-def parse_layer_data_layers(tilestache_config, layer_names):
-    layers = tilestache_config.layers
-    layer_data = []
-    for layer_name in layer_names:
-        assert layer_name in layers, \
-            ('Layer not found in config: %s' % layer_name)
-        layer = layers[layer_name]
-        layer_datum = dict(
-            name=layer_name,
-            queries=layer.provider.queries,
-            is_clipped=layer.provider.clip,
-            geometry_types=layer.provider.geometry_types,
-            simplify_until=layer.provider.simplify_until,
-            suppress_simplification=layer.provider.suppress_simplification,
-            transform_fn_names=layer.provider.transform_fn_names,
-            sort_fn_name=layer.provider.sort_fn_name,
-            simplify_before_intersect=layer.provider.simplify_before_intersect
-        )
-        layer_data.append(layer_datum)
-    return layer_data
-
-
-def parse_layer_data(tilestache_config):
-    layers = tilestache_config.layers
-    all_layer = layers.get('all')
-    assert all_layer is not None, 'All layer is expected in tilestache config'
-    layer_names = all_layer.provider.names
-    layer_data = parse_layer_data_layers(tilestache_config, layer_names)
-    return layer_data
-
-
 def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
@@ -362,19 +335,60 @@ def make_store(store_type, store_name, cfg):
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
 
 
+def parse_layer_data(query_cfg, template_path, reload_templates):
+    if reload_templates:
+        from tilequeue.query import DevJinjaQueryGenerator
+    else:
+        from tilequeue.query import JinjaQueryGenerator
+    all_layer_names = query_cfg['all']
+    layers_config = query_cfg['layers']
+    layer_data = []
+    all_layer_data = []
+
+    environment = Environment(loader=FileSystemLoader(template_path))
+    environment.filters['geometry'] = jinja_filter_geometry
+    environment.filters['bbox_filter'] = jinja_filter_bbox_filter
+
+    for layer_name, layer_config in layers_config.items():
+        template_name = layer_config['template']
+        start_zoom = layer_config['start_zoom']
+        if reload_templates:
+            query_generator = DevJinjaQueryGenerator(
+                environment, template_name, start_zoom)
+        else:
+            template = environment.get_template(template_name)
+            query_generator = JinjaQueryGenerator(template, start_zoom)
+        layer_datum = dict(
+            name=layer_name,
+            query_generator=query_generator,
+            is_clipped=layer_config.get('clip', True),
+            geometry_types=layer_config['geometry_types'],
+            transform_fn_names=layer_config['transform'],
+            sort_fn_name=layer_config.get('sort'),
+            simplify_before_intersect=layer_config.get(
+                'simplify_before_intersect', False)
+        )
+        layer_data.append(layer_datum)
+        if layer_name in all_layer_names:
+            all_layer_data.append(layer_datum)
+    return all_layer_data, layer_data
+
+
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
     logger.warn('tilequeue processing started')
 
-    assert os.path.exists(cfg.tilestache_config), \
-        'Invalid tilestache config path'
+    assert os.path.exists(cfg.query_cfg), \
+        'Invalid query config path'
+
+    with open(cfg.query_cfg) as query_cfg_fp:
+        query_cfg = yaml.load(query_cfg_fp)
+    all_layer_data, layer_data = parse_layer_data(
+        query_cfg, cfg.template_path, cfg.reload_templates)
 
     formats = lookup_formats(cfg.output_formats)
 
     sqs_queue = peripherals.queue
-
-    tilestache_config = parseConfigfile(cfg.tilestache_config)
-    layer_data = parse_layer_data(tilestache_config)
 
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
 
@@ -388,7 +402,7 @@ def tilequeue_process(cfg, peripherals):
         n_simultaneous_query_sets = len(cfg.postgresql_conn_info['dbnames'])
     assert n_simultaneous_query_sets > 0
     default_queue_buffer_size = 256
-    n_layers = len(layer_data)
+    n_layers = len(all_layer_data)
     n_formats = len(formats)
     n_simultaneous_s3_storage = cfg.n_simultaneous_s3_storage
     if not n_simultaneous_s3_storage:
@@ -403,7 +417,7 @@ def tilequeue_process(cfg, peripherals):
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
 
-    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, layer_data,
+    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, all_layer_data,
                                   io_pool, n_layers)
 
     # create all queues used to manage pipeline
