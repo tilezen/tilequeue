@@ -75,6 +75,8 @@ def transform_feature_layers_shape(feature_layers, format, scale,
     format_padded_bounds = geometry.box(
         *(padded_bounds if is_vtm_format else unpadded_bounds))
 
+    tolerance = tolerance_for_zoom(coord.zoom)
+
     transformed_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
@@ -88,11 +90,12 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
         simplify_before_intersect = layer_datum['simplify_before_intersect']
 
+        # perform any simplification as necessary
+        simplify_start = layer_datum['simplify_start']
+        simplify_until = 16
+        should_simplify = simplify_start <= coord.zoom < simplify_until
+
         for shape, props, feature_id in features:
-            # perform any simplification as necessary
-            tolerance = tolerance_for_zoom(coord.zoom)
-            simplify_until = 16
-            should_simplify = coord.zoom < simplify_until
 
             if should_simplify and simplify_before_intersect:
                 # To reduce the performance hit of simplifying potentially huge
