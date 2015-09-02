@@ -55,6 +55,13 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 
     return preproc_feature_layers
 
+# post-process all the layers simulataneously, which allows new
+# layers to be created from processing existing ones (e.g: for
+# computed centroids) or modifying layers based on the contents
+# of other layers (e.g: projecting attributes, deleting hidden
+# features, etc...)
+def _postprocess_data(feature_layers, post_process_data):
+    return feature_layers
 
 def _cut_coord(feature_layers, shape_padded_bounds):
     cut_feature_layers = []
@@ -145,12 +152,14 @@ def _process_feature_layers(feature_layers, coord, formats, unpadded_bounds,
 
 
 # given a coord and the raw feature layers results from the database,
-# filter, transform, sort, and then format according to each formatter
-# this is the entry point from the worker process
-def process_coord(coord, feature_layers, formats, unpadded_bounds,
-                  padded_bounds, cut_coords, scale=4096):
+# filter, transform, sort, post-process and then format according to
+# each formatter. this is the entry point from the worker process
+def process_coord(coord, feature_layers, post_process_data, formats,
+                  unpadded_bounds, padded_bounds, cut_coords, scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
+    feature_layers = _postprocess_data(feature_layers, post_process_data)
+
     children_formatted_tiles = []
     if cut_coords:
         for cut_coord in cut_coords:

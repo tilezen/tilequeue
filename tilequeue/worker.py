@@ -182,6 +182,7 @@ class DataFetch(object):
                 metadata=metadata,
                 coord=coord,
                 feature_layers=fetch_data['feature_layers'],
+                post_process_data=fetch_data['post_process_data'],
                 unpadded_bounds=fetch_data['unpadded_bounds'],
                 padded_bounds=fetch_data['padded_bounds'],
                 cut_coords=cut_coords,
@@ -200,8 +201,9 @@ class ProcessAndFormatData(object):
 
     scale = 4096
 
-    def __init__(self, formats, input_queue, output_queue, logger):
+    def __init__(self, post_process_data, formats, input_queue, output_queue, logger):
         formats.sort(key=attrgetter('sort_key'))
+        self.post_process_data = post_process_data
         self.formats = formats
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -231,8 +233,9 @@ class ProcessAndFormatData(object):
 
             try:
                 formatted_tiles = process_coord(
-                    coord, feature_layers, self.formats,
-                    unpadded_bounds, padded_bounds, cut_coords)
+                    coord, feature_layers, self.post_process_data,
+                    self.formats, unpadded_bounds, padded_bounds,
+                    cut_coords)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
