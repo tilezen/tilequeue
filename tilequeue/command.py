@@ -366,7 +366,8 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
             transform_fn_names=layer_config['transform'],
             sort_fn_name=layer_config.get('sort'),
             simplify_before_intersect=layer_config.get(
-                'simplify_before_intersect', False)
+                'simplify_before_intersect', False),
+            simplify_start=layer_config.get('simplify_start', 0),
         )
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
