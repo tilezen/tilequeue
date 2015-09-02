@@ -67,12 +67,13 @@ def _postprocess_data(feature_layers, post_process_data):
         params = step['params']
 
         layer = fn(feature_layers, **params)
-        for index, feature_layer in enumerate(feature_layers):
-            layer_datum = feature_layer['layer_datum']
-            layer_name = layer_datum['name']
-            if layer_name == layer['name']:
-                feature_layers[index] = layer
-                break
+        if layer is not None:
+            for index, feature_layer in enumerate(feature_layers):
+                layer_datum = feature_layer['layer_datum']
+                layer_name = layer_datum['name']
+                if layer_name == layer['name']:
+                    feature_layers[index] = layer
+                    break
 
     return feature_layers
 
