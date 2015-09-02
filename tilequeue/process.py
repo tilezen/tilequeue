@@ -101,8 +101,9 @@ def _cut_coord(feature_layers, shape_padded_bounds):
     return cut_feature_layers
 
 
-def _process_feature_layers(feature_layers, coord, formats, unpadded_bounds,
-                            padded_bounds, scale):
+def _process_feature_layers(feature_layers, coord, post_process_data,
+                            formats, unpadded_bounds, padded_bounds,
+                            scale):
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -138,6 +139,9 @@ def _process_feature_layers(feature_layers, coord, formats, unpadded_bounds,
                              layer_datum=layer_datum)
         processed_feature_layers.append(feature_layer)
 
+    # post-process data here, before it gets formatted
+    processed_feature_layers = _postprocess_data(processed_feature_layers, post_process_data)
+
     # topojson formatter expects bounds to be in wgs84
     unpadded_bounds_merc = unpadded_bounds
     unpadded_bounds_wgs84 = (
@@ -172,7 +176,6 @@ def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, padded_bounds, cut_coords, scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
-    feature_layers = _postprocess_data(feature_layers, post_process_data)
 
     children_formatted_tiles = []
     if cut_coords:
@@ -185,11 +188,12 @@ def process_coord(coord, feature_layers, post_process_data, formats,
             child_feature_layers = _cut_coord(feature_layers,
                                               shape_cut_padded_bounds)
             child_formatted_tiles = _process_feature_layers(
-                child_feature_layers, cut_coord, formats, unpadded_cut_bounds,
-                padded_cut_bounds, scale)
+                child_feature_layers, cut_coord, post_process_data, formats,
+                unpadded_cut_bounds, padded_cut_bounds, scale)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
-        feature_layers, coord, formats, unpadded_bounds, padded_bounds, scale)
+        feature_layers, coord, post_process_data, formats, unpadded_bounds,
+        padded_bounds, scale)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles
