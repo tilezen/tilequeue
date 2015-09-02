@@ -61,6 +61,19 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data):
+
+    for step in post_process_data:
+        fn = loadClassPath(step['fn_name'])
+        params = step['params']
+
+        layer = fn(feature_layers, **params)
+        for index, feature_layer in enumerate(feature_layers):
+            layer_datum = feature_layer['layer_datum']
+            layer_name = layer_datum['name']
+            if layer_name == layer['name']:
+                feature_layers[index] = layer
+                break
+
     return feature_layers
 
 def _cut_coord(feature_layers, shape_padded_bounds):
