@@ -55,6 +55,7 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 
     return preproc_feature_layers
 
+
 # post-process all the layers simulataneously, which allows new
 # layers to be created from processing existing ones (e.g: for
 # computed centroids) or modifying layers based on the contents
@@ -76,6 +77,7 @@ def _postprocess_data(feature_layers, post_process_data):
                     break
 
     return feature_layers
+
 
 def _cut_coord(feature_layers, shape_padded_bounds):
     cut_feature_layers = []
@@ -140,7 +142,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
         processed_feature_layers.append(feature_layer)
 
     # post-process data here, before it gets formatted
-    processed_feature_layers = _postprocess_data(processed_feature_layers, post_process_data)
+    processed_feature_layers = _postprocess_data(
+        processed_feature_layers, post_process_data)
 
     # topojson formatter expects bounds to be in wgs84
     unpadded_bounds_merc = unpadded_bounds

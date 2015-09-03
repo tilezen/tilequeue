@@ -201,7 +201,8 @@ class ProcessAndFormatData(object):
 
     scale = 4096
 
-    def __init__(self, post_process_data, formats, input_queue, output_queue, logger):
+    def __init__(self, post_process_data, formats, input_queue, \
+                 output_queue, logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
