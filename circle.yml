@@ -7,5 +7,6 @@ dependencies:
 
 test:
   override:
+    - pip install -U 'mock==1.2.0'
     - python setup.py test
     - find . -not -path '*/.eggs/*' -name '*.py' | xargs flake8
