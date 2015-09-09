@@ -342,8 +342,10 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
         from tilequeue.query import JinjaQueryGenerator
     all_layer_names = query_cfg['all']
     layers_config = query_cfg['layers']
+    post_process_config = query_cfg.get('post_process', dict())
     layer_data = []
     all_layer_data = []
+    post_process_data = []
 
     environment = Environment(loader=FileSystemLoader(template_path))
     environment.filters['geometry'] = jinja_filter_geometry
@@ -372,7 +374,13 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
             all_layer_data.append(layer_datum)
-    return all_layer_data, layer_data
+
+    for fn_name, params in post_process_config.items():
+        post_process_data.append(dict(
+            fn_name=fn_name,
+            params=dict(params)))
+
+    return all_layer_data, layer_data, post_process_data
 
 
 def tilequeue_process(cfg, peripherals):
@@ -384,7 +392,7 @@ def tilequeue_process(cfg, peripherals):
 
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
-    all_layer_data, layer_data = parse_layer_data(
+    all_layer_data, layer_data, post_process_data = parse_layer_data(
         query_cfg, cfg.template_path, cfg.reload_templates)
 
     formats = lookup_formats(cfg.output_formats)
@@ -447,7 +455,8 @@ def tilequeue_process(cfg, peripherals):
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
         peripherals.redis_cache_index, logger)
 
-    data_processor = ProcessAndFormatData(formats, sql_data_fetch_queue,
+    data_processor = ProcessAndFormatData(post_process_data, formats,
+                                          sql_data_fetch_queue,
                                           processor_queue, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
