@@ -182,7 +182,6 @@ class DataFetch(object):
                 metadata=metadata,
                 coord=coord,
                 feature_layers=fetch_data['feature_layers'],
-                post_process_data=fetch_data['post_process_data'],
                 unpadded_bounds=fetch_data['unpadded_bounds'],
                 padded_bounds=fetch_data['padded_bounds'],
                 cut_coords=cut_coords,
