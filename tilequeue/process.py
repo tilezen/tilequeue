@@ -72,9 +72,14 @@ def _postprocess_data(feature_layers, post_process_data):
             for index, feature_layer in enumerate(feature_layers):
                 layer_datum = feature_layer['layer_datum']
                 layer_name = layer_datum['name']
-                if layer_name == layer['name']:
+                if layer_name == layer['layer_datum']['name']:
                     feature_layers[index] = layer
+                    layer = None
                     break
+            # if this layer isn't replacing an old layer, then
+            # append it.
+            if layer is not None:
+                feature_layers.append(layer)
 
     return feature_layers
 
