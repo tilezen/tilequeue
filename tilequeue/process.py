@@ -1,4 +1,5 @@
 from cStringIO import StringIO
+from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
 from tilequeue.tile import coord_to_mercator_bounds
@@ -9,6 +10,7 @@ from tilequeue.transform import transform_feature_layers_shape
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
+import math
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -123,9 +125,52 @@ def _make_valid_if_necessary(shape):
     return shape
 
 
+# radius from http://wiki.openstreetmap.org/wiki/Zoom_levels
+earth_equatorial_radius_meters = 6372798.2
+earth_equatorial_circumference_meters = 40041472.01586051
+
+
+def _find_meters_per_pixel(zoom, mercator_bounds):
+    # just use the miny for the latitude
+    min_xy = mercator_bounds[:2]
+    # we need the value in degrees
+    _, y = mercator_point_to_wgs84(min_xy)
+    # math.cos wants the input to be in radians
+    y = y * math.pi / 180
+
+    # from http://wiki.openstreetmap.org/wiki/Zoom_levels
+    meters_per_pixel = (earth_equatorial_circumference_meters * math.cos(y) /
+                        (2 ** (zoom + 8)))
+    return meters_per_pixel
+
+
+# returns none if the shape is not visible given the number of meters
+# per pixel. for multipolygons, will filter out any subpolygons that
+# should not be visible, which means that the shape could have been
+# altered
+def _visible_shape(shape, meters_per_pixel):
+    if shape.type == 'MultiPolygon':
+        visible_shapes = []
+        for subshape in shape.geoms:
+            subshape = _visible_shape(subshape, meters_per_pixel)
+            if subshape:
+                visible_shapes.append(subshape)
+        if visible_shapes:
+            return MultiPolygon(visible_shapes)
+        else:
+            return None
+    elif shape.type == 'Polygon':
+        shape_meters = shape.area
+        return shape if shape_meters >= meters_per_pixel else None
+    else:
+        return shape
+
+
 def _simplify_data(feature_layers, bounds, zoom):
     tolerance = tolerance_for_zoom(zoom)
     shape_bounds = geometry.box(*bounds)
+
+    meters_per_pixel = _find_meters_per_pixel(zoom, bounds)
 
     simplified_feature_layers = []
     for feature_layer in feature_layers:
@@ -172,6 +217,11 @@ def _simplify_data(feature_layers, bounds, zoom):
                 simplified_shape = shape.simplify(tolerance,
                                                   preserve_topology=True)
                 shape = _make_valid_if_necessary(simplified_shape)
+
+            # this could alter multipolygon geometries
+            shape = _visible_shape(shape, meters_per_pixel)
+            if shape is None:
+                continue
 
             simplified_feature = shape, props, feature_id
             simplified_features.append(simplified_feature)
