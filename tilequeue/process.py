@@ -3,6 +3,7 @@ from shapely import geometry
 from shapely.wkb import loads
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import pad_bounds_for_zoom
+from tilequeue.tile import tolerance_for_zoom
 from tilequeue.transform import mercator_point_to_wgs84
 from tilequeue.transform import transform_feature_layers_shape
 from TileStache.Config import loadClassPath
@@ -108,6 +109,83 @@ def _cut_coord(feature_layers, shape_padded_bounds):
     return cut_feature_layers
 
 
+def _make_valid_if_necessary(shape):
+    """
+    attempt to correct invalid shapes if necessary
+
+    After simplification, even when preserving topology, invalid
+    shapes can be returned. This appears to only occur with polygon
+    types. As an optimization, we only check if the polygon types are
+    valid.
+    """
+    if shape.type in ('Polygon', 'MultiPolygon') and not shape.is_valid:
+        shape = shape.buffer(0)
+    return shape
+
+
+def _simplify_data(feature_layers, bounds, zoom):
+    tolerance = tolerance_for_zoom(zoom)
+    shape_bounds = geometry.box(*bounds)
+
+    simplified_feature_layers = []
+    for feature_layer in feature_layers:
+        simplified_features = []
+
+        layer_datum = feature_layer['layer_datum']
+        is_clipped = layer_datum['is_clipped']
+
+        # The logic behind simplifying before intersecting rather than the
+        # other way around is extensively explained here:
+        # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
+        simplify_before_intersect = layer_datum['simplify_before_intersect']
+
+        # perform any simplification as necessary
+        simplify_start = layer_datum['simplify_start']
+        simplify_until = 16
+        should_simplify = simplify_start <= zoom < simplify_until
+
+        for shape, props, feature_id in feature_layer['features']:
+
+            if should_simplify and simplify_before_intersect:
+                # To reduce the performance hit of simplifying potentially huge
+                # geometries to extract only a small portion of them when
+                # cutting out the actual tile, we cut out a slightly larger
+                # bounding box first. See here for an explanation:
+                # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
+
+                min_x, min_y, max_x, max_y = shape_bounds.bounds
+                gutter_bbox_size = (max_x - min_x) * 0.1
+                gutter_bbox = geometry.box(
+                    min_x - gutter_bbox_size,
+                    min_y - gutter_bbox_size,
+                    max_x + gutter_bbox_size,
+                    max_y + gutter_bbox_size)
+                clipped_shape = shape.intersection(gutter_bbox)
+                simplified_shape = clipped_shape.simplify(
+                    tolerance, preserve_topology=True)
+                shape = _make_valid_if_necessary(simplified_shape)
+
+            if is_clipped:
+                shape = shape.intersection(shape_bounds)
+
+            if should_simplify and not simplify_before_intersect:
+                simplified_shape = shape.simplify(tolerance,
+                                                  preserve_topology=True)
+                shape = _make_valid_if_necessary(simplified_shape)
+
+            simplified_feature = shape, props, feature_id
+            simplified_features.append(simplified_feature)
+
+        simplified_feature_layer = dict(
+            name=feature_layer['name'],
+            features=simplified_features,
+            layer_datum=layer_datum,
+        )
+        simplified_feature_layers.append(simplified_feature_layer)
+
+    return simplified_feature_layers
+
+
 def _process_feature_layers(feature_layers, coord, post_process_data,
                             formats, unpadded_bounds, padded_bounds,
                             scale):
@@ -149,6 +227,10 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
         processed_feature_layers, post_process_data)
+
+    # after post processing, perform simplification and clipping
+    processed_feature_layers = _simplify_data(
+        processed_feature_layers, padded_bounds, coord.zoom)
 
     # topojson formatter expects bounds to be in wgs84
     unpadded_bounds_merc = unpadded_bounds
