@@ -10,7 +10,6 @@ from tilequeue.transform import transform_feature_layers_shape
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
-import math
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -130,17 +129,10 @@ earth_equatorial_radius_meters = 6372798.2
 earth_equatorial_circumference_meters = 40041472.01586051
 
 
-def _find_meters_per_pixel(zoom, mercator_bounds):
-    # just use the miny for the latitude
-    min_xy = mercator_bounds[:2]
-    # we need the value in degrees
-    _, y = mercator_point_to_wgs84(min_xy)
-    # math.cos wants the input to be in radians
-    y = y * math.pi / 180
-
-    # from http://wiki.openstreetmap.org/wiki/Zoom_levels
-    meters_per_pixel = (earth_equatorial_circumference_meters * math.cos(y) /
-                        (2 ** (zoom + 8)))
+def _find_meters_per_pixel(zoom):
+    meters_in_dimension = (earth_equatorial_circumference_meters /
+                           (2 ** (zoom + 8)))
+    meters_per_pixel = meters_in_dimension * meters_in_dimension
     return meters_per_pixel
 
 
@@ -170,7 +162,7 @@ def _simplify_data(feature_layers, bounds, zoom):
     tolerance = tolerance_for_zoom(zoom)
     shape_bounds = geometry.box(*bounds)
 
-    meters_per_pixel = _find_meters_per_pixel(zoom, bounds)
+    meters_per_pixel = _find_meters_per_pixel(zoom)
 
     simplified_feature_layers = []
     for feature_layer in feature_layers:
