@@ -63,13 +63,14 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
-def _postprocess_data(feature_layers, post_process_data):
+def _postprocess_data(feature_layers, post_process_data,
+                      zoom):
 
     for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
         params = step['params']
 
-        layer = fn(feature_layers, **params)
+        layer = fn(feature_layers, zoom, **params)
         if layer is not None:
             for index, feature_layer in enumerate(feature_layers):
                 layer_datum = feature_layer['layer_datum']
@@ -268,7 +269,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data)
+        processed_feature_layers, post_process_data, coord.zoom)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
