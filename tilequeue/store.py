@@ -24,6 +24,14 @@ class S3(object):
             reduced_redundancy=self.reduced_redundancy,
         )
 
+    def read_tile(self, coord, format):
+        key_name = tile_key(self.layer, coord, format.extension, self.path)
+        key = self.bucket.get_key(key_name)
+        if key is None:
+            return None
+        tile_data = key.get_contents_as_string()
+        return tile_data
+
 
 class StubLayer(object):
 
@@ -74,6 +82,15 @@ class TileDirectory(object):
         with open(file_path, 'w') as tile_fp:
             tile_fp.write(tile_data)
 
+    def read_tile(self, coord, format):
+        file_path = make_file_path(self.base_path, coord, format.extension)
+        try:
+            with open(file_path, 'r') as tile_fp:
+                tile_data = tile_fp.read()
+            return tile_data
+        except IOError:
+            return None
+
 
 def make_tile_file_store(base_path=None):
     if base_path is None:
@@ -88,6 +105,12 @@ class Memory(object):
 
     def write_tile(self, tile_data, coord, format):
         self.data = tile_data, coord, format
+
+    def read_tile(self, coord, format):
+        if self.data is None:
+            return None
+        tile_data, coord, format = self.data
+        return tile_data
 
 
 def make_s3_store(bucket_name,
