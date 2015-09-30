@@ -342,7 +342,7 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
         from tilequeue.query import JinjaQueryGenerator
     all_layer_names = query_cfg['all']
     layers_config = query_cfg['layers']
-    post_process_config = query_cfg.get('post_process', dict())
+    post_process_config = query_cfg.get('post_process', [])
     layer_data = []
     all_layer_data = []
     post_process_data = []
@@ -375,7 +375,12 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
         if layer_name in all_layer_names:
             all_layer_data.append(layer_datum)
 
-    for fn_name, params in post_process_config.items():
+    for post_process_item in post_process_config:
+        fn_name = post_process_item.get('fn')
+        assert fn_name, 'Missing post process config fn'
+        params = post_process_item.get('params')
+        if params is None:
+            params = {}
         post_process_data.append(dict(
             fn_name=fn_name,
             params=dict(params)))
