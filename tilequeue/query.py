@@ -47,6 +47,15 @@ def jinja_filter_bbox_filter(bounds, geometry_col_name, srid=900913):
     return bbox_filter
 
 
+def jinja_filter_bbox_intersection(bounds, geometry_col_name, srid=900913):
+    min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
+    max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
+    bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
+    bbox = 'ST_SetSrid(%s, %d)' % (bbox_no_srid, srid)
+    bbox_intersection = 'st_intersection(%s, %s)' % (geometry_col_name, bbox)
+    return bbox_intersection
+
+
 def build_feature_queries(bounds, layer_data, zoom):
     queries_to_execute = []
     for layer_datum in layer_data:
