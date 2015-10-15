@@ -295,6 +295,7 @@ def tilequeue_intersect(cfg, peripherals):
     all_coord_ints_set = coord_ints_from_paths(expired_tile_paths)
     logger.info('Unique expired tiles read to process: %d' %
                 len(all_coord_ints_set))
+
     for coord_int in explode_and_intersect(
             all_coord_ints_set, tiles_of_interest,
             until=cfg.intersect_zoom_until):
@@ -699,6 +700,80 @@ def tilequeue_seed(cfg, peripherals):
     logger.info('%d tiles enqueued' % n_tiles)
 
 
+class ThreadedEnqueuer(object):
+
+    def __init__(self, sqs_queue, n_threads, logger=None):
+        self.sqs_queue = sqs_queue
+        self.n_threads = n_threads
+        self.logger = logger
+
+    def _log(self, level, msg):
+        if self.logger is not None:
+            self.logger.log(level, msg)
+
+    def __call__(self, coords):
+        # 10 is the number of messages that sqs can send at once
+        buf_size = 10
+        thread_work_queue = Queue.Queue(self.n_threads * buf_size)
+        thread_results_queue = Queue.Queue(self.n_threads)
+        threads = []
+
+        def enqueue():
+            buf = []
+            done = False
+            total_queued = 0
+            total_in_flight = 0
+            while not done:
+                coord = thread_work_queue.get()
+                if coord is None:
+                    done = True
+                else:
+                    buf.append(coord)
+                if len(buf) >= buf_size or (done and buf):
+                    n_queued, n_in_flight = self.sqs_queue.enqueue_batch(buf)
+                    total_queued += n_queued
+                    total_in_flight += n_in_flight
+                    del buf[:]
+            thread_results_queue.put((total_queued, total_in_flight))
+
+        # first start up all the threads
+        self._log(logging.INFO, 'Starting %d enqueueing threads ...' %
+                  self.n_threads)
+        for i in xrange(self.n_threads):
+            thread = threading.Thread(target=enqueue)
+            thread.start()
+            threads.append(thread)
+        self._log(logging.INFO, 'Starting %d enqueueing threads ... done' %
+                  self.n_threads)
+
+        # queue up the work
+        self._log(logging.INFO,
+                  'Starting to enqueue coordinates - will process %d tiles' %
+                  len(coords))
+        for coord in coords:
+            thread_work_queue.put(coord)
+
+        # tell the threads to stop
+        total_queued_across_threads = 0
+        total_in_flight_across_threads = 0
+        for thread in threads:
+            thread_work_queue.put(None)
+        for thread in threads:
+            # join with the thread
+            thread.join()
+            # and also get the results from that thread
+            n_queued, n_in_flight = thread_results_queue.get()
+            total_queued_across_threads += n_queued
+            total_in_flight_across_threads += n_in_flight
+
+        self._log(logging.INFO, 'All coordinates enqueued')
+        self._log(logging.INFO, '%d processed - %d enqueued - %d in flight' %
+                  (len(coords), total_queued_across_threads,
+                   total_in_flight_across_threads))
+
+        return total_queued_across_threads, total_in_flight_across_threads
+
+
 def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'enqueue_tiles_of_interest')
     logger.info('Enqueueing tiles of interest')
@@ -964,6 +1039,31 @@ def tilequeue_tile_sizes(cfg, peripherals):
     print_count(None, grand_total_count)
 
 
+def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
+    from tilequeue.wof import make_wof_model
+    from tilequeue.wof import make_wof_neighbourhood_fetcher
+    from tilequeue.wof import make_wof_processor
+
+    wof_cfg = cfg.wof
+    assert wof_cfg, 'Missing wof config'
+
+    logger = make_logger(cfg, 'wof_process_neighbourhoods')
+    logger.info('WOF process neighbourhoods run started')
+
+    fetcher = make_wof_neighbourhood_fetcher(wof_cfg['neighbourhoods_url'])
+    model = make_wof_model(wof_cfg['postgresql'])
+
+    n_threads = 20
+    processor = make_wof_processor(
+        fetcher, model, peripherals.redis_cache_index, peripherals.queue,
+        n_threads, logger)
+
+    logger.info('Processing ...')
+    processor()
+    logger.info('Processing ... done')
+    logger.info('WOF process neighbourhoods run completed')
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -986,6 +1086,8 @@ def tilequeue_main(argv_args=None):
         ('enqueue-tiles-of-interest',
          create_command_parser(tilequeue_enqueue_tiles_of_interest)),
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
+        ('wof-process-neighbourhoods', create_command_parser(
+            tilequeue_process_wof_neighbourhoods)),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

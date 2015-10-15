@@ -85,6 +85,8 @@ class Configuration(object):
             "Expecting postgresql 'dbnames' to be a list"
         assert len(dbnames) > 0, 'No postgresql dbnames configured'
 
+        self.wof = self.yml.get('wof')
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml

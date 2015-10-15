@@ -1,5 +1,6 @@
 from itertools import chain
 from ModestMaps.Core import Coordinate
+from ModestMaps.Core import Point
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
@@ -97,6 +98,13 @@ def coord_to_bounds(coord):
 
 
 spherical_mercator = SphericalMercator()
+
+
+def mercator_point_to_coord(z, x, y):
+    point = Point(x, y)
+    coord = spherical_mercator.projCoordinate(point)
+    coord = coord.zoomTo(z).container()
+    return coord
 
 
 def coord_to_mercator_bounds(coord):
