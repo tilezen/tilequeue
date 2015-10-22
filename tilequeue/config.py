@@ -24,6 +24,7 @@ class Configuration(object):
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
         self.seed_all_zoom_until = seed_cfg['all']['zoom-until']
+        self.seed_n_threads = seed_cfg['n-threads']
 
         seed_metro_cfg = seed_cfg['metro-extract']
         self.seed_metro_extract_url = seed_metro_cfg['url']
@@ -136,7 +137,8 @@ def default_yml_config():
                     'zoom-until': None,
                     'bboxes': []
                 },
-                'should-add-to-tiles-of-interest': True
+                'should-add-to-tiles-of-interest': True,
+                'n-threads': 50,
             },
             'intersect': {
                 'expired-location': None,
