@@ -1,6 +1,6 @@
 queue:
-  # type can be `sqs`, `file`, or `redis`
-  type: sqs
+  # type can be `sqs`, `file`, `mem`, or `redis`
+  type: mem
   name: <sqs queue/queue file name/redis key>
 store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
@@ -53,7 +53,7 @@ tilestache:
 logging:
   # logging.conf on this page:
   # https://docs.python.org/2/howto/logging.html#logging-basic-tutorial
-  config: <path/to/logging/config>
+  config: logging.conf.sample
 redis:
   host: localhost
   port: 6379
@@ -65,3 +65,12 @@ postgresql:
   dbnames: [osm]
   user: osm
   password:
+
+wof:
+  neighbourhoods_url: https://github.com/whosonfirst/whosonfirst-data/blob/master/meta/wof-neighbourhood-latest.csv?raw=true
+  postgresql:
+    host: localhost
+    port: 5432
+    dbname: osm
+    user: osm
+    password:

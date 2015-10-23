@@ -250,38 +250,6 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Will process %d expired tile files.'
                 % len(expired_tile_paths))
 
-    lock = threading.Lock()
-    totals = dict(enqueued=0, in_flight=0)
-    thread_queue_buffer_size = 1000
-    thread_queue = Queue.Queue(thread_queue_buffer_size)
-
-    # each thread will enqueue coords to sqs
-    def enqueue_coords():
-        buf = []
-        buf_size = 10
-        done = False
-        while not done:
-            coord = thread_queue.get()
-            if coord is None:
-                done = True
-            else:
-                buf.append(coord)
-            if len(buf) >= buf_size or (done and buf):
-                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-                with lock:
-                    totals['enqueued'] += n_queued
-                    totals['in_flight'] += n_in_flight
-                del buf[:]
-
-    # clamp number of threads between 5 and 20
-    n_threads = max(min(len(expired_tile_paths), 20), 5)
-    # start up threads
-    threads = []
-    for i in range(n_threads):
-        thread = threading.Thread(target=enqueue_coords)
-        thread.start()
-        threads.append(thread)
-
     for expired_tile_path in expired_tile_paths:
         stat_result = os.stat(expired_tile_path)
         file_size = stat_result.st_size
@@ -295,19 +263,16 @@ def tilequeue_intersect(cfg, peripherals):
     all_coord_ints_set = coord_ints_from_paths(expired_tile_paths)
     logger.info('Unique expired tiles read to process: %d' %
                 len(all_coord_ints_set))
-    for coord_int in explode_and_intersect(
-            all_coord_ints_set, tiles_of_interest,
-            until=cfg.intersect_zoom_until):
-        coord = coord_unmarshall_int(coord_int)
-        thread_queue.put(coord)
 
-    for thread in threads:
-        # threads stop on None sentinel
-        thread_queue.put(None)
+    # determine the list of coordinates we would want to enqueue
+    coord_ints = explode_and_intersect(all_coord_ints_set, tiles_of_interest,
+                                       until=cfg.intersect_zoom_until)
+    coords = map(coord_unmarshall_int, coord_ints)
 
-    # wait for all threads to terminate
-    for thread in threads:
-        thread.join()
+    # clamp number of threads between 5 and 20
+    n_threads = max(min(len(expired_tile_paths), 20), 5)
+    enqueuer = ThreadedEnqueuer(sqs_queue, n_threads, logger)
+    n_queued, n_in_flight = enqueuer(coords)
 
     # print results
     for expired_tile_path in expired_tile_paths:
@@ -316,7 +281,7 @@ def tilequeue_intersect(cfg, peripherals):
         logger.info('Removed: %s' % expired_tile_path)
 
     logger.info('%d tiles enqueued. %d tiles in flight.' %
-                (totals['enqueued'], totals['in_flight']))
+                (n_queued, n_in_flight))
 
     logger.info('Intersection complete.')
 
@@ -630,73 +595,121 @@ def tilequeue_process(cfg, peripherals):
         time.sleep(1024)
 
 
-def queue_generator(queue):
-    while True:
-        data = queue.get()
-        if data is None:
-            break
-        yield data
+class ThreadedEnqueuer(object):
+
+    def __init__(self, sqs_queue, n_threads, logger=None):
+        self.sqs_queue = sqs_queue
+        self.n_threads = n_threads
+        self.logger = logger
+
+    def _log(self, level, msg):
+        if self.logger is not None:
+            self.logger.log(level, msg)
+
+    def __call__(self, coords):
+        # 10 is the number of messages that sqs can send at once
+        buf_size = 10
+        thread_work_queue = Queue.Queue(self.n_threads * buf_size)
+        thread_results_queue = Queue.Queue(self.n_threads)
+        threads = []
+
+        def enqueue():
+            buf = []
+            done = False
+            total_queued = 0
+            total_in_flight = 0
+            while not done:
+                coord = thread_work_queue.get()
+                if coord is None:
+                    done = True
+                else:
+                    buf.append(coord)
+                if len(buf) >= buf_size or (done and buf):
+                    n_queued, n_in_flight = self.sqs_queue.enqueue_batch(buf)
+                    total_queued += n_queued
+                    total_in_flight += n_in_flight
+                    del buf[:]
+            thread_results_queue.put((total_queued, total_in_flight))
+
+        # first start up all the threads
+        self._log(logging.INFO, 'Starting %d enqueueing threads ...' %
+                  self.n_threads)
+        for i in xrange(self.n_threads):
+            thread = threading.Thread(target=enqueue)
+            thread.start()
+            threads.append(thread)
+        self._log(logging.INFO, 'Starting %d enqueueing threads ... done' %
+                  self.n_threads)
+
+        # queue up the work
+        self._log(logging.INFO, 'Starting to enqueue coordinates ...')
+        for coord in coords:
+            thread_work_queue.put(coord)
+
+        # tell the threads to stop
+        total_queued_across_threads = 0
+        total_in_flight_across_threads = 0
+        for thread in threads:
+            thread_work_queue.put(None)
+        for thread in threads:
+            # join with the thread
+            thread.join()
+            # and also get the results from that thread
+            n_queued, n_in_flight = thread_results_queue.get()
+            total_queued_across_threads += n_queued
+            total_in_flight_across_threads += n_in_flight
+
+        n_proc = total_queued_across_threads + total_in_flight_across_threads
+        self._log(logging.INFO, 'Starting to enqueue coordinates ... done')
+        self._log(logging.INFO, '%d processed - %d enqueued - %d in flight' %
+                  (n_proc, total_queued_across_threads,
+                   total_in_flight_across_threads))
+
+        return total_queued_across_threads, total_in_flight_across_threads
 
 
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
     queue = peripherals.queue
-    tile_generator = make_seed_tile_generator(cfg)
-
-    # updating sqs and updating redis happen in background threads
-    def sqs_enqueue(tile_gen):
-        n_enqueued, n_in_flight = queue.enqueue_batch(tile_gen)
-
-    def redis_add(tile_gen):
-        peripherals.redis_cache_index.index_coords(tile_gen)
-
-    queue_buf_size = 1000
-    queue_sqs_coords = Queue.Queue(queue_buf_size)
-    queue_redis_coords = Queue.Queue(queue_buf_size)
-
     # suppresses checking the in flight list while seeding
     queue.is_seeding = True
+    redis_cache_index = peripherals.redis_cache_index
+    enqueuer = ThreadedEnqueuer(queue, cfg.seed_n_threads, logger)
 
-    # use multiple sqs threads
-    n_sqs_threads = 3
+    # based on cfg, create tile generator
+    tile_generator = make_seed_tile_generator(cfg)
+    # realize all tiles to simplify (they get realized anyway to
+    # eliminate dupes)
+    logger.info('Generating seed list ...')
+    coords = list(tile_generator)
+    logger.info('Generating seed list ... done')
+    n_tiles = len(coords)
+    logger.info('Will seed %d tiles' % n_tiles)
 
-    sqs_threads = [threading.Thread(target=sqs_enqueue,
-                                    args=(queue_generator(queue_sqs_coords),))
-                   for x in range(n_sqs_threads)]
-    thread_redis = threading.Thread(
-        target=redis_add, args=(queue_generator(queue_redis_coords),))
+    # updating sqs and updating redis happen in background threads
+    def redis_add():
+        redis_cache_index.index_coords(coords)
+
+    def sqs_enqueue():
+        enqueuer(coords)
 
     logger.info('Sqs ... ')
+    thread_enqueue = threading.Thread(target=sqs_enqueue)
+    thread_enqueue.start()
+
     if cfg.seed_should_add_to_tiles_of_interest:
         logger.info('Tiles of interest ...')
-
-    for thread_sqs in sqs_threads:
-        thread_sqs.start()
-    if cfg.seed_should_add_to_tiles_of_interest:
+        thread_redis = threading.Thread(target=redis_add)
         thread_redis.start()
-
-    n_tiles = 0
-    for tile in tile_generator:
-        n_tiles += 1
-        queue_sqs_coords.put(tile)
-        if cfg.seed_should_add_to_tiles_of_interest:
-            queue_redis_coords.put(tile)
-
-    # None is sentinel value
-    for i in range(n_sqs_threads):
-        queue_sqs_coords.put(None)
-    if cfg.seed_should_add_to_tiles_of_interest:
-        queue_redis_coords.put(None)
 
     if cfg.seed_should_add_to_tiles_of_interest:
         thread_redis.join()
         logger.info('Tiles of interest ... done')
-    for thread_sqs in sqs_threads:
-        thread_sqs.join()
+
+    thread_enqueue.join()
     logger.info('Sqs ... done')
     logger.info('Seeding tiles ... done')
-    logger.info('%d tiles enqueued' % n_tiles)
 
 
 def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
@@ -706,81 +719,20 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     sqs_queue = peripherals.queue
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    n_toi = len(tiles_of_interest)
     logger.info('Fetching tiles of interest ... done')
 
-    thread_queue_buffer_size = 5000
-    thread_queue = Queue.Queue(thread_queue_buffer_size)
-    n_threads = 50
-
-    lock = threading.Lock()
-    totals = dict(enqueued=0, in_flight=0)
-
-    def enqueue_coords_thread():
-        buf = []
-        buf_size = 10
-        done = False
-        while not done:
-            coord = thread_queue.get()
-            if coord is None:
-                done = True
-            else:
-                buf.append(coord)
-            if len(buf) >= buf_size or (done and buf):
-                n_queued, n_in_flight = sqs_queue.enqueue_batch(buf)
-                with lock:
-                    totals['enqueued'] += n_queued
-                    totals['in_flight'] += n_in_flight
-                del buf[:]
-
-    logger.info('Starting %d enqueueing threads ...' % n_threads)
-    threads = []
-    for i in xrange(n_threads):
-        thread = threading.Thread(target=enqueue_coords_thread)
-        thread.start()
-        threads.append(thread)
-    logger.info('Starting %d enqueueing threads ... done' % n_threads)
-
-    logger.info('Starting to enqueue coordinates - will process %d tiles'
-                % len(tiles_of_interest))
-
-    def log_totals():
-        with lock:
-            logger.info('%d processed - %d enqueued, %d in flight' % (
-                totals['enqueued'] + totals['in_flight'],
-                totals['enqueued'], totals['in_flight']))
-
-    progress_queue = Queue.Queue()
-    progress_interval_seconds = 120
-
-    def log_progress_thread():
-        while True:
-            try:
-                progress_queue.get(timeout=progress_interval_seconds)
-            except:
-                log_totals()
-            else:
-                break
-
-    progress_thread = threading.Thread(target=log_progress_thread)
-    progress_thread.start()
-
-    for tile_of_interest_value in tiles_of_interest:
-        coord = coord_unmarshall_int(tile_of_interest_value)
-        # don't enqueue coords with zoom > 18
+    coords = []
+    for coord_int in tiles_of_interest:
+        coord = coord_unmarshall_int(coord_int)
         if coord.zoom <= 18:
-            thread_queue.put(coord)
+            coords.append(coord)
 
-    for i in xrange(n_threads):
-        thread_queue.put(None)
+    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+    n_queued, n_in_flight = enqueuer(coords)
 
-    for thread in threads:
-        thread.join()
-
-    progress_queue.put(None)
-    progress_thread.join()
-
-    logger.info('All tiles of interest processed')
-    log_totals()
+    logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
+    logger.info('%d tiles of interest processed' % n_toi)
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
@@ -964,6 +916,31 @@ def tilequeue_tile_sizes(cfg, peripherals):
     print_count(None, grand_total_count)
 
 
+def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
+    from tilequeue.wof import make_wof_model
+    from tilequeue.wof import make_wof_neighbourhood_fetcher
+    from tilequeue.wof import make_wof_processor
+
+    wof_cfg = cfg.wof
+    assert wof_cfg, 'Missing wof config'
+
+    logger = make_logger(cfg, 'wof_process_neighbourhoods')
+    logger.info('WOF process neighbourhoods run started')
+
+    fetcher = make_wof_neighbourhood_fetcher(wof_cfg['neighbourhoods_url'])
+    model = make_wof_model(wof_cfg['postgresql'])
+
+    n_threads = 20
+    processor = make_wof_processor(
+        fetcher, model, peripherals.redis_cache_index, peripherals.queue,
+        n_threads, logger)
+
+    logger.info('Processing ...')
+    processor()
+    logger.info('Processing ... done')
+    logger.info('WOF process neighbourhoods run completed')
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -986,6 +963,8 @@ def tilequeue_main(argv_args=None):
         ('enqueue-tiles-of-interest',
          create_command_parser(tilequeue_enqueue_tiles_of_interest)),
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
+        ('wof-process-neighbourhoods', create_command_parser(
+            tilequeue_process_wof_neighbourhoods)),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
