@@ -58,7 +58,7 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
     return preproc_feature_layers
 
 
-# post-process all the layers simulataneously, which allows new
+# post-process all the layers simultaneously, which allows new
 # layers to be created from processing existing ones (e.g: for
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
@@ -122,6 +122,13 @@ def _make_valid_if_necessary(shape):
     """
     if shape.type in ('Polygon', 'MultiPolygon') and not shape.is_valid:
         shape = shape.buffer(0)
+
+        # return value from buffer is usually valid, but it's
+        # not clear from the docs whether this is guaranteed,
+        # so return None if not.
+        if not shape.is_valid:
+            return None
+
     return shape
 
 
@@ -142,7 +149,9 @@ def _find_meters_per_pixel(zoom):
 # should not be visible, which means that the shape could have been
 # altered
 def _visible_shape(shape, meters_per_pixel):
-    if shape.type == 'MultiPolygon':
+    if shape is None:
+        return None
+    elif shape.type == 'MultiPolygon':
         visible_shapes = []
         for subshape in shape.geoms:
             subshape = _visible_shape(subshape, meters_per_pixel)
