@@ -4,7 +4,6 @@ from itertools import chain
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
-from tilequeue.cache import RedisCacheIndex
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
@@ -119,8 +118,14 @@ def make_redis_client(cfg):
 
 
 def make_redis_cache_index(redis_client, cfg):
-    redis_cache_index = RedisCacheIndex(redis_client, cfg.redis_cache_set_key)
-    return redis_cache_index
+    if cfg.redis_type == 'redis_client':
+        from tilequeue.cache import RedisCacheIndex
+        redis_cache_index = RedisCacheIndex(
+            redis_client, cfg.redis_cache_set_key)
+        return redis_cache_index
+    else:
+        from tilequeue.cache import StubIndex
+        return StubIndex()
 
 
 def make_logger(cfg, logger_name):

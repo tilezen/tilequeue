@@ -61,6 +61,7 @@ class Configuration(object):
         self.intersect_zoom_until = intersect_cfg['parent-zoom-until']
 
         self.logconfig = self._cfg('logging config')
+        self.redis_type = self._cfg('redis type')
         self.redis_host = self._cfg('redis host')
         self.redis_port = self._cfg('redis port')
         self.redis_db = self._cfg('redis db')
@@ -163,6 +164,7 @@ def default_yml_config():
             'port': 6379,
             'db': 0,
             'cache-set-key': 'tilequeue.tiles-of-interest',
+            'type': 'redis_client',
         },
         'postgresql': {
             'host': 'localhost',
