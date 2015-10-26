@@ -55,6 +55,7 @@ logging:
   # https://docs.python.org/2/howto/logging.html#logging-basic-tutorial
   config: logging.conf.sample
 redis:
+  type: stub
   host: localhost
   port: 6379
   db: 0
