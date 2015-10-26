@@ -321,18 +321,25 @@ class WofProcessor(object):
         # process an affected tile before the new data exists in
         # postgresql
 
-        self.logger.info('Inserting %d neighbourhoods ...' %
-                         len(next_neighbourhoods))
-        self.model.insert_neighbourhoods(next_neighbourhoods,
-                                         has_existing_neighbourhoods)
-        self.logger.info('Inserting %d neighbourhoods ... done' %
-                         len(next_neighbourhoods))
+        if diffs:
+            # only insert neighbourhoods if we actually have some diffs
+            self.logger.info('Inserting %d neighbourhoods ...' %
+                             len(next_neighbourhoods))
+            self.model.insert_neighbourhoods(next_neighbourhoods,
+                                             has_existing_neighbourhoods)
+            self.logger.info('Inserting %d neighbourhoods ... done' %
+                             len(next_neighbourhoods))
+        else:
+            self.logger.info('No diffs found, not updating data')
 
-        self.logger.info('Asking enqueuer to enqueue %d coords ...' %
-                         len(coords))
-        self.coords_enqueuer(coords)
-        self.logger.info('Asking enqueuer to enqueue %d coords ... done' %
-                         len(coords))
+        if coords:
+            self.logger.info('Asking enqueuer to enqueue %d coords ...' %
+                             len(coords))
+            self.coords_enqueuer(coords)
+            self.logger.info('Asking enqueuer to enqueue %d coords ... done' %
+                             len(coords))
+        else:
+            self.logger.info('No expired tiles to enqueue')
 
 
 def make_wof_neighbourhood_fetcher(neighbourhood_url):
