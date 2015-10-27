@@ -32,15 +32,21 @@ def fetch_wof_neighbourhoods(url):
     csv_line_generator = generate_csv_lines(r)
     reader = csv.reader(csv_line_generator)
 
-    # drop header
     it = iter(reader)
-    it.next()
+    header = it.next()
+
+    lbl_lat_idx = header.index('lbl_latitude')
+    lbl_lng_idx = header.index('lbl_longitude')
+    name_idx = header.index('name')
+    wof_id_idx = header.index('id')
+
+    min_row_length = max(lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx) + 1
 
     for row in it:
-        if len(row) < 11:
+        if len(row) < min_row_length:
             continue
 
-        wof_id_str = row[5]
+        wof_id_str = row[wof_id_idx]
         if not wof_id_str:
             continue
         try:
@@ -48,12 +54,12 @@ def fetch_wof_neighbourhoods(url):
         except ValueError:
             continue
 
-        name = row[10]
+        name = row[name_idx]
         if not name:
             continue
 
-        lat_str = row[8]
-        lng_str = row[9]
+        lat_str = row[lbl_lat_idx]
+        lng_str = row[lbl_lng_idx]
         try:
             lat = float(lat_str)
             lng = float(lng_str)
