@@ -1,16 +1,20 @@
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
+from itertools import imap
 from operator import attrgetter
 from shapely import geos
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import mercator_point_to_coord
 import csv
+import json
+import os.path
 import psycopg2
 import pyproj
 import Queue
 import requests
+import shapely.geometry
 import shapely.wkb
 import threading
 
@@ -24,12 +28,15 @@ def generate_csv_lines(requests_result):
             yield line
 
 
-Neighbourhood = namedtuple('Neighbourhood', 'wof_id name x y')
+NeighbourhoodMeta = namedtuple(
+    'NeighbourhoodMeta',
+    'wof_id name label_position hash')
+Neighbourhood = namedtuple(
+    'Neighbourhood',
+    'wof_id name label_position hash geometry n_photos')
 
 
-def fetch_wof_neighbourhoods(url):
-    r = requests.get(url, stream=True)
-    csv_line_generator = generate_csv_lines(r)
+def parse_neighbourhood_meta_csv(csv_line_generator):
     reader = csv.reader(csv_line_generator)
 
     it = iter(reader)
@@ -39,8 +46,10 @@ def fetch_wof_neighbourhoods(url):
     lbl_lng_idx = header.index('lbl_longitude')
     name_idx = header.index('name')
     wof_id_idx = header.index('id')
+    hash_idx = header.index('file_hash')
 
-    min_row_length = max(lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx) + 1
+    min_row_length = max(
+        lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx, hash_idx) + 1
 
     for row in it:
         if len(row) < min_row_length:
@@ -66,33 +75,194 @@ def fetch_wof_neighbourhoods(url):
         except ValueError:
             continue
 
-        x, y = pyproj.transform(latlng_proj, merc_proj, lng, lat)
+        file_hash = row[hash_idx]
 
-        neighbourhood = Neighbourhood(wof_id, name, x, y)
-        yield neighbourhood
+        label_x, label_y = pyproj.transform(latlng_proj, merc_proj, lng, lat)
+        label_position = shapely.geometry.Point(label_x, label_y)
+
+        neighbourhood_meta = NeighbourhoodMeta(
+            wof_id, name, label_position, file_hash)
+        yield neighbourhood_meta
 
 
-class WofNeighbourhoodFetcher(object):
+def fetch_wof_url_meta_neighbourhoods(url):
+    r = requests.get(url, stream=True)
+    csv_line_generator = generate_csv_lines(r)
+    return parse_neighbourhood_meta_csv(csv_line_generator)
 
-    def __init__(self, neighbourhood_url):
+
+def create_neighbourhood_from_json(json_data, neighbourhood_meta):
+    wof_id = json_data['id']
+
+    geometry = json_data['geometry']
+    shape = shapely.geometry.shape(geometry)
+
+    props = json_data['properties']
+    name = props['wof:name']
+    n_photos = props.get('misc:photo_sum')
+    label_lat = props['lbl:latitude']
+    label_lng = props['lbl:longitude']
+    label_merc_x, label_merc_y = pyproj.transform(latlng_proj, merc_proj,
+                                                  label_lng, label_lat)
+    label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
+
+    neighbourhood = Neighbourhood(
+        wof_id, name, label_position, neighbourhood_meta.hash, shape, n_photos)
+    return neighbourhood
+
+
+def fetch_url_raw_neighbourhood(url, neighbourhood_meta):
+    r = requests.get(url)
+    assert r.status_code == 200, 'Failure requesting: %s' % url
+
+    doc = r.json()
+    neighbourhood = create_neighbourhood_from_json(doc, neighbourhood_meta)
+    return neighbourhood
+
+
+def fetch_fs_raw_neighbourhood(path, neighbourhood_meta):
+    with open(path) as fp:
+        json_data = json.load(fp)
+    neighbourhood = create_neighbourhood_from_json(json_data,
+                                                   neighbourhood_meta)
+    return neighbourhood
+
+
+def generate_wof_url(url_prefix, wof_id):
+    wof_id_str = str(wof_id)
+    grouped = []
+    grouping = []
+    for c in wof_id_str:
+        grouping.append(c)
+        if len(grouping) == 3:
+            grouped.append(grouping)
+            grouping = []
+    if grouping:
+        grouped.append(grouping)
+    grouped_part = '/'.join([''.join(part) for part in grouped])
+    wof_url = '%s/%s/%s.geojson' % (url_prefix, grouped_part, wof_id_str)
+    return wof_url
+
+
+def make_fetch_raw_url_fn(data_url_prefix):
+    def fn(neighbourhood_meta):
+        wof_url = generate_wof_url(
+            data_url_prefix, neighbourhood_meta.wof_id)
+        neighbourhood = fetch_url_raw_neighbourhood(wof_url,
+                                                    neighbourhood_meta)
+        return neighbourhood
+    return fn
+
+
+def make_fetch_raw_filesystem_fn(data_path):
+    def fn(neighbourhood_meta):
+        # this will work for OS's with / separators
+        wof_path = generate_wof_url(
+            data_path, neighbourhood_meta.wof_id)
+        neighbourhood = fetch_fs_raw_neighbourhood(wof_path,
+                                                   neighbourhood_meta)
+        return neighbourhood
+    return fn
+
+
+def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
+    queue_size = n_threads * 10
+    neighbourhood_input_queue = Queue.Queue(queue_size)
+    neighbourhood_output_queue = Queue.Queue(len(neighbourhood_metas))
+
+    def _fetch_raw_neighbourhood():
+        while True:
+            neighbourhood_meta = neighbourhood_input_queue.get()
+            if neighbourhood_meta is None:
+                break
+            neighbourhood = fetch_raw_fn(neighbourhood_meta)
+            neighbourhood_output_queue.put(neighbourhood)
+
+    fetch_threads = []
+    for i in xrange(n_threads):
+        fetch_thread = threading.Thread(target=_fetch_raw_neighbourhood)
+        fetch_thread.start()
+        fetch_threads.append(fetch_thread)
+
+    for neighbourhood_meta in neighbourhood_metas:
+        neighbourhood_input_queue.put(neighbourhood_meta)
+
+    for fetch_thread in fetch_threads:
+        neighbourhood_input_queue.put(None)
+
+    neighbourhoods = []
+    for i in xrange(len(neighbourhood_metas)):
+        neighbourhood = neighbourhood_output_queue.get()
+        neighbourhoods.append(neighbourhood)
+
+    for fetch_thread in fetch_threads:
+        fetch_thread.join()
+
+    return neighbourhoods
+
+
+class WofUrlNeighbourhoodFetcher(object):
+
+    def __init__(self, neighbourhood_url, data_url_prefix, n_threads):
         self.neighbourhood_url = neighbourhood_url
+        self.data_url_prefix = data_url_prefix
+        self.n_threads = n_threads
 
-    def __call__(self):
-        return fetch_wof_neighbourhoods(self.neighbourhood_url)
+    def fetch_meta_neighbourhoods(self):
+        return fetch_wof_url_meta_neighbourhoods(self.neighbourhood_url)
+
+    def fetch_raw_neighbourhoods(self, neighbourhood_metas):
+        url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix)
+        neighbourhoods = threaded_fetch(neighbourhood_metas, self.n_threads,
+                                        url_fetch_fn)
+        return neighbourhoods
+
+
+class WofFilesystemNeighbourhoodFetcher(object):
+
+    def __init__(self, wof_data_path, n_threads):
+        self.wof_data_path = wof_data_path
+        self.n_threads = n_threads
+
+    def fetch_meta_neighbourhoods(self):
+        meta_fs_path = os.path.join(
+            self.wof_data_path, 'meta', 'wof-neighbourhood-latest.csv')
+        with open(meta_fs_path) as fp:
+            meta_neighbourhoods = list(parse_neighbourhood_meta_csv(fp))
+        return meta_neighbourhoods
+
+    def fetch_raw_neighbourhoods(self, neighbourhood_metas):
+        data_prefix = os.path.join(
+            self.wof_data_path, 'data')
+        fs_fetch_fn = make_fetch_raw_filesystem_fn(data_prefix)
+        neighbourhoods = threaded_fetch(neighbourhood_metas, self.n_threads,
+                                        fs_fetch_fn)
+        return neighbourhoods
 
 
 def create_neighbourhood_file_object(neighbourhoods):
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
 
+    def escape_string(s):
+        return s.replace('\t', ' ').replace('\n', ' ')
+
     buf = StringIO()
     for n in neighbourhoods:
         buf.write('%d\t' % n.wof_id)
-        buf.write('%s\t' % n.name)
+        buf.write('%s\t' % escape_string(n.name))
+        buf.write('%s\t' % escape_string(n.hash))
+        if n.n_photos is None:
+            buf.write('\\N\t')
+        else:
+            buf.write('%d\t' % n.n_photos)
 
-        p = shapely.geometry.Point(n.x, n.y)
-        geos.lgeos.GEOSSetSRID(p._geom, 900913)
-        buf.write(p.wkb_hex)
+        geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
+        buf.write(n.label_position.wkb_hex)
+        buf.write('\t')
+
+        geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
+        buf.write(n.geometry.wkb_hex)
         buf.write('\n')
 
     buf.seek(0)
@@ -111,29 +281,83 @@ class WofModel(object):
         conn.set_session(autocommit=False)
         return conn
 
-    def find_previous_neighbourhoods(self):
+    def find_previous_neighbourhood_meta(self):
         with closing(self._create_conn()) as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    'SELECT wof_id, name, ST_AsBinary(label_position) '
+                    'SELECT wof_id, name, hash, ST_AsBinary(label_position) '
                     'FROM %s ORDER BY wof_id ASC' % self.table)
 
-                neighbourhoods = []
+                ns = []
                 for row in cursor:
-                    wof_id, name, label_bytes = row
-
+                    wof_id, name, hash, label_bytes = row
                     wof_id = int(wof_id)
                     label_bytes = bytes(label_bytes)
-                    label_shape = shapely.wkb.loads(label_bytes)
-                    x = label_shape.x
-                    y = label_shape.y
+                    label_position = shapely.wkb.loads(label_bytes)
+                    n = NeighbourhoodMeta(wof_id, name, label_position, hash)
+                    ns.append(n)
+                return ns
 
-                    neighbourhood = Neighbourhood(wof_id, name, x, y)
-                    neighbourhoods.append(neighbourhood)
-                return neighbourhoods
+    def sync_neighbourhoods(
+            self, neighbourhoods_to_add, neighbourhoods_to_update,
+            ids_to_remove):
 
-    def insert_neighbourhoods(self, neighbourhoods,
-                              has_existing_neighbourhoods):
+        def gen_data(n):
+            return dict(
+                table=self.table,
+                name=n.name,
+                hash=n.hash,
+                n_photos=('NULL' if n.n_photos is None else n.n_photos),
+                label_position=n.label_position.wkb_hex,
+                geometry=n.geometry.wkb_hex,
+                wof_id=n.wof_id,
+            )
+
+        # set up all the sync updates in advance
+        if ids_to_remove:
+            ids_to_remove_str = ', '.join(imap(str, ids_to_remove))
+        if neighbourhoods_to_update:
+            updates = []
+            for n in neighbourhoods_to_update:
+                update_data = gen_data(n)
+                update_sql = (
+                    'UPDATE %(table)s SET '
+                    "name='%(name)s', "
+                    "hash='%(hash)s', "
+                    'n_photos=%(n_photos)s, '
+                    'label_position=ST_SetSRID'
+                    "('%(label_position)s'::geometry, 900913), "
+                    "geometry=ST_SetSRID('%(geometry)s'::geometry, 900913) "
+                    'WHERE wof_id=%(wof_id)s' % update_data)
+                updates.append(update_sql)
+        if neighbourhoods_to_add:
+            addition_tuples = []
+            for n in neighbourhoods_to_add:
+                addition = gen_data(n)
+                addition_tuple = (
+                    "(%(wof_id)s, '%(name)s', '%(hash)s', %(n_photos)s, "
+                    "ST_SetSRID('%(label_position)s'::geometry, 900913), "
+                    "ST_SetSRID('%(geometry)s'::geometry, 900913))" % addition)
+                addition_tuples.append(addition_tuple)
+            inserts = ', '.join(addition_tuples)
+
+        # this closes the connection
+        with closing(self._create_conn()) as conn:
+            # this commits the transaction
+            with conn as conn:
+                # this frees any resources associated with the cursor
+                with conn.cursor() as cursor:
+                    if ids_to_remove:
+                        cursor.execute('DELETE FROM %s WHERE wof_id IN (%s)' %
+                                       (self.table, ids_to_remove_str))
+                    if neighbourhoods_to_update:
+                        for update_sql in updates:
+                            cursor.execute(update_sql)
+                    if neighbourhoods_to_add:
+                        cursor.execute(
+                            'INSERT INTO %s VALUES %s' % (self.table, inserts))
+
+    def insert_neighbourhoods(self, neighbourhoods):
         # create this whole input file like object outside of the transaction
         nf = create_neighbourhood_file_object(neighbourhoods)
         # close the connection
@@ -141,8 +365,6 @@ class WofModel(object):
             # commit the transaction
             with conn as conn:
                 with conn.cursor() as cursor:
-                    if has_existing_neighbourhoods:
-                        cursor.execute('TRUNCATE %s' % self.table)
                     cursor.copy_from(nf, self.table)
 
 
@@ -154,6 +376,7 @@ def diff_neighbourhoods(xs, ys):
     # (None, x) -> neighbourhoods that have been added
     # (x, None) -> neighbourhoods that have been removed
     # (x, y)    -> neighbourhoods that have been updated
+
     diffs = []
 
     n_xs = len(xs)
@@ -177,9 +400,8 @@ def diff_neighbourhoods(xs, ys):
             idx_ys += 1
             continue
 
-        if (x.name != y.name or
-                abs(x.x - y.x) > 1e-9 or
-                abs(x.y - y.y) > 1e-9):
+        if x.hash != y.hash:
+            # if there are any differences the hash will be different
             diffs.append((x, y))
 
         idx_xs += 1
@@ -210,7 +432,9 @@ def generate_tile_expiry_list(zoom, diffs):
 
     def add_neighbourhood_diff(n):
         if n is not None:
-            coord_int = coord_int_at_mercator_point(zoom, n.x, n.y)
+            x = n.label_position.x
+            y = n.label_position.y
+            coord_int = coord_int_at_mercator_point(zoom, x, y)
             coord_ints.add(coord_int)
 
     for n1, n2 in diffs:
@@ -241,18 +465,20 @@ class WofProcessor(object):
 
         # queues to pass the results through the threads
         prev_neighbourhoods_queue = Queue.Queue(1)
-        next_neighbourhoods_queue = Queue.Queue(1)
+        meta_neighbourhoods_queue = Queue.Queue(1)
         toi_queue = Queue.Queue(1)
 
         # functions for the threads
         def find_prev_neighbourhoods():
-            prev_neighbourhoods = self.model.find_previous_neighbourhoods()
+            prev_neighbourhoods = (
+                self.model.find_previous_neighbourhood_meta())
             prev_neighbourhoods_queue.put(prev_neighbourhoods)
 
-        def fetch_next_neighbourhoods():
+        def fetch_meta_neighbourhoods():
             # ensure that we have a list here
-            next_neighbourhoods = list(self.fetcher())
-            next_neighbourhoods_queue.put(next_neighbourhoods)
+            meta_neighbourhoods = list(
+                self.fetcher.fetch_meta_neighbourhoods())
+            meta_neighbourhoods_queue.put(meta_neighbourhoods)
 
         def fetch_toi():
             toi = self.redis_cache_index.fetch_tiles_of_interest()
@@ -266,9 +492,9 @@ class WofProcessor(object):
             target=find_prev_neighbourhoods)
         prev_neighbourhoods_thread.start()
 
-        next_neighbourhoods_thread = threading.Thread(
-            target=fetch_next_neighbourhoods)
-        next_neighbourhoods_thread.start()
+        meta_neighbourhoods_thread = threading.Thread(
+            target=fetch_meta_neighbourhoods)
+        meta_neighbourhoods_thread.start()
 
         toi_thread = threading.Thread(target=fetch_toi)
         toi_thread.start()
@@ -276,35 +502,102 @@ class WofProcessor(object):
         # ensure we're done with finding the next and previous
         # neighbourhoods by this point
         prev_neighbourhoods_thread.join()
-        next_neighbourhoods_thread.join()
+        meta_neighbourhoods_thread.join()
 
         self.logger.info('Fetching old and new neighbourhoods ... done')
 
         prev_neighbourhoods = prev_neighbourhoods_queue.get()
-        next_neighbourhoods = next_neighbourhoods_queue.get()
-        has_existing_neighbourhoods = bool(prev_neighbourhoods)
+        meta_neighbourhoods = meta_neighbourhoods_queue.get()
 
-        if has_existing_neighbourhoods:
-            self.logger.info('Existing neighbourhoods detected, diffing ...')
-            by_neighborhood_id = attrgetter('wof_id')
-            # the model is expected to return records in ascending order by id
-            # it doesn't seem like the neighbourhoods in the wof csv
-            # are in ascending order, so we sort explicitly here
-            next_neighbourhoods.sort(key=by_neighborhood_id)
-            # the diff algorithm depends on the neighbourhood lists
-            # being in sorted order by id
-            diffs = diff_neighbourhoods(prev_neighbourhoods,
-                                        next_neighbourhoods)
-            self.logger.info('Diff complete')
+        self.logger.info('Diffing neighbourhoods ...')
+        by_neighborhood_id = attrgetter('wof_id')
+        # the model is expected to return records in ascending order by id
+        # it doesn't seem like the neighbourhoods in the wof csv
+        # are in ascending order, so we sort explicitly here
+        meta_neighbourhoods.sort(key=by_neighborhood_id)
+        # the diff algorithm depends on the neighbourhood lists
+        # being in sorted order by id
+        diffs = diff_neighbourhoods(prev_neighbourhoods,
+                                    meta_neighbourhoods)
+        self.logger.info('Diffing neighbourhoods ... done')
+
+        # we need to fetch neighbourhoods that have either been
+        # updated or are new
+        wof_neighbourhoods_to_fetch = []
+        # based on the diff, we'll need to keep track of how we'll
+        # need to update
+        ids_to_add = set()
+        ids_to_update = set()
+        ids_to_remove = set()
+        for dx, dy in diffs:
+            if dy is not None:
+                if dx is None:
+                    ids_to_add.add(dy.wof_id)
+                else:
+                    ids_to_update.add(dy.wof_id)
+                wof_neighbourhoods_to_fetch.append(dy)
+            else:
+                ids_to_remove.add(dx.wof_id)
+
+        if wof_neighbourhoods_to_fetch:
+            self.logger.info('Fetching %d raw neighbourhoods ...' %
+                             len(wof_neighbourhoods_to_fetch))
+            raw_neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
+                wof_neighbourhoods_to_fetch)
+            self.logger.info('Fetching %d raw neighbourhoods ... done' %
+                             len(wof_neighbourhoods_to_fetch))
         else:
-            self.logger.info('No existing neighbourhooods found')
-            # on first run, all neighbourhoods are treated as additions
-            diffs = [(None, x) for x in next_neighbourhoods]
+            self.logger.info('No raw neighbourhoods found to fetch')
+            raw_neighbourhoods = ()
 
-        self.logger.info('Generating tile expiry list ...')
-        expired_coord_ints = generate_tile_expiry_list(self.zoom_expiry, diffs)
-        self.logger.info('Generating tile expiry list ... done - '
-                         'Found %d expired tiles' % len(expired_coord_ints))
+        sync_neighbourhoods_thread = None
+        if diffs:
+            self.logger.info("Sync'ing neighbourhoods ...")
+            # raw_neighbourhoods contains both the neighbourhoods to
+            # add and update
+            # we split it up here
+            neighbourhoods_to_update = []
+            neighbourhoods_to_add = []
+            for neighbourhood in raw_neighbourhoods:
+                if neighbourhood.wof_id in ids_to_add:
+                    neighbourhoods_to_add.append(neighbourhood)
+                elif neighbourhood.wof_id in ids_to_update:
+                    neighbourhoods_to_update.append(neighbourhood)
+                else:
+                    assert 0, '%d should have been found to add or update' % (
+                        neighbourhood.wof_id)
+
+            if neighbourhoods_to_add:
+                self.logger.info('Inserting neighbourhoods: %d' %
+                                 len(neighbourhoods_to_add))
+            if neighbourhoods_to_update:
+                self.logger.info('Updating neighbourhoods: %d' %
+                                 len(neighbourhoods_to_update))
+            if ids_to_remove:
+                self.logger.info('Removing neighbourhoods: %d' %
+                                 len(ids_to_remove))
+
+            def _sync_neighbourhoods():
+                self.model.sync_neighbourhoods(
+                    neighbourhoods_to_add, neighbourhoods_to_update,
+                    ids_to_remove)
+            sync_neighbourhoods_thread = threading.Thread(
+                target=_sync_neighbourhoods)
+            sync_neighbourhoods_thread.start()
+
+        else:
+            self.logger.info('No diffs found, no sync necessary')
+
+        if diffs:
+            self.logger.info('Generating tile expiry list ...')
+            expired_coord_ints = generate_tile_expiry_list(
+                self.zoom_expiry, diffs)
+            self.logger.info(
+                'Generating tile expiry list ... done - '
+                'Found %d expired tiles' % len(expired_coord_ints))
+        else:
+            self.logger.info('No diffs found, not generating expired coords')
+            expired_coord_ints = ()
 
         # ensure we're done fetching the tiles of interest by this point
         toi_thread.join()
@@ -312,31 +605,26 @@ class WofProcessor(object):
 
         self.logger.info('Have tiles of interest')
 
-        # intersect the tiles of interest with the expired coords from
-        # the neighbourhood diff
-        self.logger.info('Intersecting %d tiles of interest with %d expired '
-                         'tiles' % (len(toi), len(expired_coord_ints)))
-        toi_expired_coord_ints = self.intersector(
-            expired_coord_ints, toi, self.zoom_until)
-        coords = map(coord_unmarshall_int, toi_expired_coord_ints)
-        self.logger.info('Intersection complete, will expired %d tiles' %
-                         len(coords))
-
-        # we shouldn't enqueue the coordinates and insert the data at
-        # the same time because we may end up in a situation where we
-        # process an affected tile before the new data exists in
-        # postgresql
-
         if diffs:
-            # only insert neighbourhoods if we actually have some diffs
-            self.logger.info('Inserting %d neighbourhoods ...' %
-                             len(next_neighbourhoods))
-            self.model.insert_neighbourhoods(next_neighbourhoods,
-                                             has_existing_neighbourhoods)
-            self.logger.info('Inserting %d neighbourhoods ... done' %
-                             len(next_neighbourhoods))
+            # intersect the tiles of interest with the expired coords from
+            # the neighbourhood diff
+            self.logger.info('Intersecting %d tiles of interest with %d '
+                             'expired tiles' % (
+                                 len(toi), len(expired_coord_ints)))
+            toi_expired_coord_ints = self.intersector(
+                expired_coord_ints, toi, self.zoom_until)
+            coords = map(coord_unmarshall_int, toi_expired_coord_ints)
+            self.logger.info('Intersection complete, will expire %d tiles' %
+                             len(coords))
         else:
-            self.logger.info('No diffs found, not updating data')
+            self.logger.info('No diffs found, no need to intersect')
+            coords = ()
+
+        # we need to finish sync'ing neighbourhoods before we enqueue
+        # coordinates
+        if sync_neighbourhoods_thread is not None:
+            sync_neighbourhoods_thread.join()
+            self.logger.info("Sync'ing neighbourhoods ... done")
 
         if coords:
             self.logger.info('Asking enqueuer to enqueue %d coords ...' %
@@ -348,8 +636,40 @@ class WofProcessor(object):
             self.logger.info('No expired tiles to enqueue')
 
 
-def make_wof_neighbourhood_fetcher(neighbourhood_url):
-    fetcher = WofNeighbourhoodFetcher(neighbourhood_url)
+class WofInitialLoader(object):
+
+    def __init__(self, fetcher, model, logger):
+        self.fetcher = fetcher
+        self.model = model
+        self.logger = logger
+
+    def __call__(self):
+        self.logger.info('Fetching meta neighbourhoods csv ...')
+        neighbourhood_metas = list(self.fetcher.fetch_meta_neighbourhoods())
+        self.logger.info('Fetching meta neighbourhoods csv ... done')
+
+        self.logger.info('Fetching raw neighbourhoods ...')
+        neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
+            neighbourhood_metas)
+        self.logger.info('Fetching raw neighbourhoods ... done')
+
+        self.logger.info('Inserting %d neighbourhoods ...' %
+                         len(neighbourhoods))
+        self.model.insert_neighbourhoods(neighbourhoods)
+        self.logger.info('Inserting %d neighbourhoods ... done' %
+                         len(neighbourhoods))
+
+
+def make_wof_url_neighbourhood_fetcher(
+        neighbourhood_url, data_prefix_url, n_threads):
+    fetcher = WofUrlNeighbourhoodFetcher(
+        neighbourhood_url, data_prefix_url, n_threads)
+    return fetcher
+
+
+def make_wof_filesystem_neighbourhood_fetcher(wof_data_path, n_threads):
+    fetcher = WofFilesystemNeighbourhoodFetcher(
+        wof_data_path, n_threads)
     return fetcher
 
 
@@ -367,3 +687,8 @@ def make_wof_processor(
         fetcher, model, redis_cache_index, explode_and_intersect,
         threaded_enqueuer, logger)
     return wof_processor
+
+
+def make_wof_initial_loader(fetcher, model, logger):
+    wof_loader = WofInitialLoader(fetcher, model, logger)
+    return wof_loader

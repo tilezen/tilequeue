@@ -923,7 +923,7 @@ def tilequeue_tile_sizes(cfg, peripherals):
 
 def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     from tilequeue.wof import make_wof_model
-    from tilequeue.wof import make_wof_neighbourhood_fetcher
+    from tilequeue.wof import make_wof_url_neighbourhood_fetcher
     from tilequeue.wof import make_wof_processor
 
     wof_cfg = cfg.wof
@@ -932,18 +932,50 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     logger = make_logger(cfg, 'wof_process_neighbourhoods')
     logger.info('WOF process neighbourhoods run started')
 
-    fetcher = make_wof_neighbourhood_fetcher(wof_cfg['neighbourhoods_url'])
+    n_raw_neighbourhood_fetch_threads = 5
+    fetcher = make_wof_url_neighbourhood_fetcher(
+        wof_cfg['neighbourhoods-meta-url'],
+        wof_cfg['data-prefix-url'],
+        n_raw_neighbourhood_fetch_threads,
+    )
     model = make_wof_model(wof_cfg['postgresql'])
 
-    n_threads = 20
+    n_enqueue_threads = 20
     processor = make_wof_processor(
         fetcher, model, peripherals.redis_cache_index, peripherals.queue,
-        n_threads, logger)
+        n_enqueue_threads, logger)
 
     logger.info('Processing ...')
     processor()
     logger.info('Processing ... done')
     logger.info('WOF process neighbourhoods run completed')
+
+
+def tilequeue_initial_load_wof_neighbourhoods(cfg, peripherals):
+    from tilequeue.wof import make_wof_initial_loader
+    from tilequeue.wof import make_wof_model
+    from tilequeue.wof import make_wof_filesystem_neighbourhood_fetcher
+
+    wof_cfg = cfg.wof
+    assert wof_cfg, 'Missing wof config'
+
+    logger = make_logger(cfg, 'wof_process_neighbourhoods')
+
+    logger.info('WOF initial neighbourhoods load run started')
+
+    n_raw_neighbourhood_fetch_threads = 50
+    fetcher = make_wof_filesystem_neighbourhood_fetcher(
+        wof_cfg['data-path'],
+        n_raw_neighbourhood_fetch_threads,
+    )
+
+    model = make_wof_model(wof_cfg['postgresql'])
+
+    loader = make_wof_initial_loader(fetcher, model, logger)
+
+    logger.info('Loading ...')
+    loader()
+    logger.info('Loading ... done')
 
 
 class TileArgumentParser(argparse.ArgumentParser):
@@ -970,6 +1002,8 @@ def tilequeue_main(argv_args=None):
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
         ('wof-process-neighbourhoods', create_command_parser(
             tilequeue_process_wof_neighbourhoods)),
+        ('wof-load-initial-neighbourhoods', create_command_parser(
+            tilequeue_initial_load_wof_neighbourhoods)),
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

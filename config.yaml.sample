@@ -68,7 +68,12 @@ postgresql:
   password:
 
 wof:
-  neighbourhoods_url: https://github.com/whosonfirst/whosonfirst-data/blob/master/meta/wof-neighbourhood-latest.csv?raw=true
+  # url path to raw neighbourhoods meta file
+  neighbourhoods-meta-url: https://github.com/whosonfirst/whosonfirst-data/blob/master/meta/wof-neighbourhood-latest.csv?raw=true
+  # url path prefix for wof raw data
+  data-prefix-url: http://whosonfirst.mapzen.com/data
+  # filesystem path to wof data checkout
+  data-path: /tmp/whosonfirst-data
   postgresql:
     host: localhost
     port: 5432
