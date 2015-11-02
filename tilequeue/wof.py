@@ -87,6 +87,8 @@ def parse_neighbourhood_meta_csv(csv_line_generator):
 
 def fetch_wof_url_meta_neighbourhoods(url):
     r = requests.get(url, stream=True)
+    assert r.status_code == 200, 'Failure requesting: %s' % url
+
     csv_line_generator = generate_csv_lines(r)
     return parse_neighbourhood_meta_csv(csv_line_generator)
 
