@@ -11,13 +11,15 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         diffs = self._call_fut([], [])
         self.failIf(diffs)
 
-    def _n(self, wof_id, name, x, y):
-        from tilequeue.wof import Neighbourhood
-        neighbourhood = Neighbourhood(wof_id, name, x, y)
+    def _n(self, wof_id, name, hash):
+        from tilequeue.wof import NeighbourhoodMeta
+        label_position = None
+        neighbourhood = NeighbourhoodMeta(
+            wof_id, name, label_position, hash)
         return neighbourhood
 
     def test_neighbourhood_added(self):
-        n = self._n(1, 'foo', 1, 2)
+        n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([], [n])
         self.failUnless(diffs)
         self.assertEqual(len(diffs), 1)
@@ -26,7 +28,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         self.assertEqual(y, n)
 
     def test_neighbourhood_removed(self):
-        n = self._n(1, 'foo', 1, 2)
+        n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([n], [])
         self.failUnless(diffs)
         self.assertEqual(len(diffs), 1)
@@ -35,13 +37,13 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         self.assertEqual(x, n)
 
     def test_neighbourhoods_equal(self):
-        ns = [self._n(i, 'foo', 1.324, 2.23987) for i in xrange(32)]
+        ns = [self._n(i, 'foo', 'hash-%d' % i) for i in xrange(32)]
         diffs = self._call_fut(ns, ns)
         self.failIf(diffs)
 
     def test_neighbourhoods_id_mismatch_cases(self):
         def _make(wof_id):
-            return self._n(wof_id, 'foo', 12938.123, -238.329)
+            return self._n(wof_id, 'foo', 'hash')
         xs = [_make(x) for x in (1, 2, 4, 5)]
         ys = [_make(x) for x in (2, 3, 4, 6)]
         diffs = self._call_fut(xs, ys)
@@ -73,35 +75,11 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         self.assertIsNone(d4x)
         assert_id(d4y, 6)
 
-    def test_neighbourhoods_different_names(self):
-        x = self._n(42, 'foo', 2, 1)
-        y = self._n(42, 'bar', 2, 1)
+    def test_neighbourhoods_different_hashes(self):
+        x = self._n(42, 'foo', 'hash-1')
+        y = self._n(42, 'foo', 'hash-2')
         diffs = self._call_fut([x], [y])
         self.assertEqual(len(diffs), 1)
         dx, dy = diffs[0]
         self.assertEqual(dx, x)
         self.assertEqual(dy, y)
-
-    def test_neighbourhood_delta_x(self):
-        x = self._n(42, 'foo', 2.00001, 1)
-        y = self._n(42, 'foo', 2.000001, 1)
-        diffs = self._call_fut([x], [y])
-        self.assertEqual(len(diffs), 1)
-        dx, dy = diffs[0]
-        self.assertEqual(dx, x)
-        self.assertEqual(dy, y)
-
-    def test_neighbourhood_delta_y(self):
-        x = self._n(42, 'foo', 2, 1.00000001)
-        y = self._n(42, 'foo', 2, 1.000000001)
-        diffs = self._call_fut([x], [y])
-        self.assertEqual(len(diffs), 1)
-        dx, dy = diffs[0]
-        self.assertEqual(dx, x)
-        self.assertEqual(dy, y)
-
-    def test_neighbourhood_small_delta_no_diff(self):
-        x = self._n(42, 'foo', 2.00000000001, 1.00000000009)
-        y = self._n(42, 'foo', 2.00000000002, 1.00000000008)
-        diffs = self._call_fut([x], [y])
-        self.assertEqual(len(diffs), 0)
