@@ -935,6 +935,8 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     n_raw_neighbourhood_fetch_threads = 5
     fetcher = make_wof_url_neighbourhood_fetcher(
         wof_cfg['neighbourhoods-meta-url'],
+        wof_cfg['microhoods-meta-url'],
+        wof_cfg['macrohoods-meta-url'],
         wof_cfg['data-prefix-url'],
         n_raw_neighbourhood_fetch_threads,
     )

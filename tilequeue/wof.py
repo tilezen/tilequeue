@@ -28,15 +28,27 @@ def generate_csv_lines(requests_result):
             yield line
 
 
+neighbourhood_placetypes_to_int = dict(
+    neighbourhood=1,
+    microhood=2,
+    macrohood=3,
+)
+neighbourhood_int_to_placetypes = {
+    1: 'neighbourhood',
+    2: 'microhood',
+    3: 'macrohood',
+}
+
+
 NeighbourhoodMeta = namedtuple(
     'NeighbourhoodMeta',
-    'wof_id name label_position hash')
+    'wof_id placetype name hash label_position')
 Neighbourhood = namedtuple(
     'Neighbourhood',
-    'wof_id name label_position hash geometry n_photos')
+    'wof_id placetype name hash label_position geometry n_photos')
 
 
-def parse_neighbourhood_meta_csv(csv_line_generator):
+def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
     reader = csv.reader(csv_line_generator)
 
     it = iter(reader)
@@ -47,12 +59,18 @@ def parse_neighbourhood_meta_csv(csv_line_generator):
     name_idx = header.index('name')
     wof_id_idx = header.index('id')
     hash_idx = header.index('file_hash')
+    superseded_by_idx = header.index('superseded_by')
 
-    min_row_length = max(
-        lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx, hash_idx) + 1
+    min_row_length = (max(
+        lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx, hash_idx,
+        superseded_by_idx) + 1)
 
     for row in it:
         if len(row) < min_row_length:
+            continue
+
+        superseded_by = row[superseded_by_idx]
+        if superseded_by:
             continue
 
         wof_id_str = row[wof_id_idx]
@@ -81,35 +99,42 @@ def parse_neighbourhood_meta_csv(csv_line_generator):
         label_position = shapely.geometry.Point(label_x, label_y)
 
         neighbourhood_meta = NeighbourhoodMeta(
-            wof_id, name, label_position, file_hash)
+            wof_id, placetype, name, file_hash, label_position)
         yield neighbourhood_meta
 
 
-def fetch_wof_url_meta_neighbourhoods(url):
+def fetch_wof_url_meta_neighbourhoods(url, placetype):
     r = requests.get(url, stream=True)
     assert r.status_code == 200, 'Failure requesting: %s' % url
 
     csv_line_generator = generate_csv_lines(r)
-    return parse_neighbourhood_meta_csv(csv_line_generator)
+    return parse_neighbourhood_meta_csv(csv_line_generator, placetype)
 
 
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
-    wof_id = json_data['id']
-
     geometry = json_data['geometry']
     shape = shapely.geometry.shape(geometry)
 
     props = json_data['properties']
+    wof_id = int(props['wof:id'])
     name = props['wof:name']
     n_photos = props.get('misc:photo_sum')
-    label_lat = props['lbl:latitude']
-    label_lng = props['lbl:longitude']
+    if n_photos is not None:
+        n_photos = int(n_photos)
+
+    label_lat = props.get('lbl:latitude')
+    label_lng = props.get('lbl:longitude')
+    if label_lat is None or label_lng is None:
+        return None
+
     label_merc_x, label_merc_y = pyproj.transform(latlng_proj, merc_proj,
                                                   label_lng, label_lat)
     label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
+    placetype = props['wof:placetype']
 
     neighbourhood = Neighbourhood(
-        wof_id, name, label_position, neighbourhood_meta.hash, shape, n_photos)
+        wof_id, placetype, name, neighbourhood_meta.hash,
+        label_position, shape, n_photos)
     return neighbourhood
 
 
@@ -195,7 +220,8 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
     neighbourhoods = []
     for i in xrange(len(neighbourhood_metas)):
         neighbourhood = neighbourhood_output_queue.get()
-        neighbourhoods.append(neighbourhood)
+        if neighbourhood is not None:
+            neighbourhoods.append(neighbourhood)
 
     for fetch_thread in fetch_threads:
         fetch_thread.join()
@@ -205,13 +231,25 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
 
 class WofUrlNeighbourhoodFetcher(object):
 
-    def __init__(self, neighbourhood_url, data_url_prefix, n_threads):
+    def __init__(self, neighbourhood_url, microhood_url, macrohood_url,
+                 data_url_prefix, n_threads):
         self.neighbourhood_url = neighbourhood_url
+        self.microhood_url = microhood_url
+        self.macrohood_url = macrohood_url
         self.data_url_prefix = data_url_prefix
         self.n_threads = n_threads
 
     def fetch_meta_neighbourhoods(self):
-        return fetch_wof_url_meta_neighbourhoods(self.neighbourhood_url)
+        return fetch_wof_url_meta_neighbourhoods(
+            self.neighbourhood_url, 'neighbourhood')
+
+    def fetch_meta_microhoods(self):
+        return fetch_wof_url_meta_neighbourhoods(
+            self.microhood_url, 'microhood')
+
+    def fetch_meta_macrohoods(self):
+        return fetch_wof_url_meta_neighbourhoods(
+            self.macrohood_url, 'macrohood')
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
         url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix)
@@ -226,12 +264,22 @@ class WofFilesystemNeighbourhoodFetcher(object):
         self.wof_data_path = wof_data_path
         self.n_threads = n_threads
 
-    def fetch_meta_neighbourhoods(self):
+    def _fetch_meta_neighbourhoods(self, placetype):
         meta_fs_path = os.path.join(
-            self.wof_data_path, 'meta', 'wof-neighbourhood-latest.csv')
+            self.wof_data_path, 'meta', 'wof-%s-latest.csv' % placetype)
         with open(meta_fs_path) as fp:
-            meta_neighbourhoods = list(parse_neighbourhood_meta_csv(fp))
+            meta_neighbourhoods = list(
+                parse_neighbourhood_meta_csv(fp, placetype))
         return meta_neighbourhoods
+
+    def fetch_meta_neighbourhoods(self):
+        return self._fetch_meta_neighbourhoods('neighbourhood')
+
+    def fetch_meta_microhoods(self):
+        return self._fetch_meta_neighbourhoods('microhood')
+
+    def fetch_meta_macrohoods(self):
+        return self._fetch_meta_neighbourhoods('macrohood')
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
         data_prefix = os.path.join(
@@ -252,6 +300,7 @@ def create_neighbourhood_file_object(neighbourhoods):
     buf = StringIO()
     for n in neighbourhoods:
         buf.write('%d\t' % n.wof_id)
+        buf.write('%d\t' % neighbourhood_placetypes_to_int[n.placetype])
         buf.write('%s\t' % escape_string(n.name))
         buf.write('%s\t' % escape_string(n.hash))
         if n.n_photos is None:
@@ -287,16 +336,19 @@ class WofModel(object):
         with closing(self._create_conn()) as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    'SELECT wof_id, name, hash, ST_AsBinary(label_position) '
+                    'SELECT wof_id, placetype, name, hash, '
+                    'ST_AsBinary(label_position) '
                     'FROM %s ORDER BY wof_id ASC' % self.table)
 
                 ns = []
                 for row in cursor:
-                    wof_id, name, hash, label_bytes = row
+                    wof_id, placetype_int, name, hash, label_bytes = row
                     wof_id = int(wof_id)
                     label_bytes = bytes(label_bytes)
                     label_position = shapely.wkb.loads(label_bytes)
-                    n = NeighbourhoodMeta(wof_id, name, label_position, hash)
+                    placetype = neighbourhood_int_to_placetypes[placetype_int]
+                    n = NeighbourhoodMeta(
+                        wof_id, placetype, name, hash, label_position)
                     ns.append(n)
                 return ns
 
@@ -307,6 +359,7 @@ class WofModel(object):
         def gen_data(n):
             return dict(
                 table=self.table,
+                placetype=neighbourhood_placetypes_to_int[n.placetype],
                 name=n.name,
                 hash=n.hash,
                 n_photos=('NULL' if n.n_photos is None else n.n_photos),
@@ -324,6 +377,7 @@ class WofModel(object):
                 update_data = gen_data(n)
                 update_sql = (
                     'UPDATE %(table)s SET '
+                    'placetype=%(placetype)d, '
                     "name='%(name)s', "
                     "hash='%(hash)s', "
                     'n_photos=%(n_photos)s, '
@@ -337,7 +391,8 @@ class WofModel(object):
             for n in neighbourhoods_to_add:
                 addition = gen_data(n)
                 addition_tuple = (
-                    "(%(wof_id)s, '%(name)s', '%(hash)s', %(n_photos)s, "
+                    "(%(wof_id)d, %(placetype)d, '%(name)s', '%(hash)s', "
+                    '%(n_photos)d, '
                     "ST_SetSRID('%(label_position)s'::geometry, 900913), "
                     "ST_SetSRID('%(geometry)s'::geometry, 900913))" % addition)
                 addition_tuples.append(addition_tuple)
@@ -468,6 +523,8 @@ class WofProcessor(object):
         # queues to pass the results through the threads
         prev_neighbourhoods_queue = Queue.Queue(1)
         meta_neighbourhoods_queue = Queue.Queue(1)
+        meta_microhoods_queue = Queue.Queue(1)
+        meta_macrohoods_queue = Queue.Queue(1)
         toi_queue = Queue.Queue(1)
 
         # functions for the threads
@@ -476,11 +533,9 @@ class WofProcessor(object):
                 self.model.find_previous_neighbourhood_meta())
             prev_neighbourhoods_queue.put(prev_neighbourhoods)
 
-        def fetch_meta_neighbourhoods():
-            # ensure that we have a list here
-            meta_neighbourhoods = list(
-                self.fetcher.fetch_meta_neighbourhoods())
-            meta_neighbourhoods_queue.put(meta_neighbourhoods)
+        def make_fetch_meta_csv_fn(fn, queue):
+            neighbourhood_metas = list(fn())
+            queue.put(neighbourhood_metas)
 
         def fetch_toi():
             toi = self.redis_cache_index.fetch_tiles_of_interest()
@@ -495,8 +550,22 @@ class WofProcessor(object):
         prev_neighbourhoods_thread.start()
 
         meta_neighbourhoods_thread = threading.Thread(
-            target=fetch_meta_neighbourhoods)
+            target=make_fetch_meta_csv_fn(
+                self.fetcher.fetch_meta_neighbourhoods,
+                meta_neighbourhoods_queue))
         meta_neighbourhoods_thread.start()
+
+        meta_microhoods_thread = threading.Thread(
+            target=make_fetch_meta_csv_fn(
+                self.fetcher.fetch_meta_microhoods,
+                meta_microhoods_queue))
+        meta_microhoods_thread.start()
+
+        meta_macrohoods_thread = threading.Thread(
+            target=make_fetch_meta_csv_fn(
+                self.fetcher.fetch_meta_macrohoods,
+                meta_macrohoods_queue))
+        meta_macrohoods_thread.start()
 
         toi_thread = threading.Thread(target=fetch_toi)
         toi_thread.start()
@@ -505,11 +574,19 @@ class WofProcessor(object):
         # neighbourhoods by this point
         prev_neighbourhoods_thread.join()
         meta_neighbourhoods_thread.join()
+        meta_microhoods_thread.join()
+        meta_macrohoods_thread.join()
 
         self.logger.info('Fetching old and new neighbourhoods ... done')
 
         prev_neighbourhoods = prev_neighbourhoods_queue.get()
         meta_neighbourhoods = meta_neighbourhoods_queue.get()
+        meta_microhoods = meta_microhoods_queue.get()
+        meta_macrohoods = meta_macrohoods_queue.get()
+
+        # each of these has the appropriate placetype set now
+        meta_neighbourhoods = (
+            meta_neighbourhoods + meta_microhoods + meta_macrohoods)
 
         self.logger.info('Diffing neighbourhoods ...')
         by_neighborhood_id = attrgetter('wof_id')
@@ -650,6 +727,17 @@ class WofInitialLoader(object):
         neighbourhood_metas = list(self.fetcher.fetch_meta_neighbourhoods())
         self.logger.info('Fetching meta neighbourhoods csv ... done')
 
+        self.logger.info('Fetching meta microhoods csv ...')
+        microhood_metas = list(self.fetcher.fetch_meta_microhoods())
+        self.logger.info('Fetching meta microhoods csv ... done')
+
+        self.logger.info('Fetching meta macrohoods csv ...')
+        macrohood_metas = list(self.fetcher.fetch_meta_macrohoods())
+        self.logger.info('Fetching meta macrohoods csv ... done')
+
+        neighbourhood_metas = (
+            neighbourhood_metas + microhood_metas + macrohood_metas)
+
         self.logger.info('Fetching raw neighbourhoods ...')
         neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
             neighbourhood_metas)
@@ -663,9 +751,11 @@ class WofInitialLoader(object):
 
 
 def make_wof_url_neighbourhood_fetcher(
-        neighbourhood_url, data_prefix_url, n_threads):
+        neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
+        n_threads):
     fetcher = WofUrlNeighbourhoodFetcher(
-        neighbourhood_url, data_prefix_url, n_threads)
+        neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
+        n_threads)
     return fetcher
 
 

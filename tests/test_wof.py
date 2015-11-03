@@ -13,9 +13,10 @@ class TestNeighbourhoodDiff(unittest.TestCase):
 
     def _n(self, wof_id, name, hash):
         from tilequeue.wof import NeighbourhoodMeta
+        placetype = None
         label_position = None
         neighbourhood = NeighbourhoodMeta(
-            wof_id, name, label_position, hash)
+            wof_id, placetype, name, hash, label_position)
         return neighbourhood
 
     def test_neighbourhood_added(self):
