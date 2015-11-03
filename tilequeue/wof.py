@@ -46,7 +46,7 @@ NeighbourhoodMeta = namedtuple(
     'wof_id placetype name hash label_position')
 Neighbourhood = namedtuple(
     'Neighbourhood',
-    'wof_id placetype name hash label_position geometry n_photos')
+    'wof_id placetype name hash label_position geometry n_photos area')
 
 
 def reproject_lnglat_to_mercator(x, y):
@@ -139,9 +139,14 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
     placetype = props['wof:placetype']
 
+    if shape_mercator.type in ('Polygon', 'MultiPolygon'):
+        area = int(shape_mercator.area)
+    else:
+        area = None
+
     neighbourhood = Neighbourhood(
         wof_id, placetype, name, neighbourhood_meta.hash,
-        label_position, shape_mercator, n_photos)
+        label_position, shape_mercator, n_photos, area)
     return neighbourhood
 
 
@@ -314,6 +319,10 @@ def create_neighbourhood_file_object(neighbourhoods):
             buf.write('\\N\t')
         else:
             buf.write('%d\t' % n.n_photos)
+        if n.area is None:
+            buf.write('\\N\t')
+        else:
+            buf.write('%d\t' % n.area)
 
         geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
         buf.write(n.label_position.wkb_hex)
@@ -369,7 +378,8 @@ class WofModel(object):
                 placetype=neighbourhood_placetypes_to_int[n.placetype],
                 name=n.name,
                 hash=n.hash,
-                n_photos=('NULL' if n.n_photos is None else n.n_photos),
+                n_photos=('NULL' if n.n_photos is None else str(n.n_photos)),
+                area=('NULL' if n.area is None else str(n.area)),
                 label_position=n.label_position.wkb_hex,
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
@@ -388,6 +398,7 @@ class WofModel(object):
                     "name='%(name)s', "
                     "hash='%(hash)s', "
                     'n_photos=%(n_photos)s, '
+                    'area=%(area)s, '
                     'label_position=ST_SetSRID'
                     "('%(label_position)s'::geometry, 900913), "
                     "geometry=ST_SetSRID('%(geometry)s'::geometry, 900913) "
@@ -399,7 +410,7 @@ class WofModel(object):
                 addition = gen_data(n)
                 addition_tuple = (
                     "(%(wof_id)d, %(placetype)d, '%(name)s', '%(hash)s', "
-                    '%(n_photos)d, '
+                    '%(n_photos)s, %(area)s, '
                     "ST_SetSRID('%(label_position)s'::geometry, 900913), "
                     "ST_SetSRID('%(geometry)s'::geometry, 900913))" % addition)
                 addition_tuples.append(addition_tuple)
