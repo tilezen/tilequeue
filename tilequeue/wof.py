@@ -15,6 +15,7 @@ import pyproj
 import Queue
 import requests
 import shapely.geometry
+import shapely.ops
 import shapely.wkb
 import threading
 
@@ -46,6 +47,10 @@ NeighbourhoodMeta = namedtuple(
 Neighbourhood = namedtuple(
     'Neighbourhood',
     'wof_id placetype name hash label_position geometry n_photos')
+
+
+def reproject_lnglat_to_mercator(x, y):
+    return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
@@ -95,7 +100,7 @@ def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
 
         file_hash = row[hash_idx]
 
-        label_x, label_y = pyproj.transform(latlng_proj, merc_proj, lng, lat)
+        label_x, label_y = reproject_lnglat_to_mercator(lng, lat)
         label_position = shapely.geometry.Point(label_x, label_y)
 
         neighbourhood_meta = NeighbourhoodMeta(
@@ -113,7 +118,9 @@ def fetch_wof_url_meta_neighbourhoods(url, placetype):
 
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     geometry = json_data['geometry']
-    shape = shapely.geometry.shape(geometry)
+    shape_lnglat = shapely.geometry.shape(geometry)
+    shape_mercator = shapely.ops.transform(
+        reproject_lnglat_to_mercator, shape_lnglat)
 
     props = json_data['properties']
     wof_id = int(props['wof:id'])
@@ -127,14 +134,14 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     if label_lat is None or label_lng is None:
         return None
 
-    label_merc_x, label_merc_y = pyproj.transform(latlng_proj, merc_proj,
-                                                  label_lng, label_lat)
+    label_merc_x, label_merc_y = reproject_lnglat_to_mercator(
+        label_lng, label_lat)
     label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
     placetype = props['wof:placetype']
 
     neighbourhood = Neighbourhood(
         wof_id, placetype, name, neighbourhood_meta.hash,
-        label_position, shape, n_photos)
+        label_position, shape_mercator, n_photos)
     return neighbourhood
 
 
