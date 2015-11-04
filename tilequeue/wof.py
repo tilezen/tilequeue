@@ -46,7 +46,8 @@ NeighbourhoodMeta = namedtuple(
     'wof_id placetype name hash label_position')
 Neighbourhood = namedtuple(
     'Neighbourhood',
-    'wof_id placetype name hash label_position geometry n_photos area')
+    'wof_id placetype name hash label_position geometry n_photos area '
+    'min_zoom max_zoom is_landuse_aoi')
 
 
 def reproject_lnglat_to_mercator(x, y):
@@ -123,6 +124,13 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
         reproject_lnglat_to_mercator, shape_lnglat)
 
     props = json_data['properties']
+
+    # ignore any features that are marked as funky
+    is_funky = props.get('mz:is_funky')
+    if is_funky is not None:
+        if int(is_funky) != 0:
+            return None
+
     wof_id = int(props['wof:id'])
     name = props['wof:name']
     n_photos = props.get('misc:photo_sum')
@@ -137,7 +145,27 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     label_merc_x, label_merc_y = reproject_lnglat_to_mercator(
         label_lng, label_lat)
     label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
+
     placetype = props['wof:placetype']
+
+    default_min_zoom = 15
+    default_max_zoom = 18
+
+    min_zoom = props.get('mz:min_zoom')
+    if min_zoom is None:
+        min_zoom = default_min_zoom
+    else:
+        min_zoom = int(min_zoom)
+    max_zoom = props.get('mz:max_zoom')
+    if max_zoom is None:
+        max_zoom = default_max_zoom
+    else:
+        max_zoom = int(max_zoom)
+
+    is_landuse_aoi = props.get('mz:is_landuse_aoi')
+    if is_landuse_aoi is not None:
+        is_landuse_aoi = int(is_landuse_aoi)
+        is_landuse_aoi = is_landuse_aoi != 0
 
     if shape_mercator.type in ('Polygon', 'MultiPolygon'):
         area = int(shape_mercator.area)
@@ -146,7 +174,8 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
 
     neighbourhood = Neighbourhood(
         wof_id, placetype, name, neighbourhood_meta.hash,
-        label_position, shape_mercator, n_photos, area)
+        label_position, shape_mercator, n_photos, area,
+        min_zoom, max_zoom, is_landuse_aoi)
     return neighbourhood
 
 
@@ -306,23 +335,33 @@ def create_neighbourhood_file_object(neighbourhoods):
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
 
+    buf = StringIO()
+
     def escape_string(s):
         return s.replace('\t', ' ').replace('\n', ' ')
 
-    buf = StringIO()
+    def write_nullable_int(buf, x):
+        if x is None:
+            buf.write('\\N\t')
+        else:
+            buf.write('%d\t' % x)
+
     for n in neighbourhoods:
         buf.write('%d\t' % n.wof_id)
         buf.write('%d\t' % neighbourhood_placetypes_to_int[n.placetype])
         buf.write('%s\t' % escape_string(n.name))
         buf.write('%s\t' % escape_string(n.hash))
-        if n.n_photos is None:
+
+        write_nullable_int(buf, n.n_photos)
+        write_nullable_int(buf, n.area)
+
+        buf.write('%d\t' % n.min_zoom)
+        buf.write('%d\t' % n.max_zoom)
+
+        if n.is_landuse_aoi is None:
             buf.write('\\N\t')
         else:
-            buf.write('%d\t' % n.n_photos)
-        if n.area is None:
-            buf.write('\\N\t')
-        else:
-            buf.write('%d\t' % n.area)
+            buf.write('%s\t' % ('true' if n.is_landuse_aoi else 'false'))
 
         geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
         buf.write(n.label_position.wkb_hex)
@@ -372,14 +411,21 @@ class WofModel(object):
             self, neighbourhoods_to_add, neighbourhoods_to_update,
             ids_to_remove):
 
+        def nullable_int(x):
+            return 'NULL' if x is None else str(x)
+
         def gen_data(n):
             return dict(
                 table=self.table,
                 placetype=neighbourhood_placetypes_to_int[n.placetype],
                 name=n.name,
                 hash=n.hash,
-                n_photos=('NULL' if n.n_photos is None else str(n.n_photos)),
-                area=('NULL' if n.area is None else str(n.area)),
+                n_photos=nullable_int(n.n_photos),
+                area=nullable_int(n.area),
+                min_zoom=n.min_zoom,
+                max_zoom=n.max_zoom,
+                is_landuse_aoi=('NULL' if n.is_landuse_aoi is None else
+                                ('true' if n.is_landuse_aoi else 'false')),
                 label_position=n.label_position.wkb_hex,
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
@@ -399,6 +445,9 @@ class WofModel(object):
                     "hash='%(hash)s', "
                     'n_photos=%(n_photos)s, '
                     'area=%(area)s, '
+                    'min_zoom=%(min_zoom)s, '
+                    'max_zoom=%(max_zoom)s, '
+                    'is_landuse_aoi=%(is_landuse_aoi)s, '
                     'label_position=ST_SetSRID'
                     "('%(label_position)s'::geometry, 900913), "
                     "geometry=ST_SetSRID('%(geometry)s'::geometry, 900913) "
@@ -410,7 +459,8 @@ class WofModel(object):
                 addition = gen_data(n)
                 addition_tuple = (
                     "(%(wof_id)d, %(placetype)d, '%(name)s', '%(hash)s', "
-                    '%(n_photos)s, %(area)s, '
+                    '%(n_photos)s, %(area)s, %(min_zoom)s, %(max_zoom)s, '
+                    '%(is_landuse_aoi)s, '
                     "ST_SetSRID('%(label_position)s'::geometry, 900913), "
                     "ST_SetSRID('%(geometry)s'::geometry, 900913))" % addition)
                 addition_tuples.append(addition_tuple)
@@ -639,6 +689,8 @@ class WofProcessor(object):
         if wof_neighbourhoods_to_fetch:
             self.logger.info('Fetching %d raw neighbourhoods ...' %
                              len(wof_neighbourhoods_to_fetch))
+            # TODO this will also need to return back the
+            # neighbourhoods that we failed to sync to update diffs
             raw_neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
                 wof_neighbourhoods_to_fetch)
             self.logger.info('Fetching %d raw neighbourhoods ... done' %
@@ -646,6 +698,21 @@ class WofProcessor(object):
         else:
             self.logger.info('No raw neighbourhoods found to fetch')
             raw_neighbourhoods = ()
+
+        # TODO the logic will need to be updated here
+        # now that we have to manage "funky" data, and even prior
+        # there's a hole where it's possible for the raw data to be
+        # incomplete/invalid in some way. Those will be skipped from
+        # insertion in our model, but we'll also need to prune our
+        # diff list appropriately because it drives the generation of
+        # tiles to expire.
+        # It's also possible for some data to become invalid/funky
+        # that wasn't before, in which case we'll want to ensure that
+        # it's removed from our model
+        # A separate pass is planned anyway to make it more robust
+        # once we detect fetch failures, and I think it's best to
+        # handle all these cases at once, but just making a note in
+        # here now to serve as a reminder
 
         sync_neighbourhoods_thread = None
         if diffs:
