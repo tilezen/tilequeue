@@ -117,36 +117,110 @@ def fetch_wof_url_meta_neighbourhoods(url, placetype):
     return parse_neighbourhood_meta_csv(csv_line_generator, placetype)
 
 
+class NeighbourhoodFailure(object):
+
+    def __init__(self, wof_id, reason, message, halt=False, skipped=False,
+                 funky=False):
+        # halt is a signal that threads should stop fetching. This
+        # would happen during a network IO error or when we get an
+        # unexpected http response when fetching raw json files. In
+        # some scenarios this could be recoverable, but because that
+        # isn't always the case we assume that we should stop further
+        # requests for more raw json files, and just process what we
+        # have so far.
+
+        # skipped means that we won't log this failure, ie there was
+        # an earlier "halt" error and processing of further records
+        # has stopped.
+
+        # funky is a signal downstream that this is a "soft" or
+        # expected failure, in the sense that it only means that we
+        # should skip the record, but we didn't actually detect any
+        # errors with the processing
+
+        self.wof_id = wof_id
+        self.reason = reason
+        self.message = message
+        self.halt = halt
+        self.skipped = skipped
+        self.funky = funky
+
+
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
-    geometry = json_data['geometry']
-    shape_lnglat = shapely.geometry.shape(geometry)
+
+    def failure(reason):
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id, reason, json.dumps(json_data))
+
+    if not isinstance(json_data, dict):
+        return failure('Unexpected json')
+
+    props = json_data.get('properties')
+    if props is None or not isinstance(props, dict):
+        return failure('Missing properties')
+
+    geometry = json_data.get('geometry')
+    if geometry is None:
+        return failure('Missing geometry')
+
+    try:
+        shape_lnglat = shapely.geometry.shape(geometry)
+    except:
+        return failure('Unexpected geometry')
+
     shape_mercator = shapely.ops.transform(
         reproject_lnglat_to_mercator, shape_lnglat)
-
-    props = json_data['properties']
 
     # ignore any features that are marked as funky
     is_funky = props.get('mz:is_funky')
     if is_funky is not None:
-        if int(is_funky) != 0:
-            return None
+        try:
+            is_funky = int(is_funky)
+        except ValueError:
+            return failure('Unexpected mz:is_funky value %s' % is_funky)
+        if is_funky != 0:
+            return NeighbourhoodFailure(
+                neighbourhood_meta.wof_id,
+                'mz:is_funky value is not 0: %s' % is_funky,
+                json.dumps(json_data), funky=True)
 
-    wof_id = int(props['wof:id'])
-    name = props['wof:name']
+    wof_id = props.get('wof:id')
+    if wof_id is None:
+        return failure('Missing wof:id')
+    try:
+        wof_id = int(wof_id)
+    except ValueError:
+        return failure('wof_id is not an int: %s' % wof_id)
+
+    name = props.get('wof:name')
+    if name is None:
+        return failure('Missing name')
+
     n_photos = props.get('misc:photo_sum')
     if n_photos is not None:
-        n_photos = int(n_photos)
+        try:
+            n_photos = int(n_photos)
+        except ValueError:
+            return failure('misc:photo_sum is not an int: %s' % n_photos)
 
     label_lat = props.get('lbl:latitude')
     label_lng = props.get('lbl:longitude')
     if label_lat is None or label_lng is None:
-        return None
+        return failure('Missing lbl:latitude or lbl:longitude')
+
+    try:
+        label_lat = float(label_lat)
+        label_lng = float(label_lng)
+    except ValueError:
+        return failure('lbl:latitude or lbl:longitude not float')
 
     label_merc_x, label_merc_y = reproject_lnglat_to_mercator(
         label_lng, label_lat)
     label_position = shapely.geometry.Point(label_merc_x, label_merc_y)
 
-    placetype = props['wof:placetype']
+    placetype = props.get('wof:placetype')
+    if placetype is None:
+        return failure('Missing wof:placetype')
 
     default_min_zoom = 15
     default_max_zoom = 18
@@ -155,16 +229,25 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     if min_zoom is None:
         min_zoom = default_min_zoom
     else:
-        min_zoom = int(min_zoom)
+        try:
+            min_zoom = int(min_zoom)
+        except ValueError:
+            return failure('mz:min_zoom not int: %s' % min_zoom)
     max_zoom = props.get('mz:max_zoom')
     if max_zoom is None:
         max_zoom = default_max_zoom
     else:
-        max_zoom = int(max_zoom)
+        try:
+            max_zoom = int(max_zoom)
+        except ValueError:
+            return failure('mz:max_zoom not int: %s' % max_zoom)
 
     is_landuse_aoi = props.get('mz:is_landuse_aoi')
     if is_landuse_aoi is not None:
-        is_landuse_aoi = int(is_landuse_aoi)
+        try:
+            is_landuse_aoi = int(is_landuse_aoi)
+        except ValueError:
+            return failure('is_landuse_aoi not int: %s' % is_landuse_aoi)
         is_landuse_aoi = is_landuse_aoi != 0
 
     if shape_mercator.type in ('Polygon', 'MultiPolygon'):
@@ -180,11 +263,36 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
 
 
 def fetch_url_raw_neighbourhood(url, neighbourhood_meta):
-    r = requests.get(url)
-    assert r.status_code == 200, 'Failure requesting: %s' % url
+    try:
+        r = requests.get(url)
+    except Exception, e:
+        # if there is an IO error when fetching the url itself, we'll
+        # want to halt too
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id, 'IO Error fetching %s' % url, str(e),
+            halt=True)
+    if r.status_code != 200:
+        # once we don't get a 200, signal that we should stop all
+        # remaining processing
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id,
+            'Invalid response %d for %s' % (r.status_code, url), r.text,
+            halt=True)
 
-    doc = r.json()
-    neighbourhood = create_neighbourhood_from_json(doc, neighbourhood_meta)
+    try:
+        doc = r.json()
+    except Exception, e:
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id, 'Response is not json for %s' % url,
+            r.text)
+    try:
+        neighbourhood = create_neighbourhood_from_json(doc, neighbourhood_meta)
+    except Exception, e:
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id,
+            'Unexpected exception parsing json',
+            json.dumps(doc))
+
     return neighbourhood
 
 
@@ -238,12 +346,30 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
     neighbourhood_input_queue = Queue.Queue(queue_size)
     neighbourhood_output_queue = Queue.Queue(len(neighbourhood_metas))
 
+    stop = threading.Event()
+
     def _fetch_raw_neighbourhood():
         while True:
             neighbourhood_meta = neighbourhood_input_queue.get()
             if neighbourhood_meta is None:
                 break
+            if stop.is_set():
+                # assume all remaining neighbourhoods are failures
+                # these will get skipped
+                neighbourhood_output_queue.put(NeighbourhoodFailure(
+                    neighbourhood_meta.wof_id,
+                    'Skipping remaining neighbourhoods',
+                    'Skipping remaining neighbourhoods',
+                    skipped=True))
+                continue
+
             neighbourhood = fetch_raw_fn(neighbourhood_meta)
+            if isinstance(neighbourhood, NeighbourhoodFailure):
+                failure = neighbourhood
+                # if this is the type of error that should stop all
+                # processing, notify all other threads
+                if failure.halt:
+                    stop.set()
             neighbourhood_output_queue.put(neighbourhood)
 
     fetch_threads = []
@@ -259,15 +385,18 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
         neighbourhood_input_queue.put(None)
 
     neighbourhoods = []
+    failures = []
     for i in xrange(len(neighbourhood_metas)):
         neighbourhood = neighbourhood_output_queue.get()
-        if neighbourhood is not None:
+        if isinstance(neighbourhood, NeighbourhoodFailure):
+            failures.append(neighbourhood)
+        else:
             neighbourhoods.append(neighbourhood)
 
     for fetch_thread in fetch_threads:
         fetch_thread.join()
 
-    return neighbourhoods
+    return neighbourhoods, failures
 
 
 class WofUrlNeighbourhoodFetcher(object):
@@ -294,9 +423,9 @@ class WofUrlNeighbourhoodFetcher(object):
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
         url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix)
-        neighbourhoods = threaded_fetch(neighbourhood_metas, self.n_threads,
-                                        url_fetch_fn)
-        return neighbourhoods
+        neighbourhoods, failures = threaded_fetch(
+            neighbourhood_metas, self.n_threads, url_fetch_fn)
+        return neighbourhoods, failures
 
 
 class WofFilesystemNeighbourhoodFetcher(object):
@@ -326,9 +455,9 @@ class WofFilesystemNeighbourhoodFetcher(object):
         data_prefix = os.path.join(
             self.wof_data_path, 'data')
         fs_fetch_fn = make_fetch_raw_filesystem_fn(data_prefix)
-        neighbourhoods = threaded_fetch(neighbourhood_metas, self.n_threads,
-                                        fs_fetch_fn)
-        return neighbourhoods
+        neighbourhoods, failures = threaded_fetch(
+            neighbourhood_metas, self.n_threads, fs_fetch_fn)
+        return neighbourhoods, failures
 
 
 def create_neighbourhood_file_object(neighbourhoods):
@@ -689,30 +818,46 @@ class WofProcessor(object):
         if wof_neighbourhoods_to_fetch:
             self.logger.info('Fetching %d raw neighbourhoods ...' %
                              len(wof_neighbourhoods_to_fetch))
-            # TODO this will also need to return back the
-            # neighbourhoods that we failed to sync to update diffs
-            raw_neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
-                wof_neighbourhoods_to_fetch)
+            raw_neighbourhoods, failures = (
+                self.fetcher.fetch_raw_neighbourhoods(
+                    wof_neighbourhoods_to_fetch))
             self.logger.info('Fetching %d raw neighbourhoods ... done' %
                              len(wof_neighbourhoods_to_fetch))
         else:
             self.logger.info('No raw neighbourhoods found to fetch')
             raw_neighbourhoods = ()
 
-        # TODO the logic will need to be updated here
-        # now that we have to manage "funky" data, and even prior
-        # there's a hole where it's possible for the raw data to be
-        # incomplete/invalid in some way. Those will be skipped from
-        # insertion in our model, but we'll also need to prune our
-        # diff list appropriately because it drives the generation of
-        # tiles to expire.
-        # It's also possible for some data to become invalid/funky
-        # that wasn't before, in which case we'll want to ensure that
-        # it's removed from our model
-        # A separate pass is planned anyway to make it more robust
-        # once we detect fetch failures, and I think it's best to
-        # handle all these cases at once, but just making a note in
-        # here now to serve as a reminder
+        # we should just remove any neighbourhoods from add/update lists
+        # also keep track of these ids to remove from the diffs too
+        failed_wof_ids = set()
+        n_funky = 0
+        for failure in failures:
+            failure_wof_id = failure.wof_id
+            # TODO logging funky failures is noisy
+            # maybe we just log the count of funky failures?
+            if not failure.skipped and not failure.funky:
+                self.logger.warn('Neighbourhood failure for %s: %s' % (
+                    failure_wof_id, failure.reason))
+                self.logger.debug(failure.message)
+
+            if failure.funky:
+                n_funky += 1
+
+            failed_wof_ids.add(failure_wof_id)
+            ids_to_add.discard(failure_wof_id)
+            ids_to_update.discard(failure_wof_id)
+
+        # we'll only log the number of funky records that we found
+        if n_funky:
+            self.logger.info('Number of funky neighbourhoods: %d' % n_funky)
+
+        # now we'll want to ensure that the failed ids are not present
+        # in the diffs
+        new_diffs = []
+        for n1, n2 in diffs:
+            if n2 is None or n2.wof_id not in failed_wof_ids:
+                new_diffs.append((n1, n2))
+        diffs = new_diffs
 
         sync_neighbourhoods_thread = None
         if diffs:
@@ -824,8 +969,13 @@ class WofInitialLoader(object):
             neighbourhood_metas + microhood_metas + macrohood_metas)
 
         self.logger.info('Fetching raw neighbourhoods ...')
-        neighbourhoods = self.fetcher.fetch_raw_neighbourhoods(
+        neighbourhoods, failures = self.fetcher.fetch_raw_neighbourhoods(
             neighbourhood_metas)
+        for failure in failures:
+            if not failure.skipped and not failure.funky:
+                self.logger.warn('Neighbourhood failure for %s: %s' % (
+                    failure.wof_id, failure.reason))
+                self.logger.debug(failure.message)
         self.logger.info('Fetching raw neighbourhoods ... done')
 
         self.logger.info('Inserting %d neighbourhoods ...' %
