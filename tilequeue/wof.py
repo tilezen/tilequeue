@@ -120,7 +120,7 @@ def fetch_wof_url_meta_neighbourhoods(url, placetype):
 class NeighbourhoodFailure(object):
 
     def __init__(self, wof_id, reason, message, halt=False, skipped=False,
-                 funky=False):
+                 funky=False, superseded=False):
         # halt is a signal that threads should stop fetching. This
         # would happen during a network IO error or when we get an
         # unexpected http response when fetching raw json files. In
@@ -138,12 +138,19 @@ class NeighbourhoodFailure(object):
         # should skip the record, but we didn't actually detect any
         # errors with the processing
 
+        # superseded is set when the json has a value for
+        # wof:superseded. This would indicate a data inconsistency
+        # because the meta csv file didn't have it set if we're trying
+        # to fetch the raw json in the first place. But this is meant
+        # to catch this scenario.
+
         self.wof_id = wof_id
         self.reason = reason
         self.message = message
         self.halt = halt
         self.skipped = skipped
         self.funky = funky
+        self.superseded = superseded
 
 
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
@@ -158,6 +165,15 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     props = json_data.get('properties')
     if props is None or not isinstance(props, dict):
         return failure('Missing properties')
+
+    superseded_by = props.get('wof:superseded_by')
+    # these often show up as empty lists, so we do a truthy test
+    # instead of expicitly checking for None
+    if superseded_by:
+        return NeighbourhoodFailure(
+            neighbourhood_meta.wof_id,
+            'superseded_by: %s' % superseded_by,
+            json.dumps(json_data), superseded=True)
 
     geometry = json_data.get('geometry')
     if geometry is None:
@@ -830,18 +846,26 @@ class WofProcessor(object):
         # we should just remove any neighbourhoods from add/update lists
         # also keep track of these ids to remove from the diffs too
         failed_wof_ids = set()
+        superseded_by_wof_ids = set()
         n_funky = 0
         for failure in failures:
             failure_wof_id = failure.wof_id
-            # TODO logging funky failures is noisy
-            # maybe we just log the count of funky failures?
-            if not failure.skipped and not failure.funky:
-                self.logger.warn('Neighbourhood failure for %s: %s' % (
+            if not (failure.skipped or failure.funky or failure.superseded):
+                self.logger.error('Neighbourhood failure for %s: %s' % (
                     failure_wof_id, failure.reason))
-                self.logger.debug(failure.message)
+                self.logger.info(failure.message)
 
             if failure.funky:
                 n_funky += 1
+
+            if failure.superseded:
+                self.logger.warn(
+                    'superseded_by inconsistency for %s' % failure_wof_id)
+                # this means that we had a value for superseded_by in
+                # the raw json, but not in the meta file
+                # this should get treated as a removal
+                ids_to_remove.add(failure_wof_id)
+                superseded_by_wof_ids.add(failure_wof_id)
 
             failed_wof_ids.add(failure_wof_id)
             ids_to_add.discard(failure_wof_id)
@@ -849,7 +873,7 @@ class WofProcessor(object):
 
         # we'll only log the number of funky records that we found
         if n_funky:
-            self.logger.info('Number of funky neighbourhoods: %d' % n_funky)
+            self.logger.warn('Number of funky neighbourhoods: %d' % n_funky)
 
         # now we'll want to ensure that the failed ids are not present
         # in the diffs
@@ -858,6 +882,16 @@ class WofProcessor(object):
             if n2 is None or n2.wof_id not in failed_wof_ids:
                 new_diffs.append((n1, n2))
         diffs = new_diffs
+
+        # and we'll want to also treat any superseded_by
+        # inconsistencies as removals
+        # but we need the original neighbourhood meta object to
+        # generate the diff, for its label position to expire the
+        # appropriate tile
+        if superseded_by_wof_ids:
+            for n in prev_neighbourhoods:
+                if n.wof_id in superseded_by_wof_ids:
+                    diffs.append((n, None))
 
         sync_neighbourhoods_thread = None
         if diffs:
@@ -972,10 +1006,10 @@ class WofInitialLoader(object):
         neighbourhoods, failures = self.fetcher.fetch_raw_neighbourhoods(
             neighbourhood_metas)
         for failure in failures:
-            if not failure.skipped and not failure.funky:
-                self.logger.warn('Neighbourhood failure for %s: %s' % (
+            if not (failure.skipped or failure.funky or failure.superseded):
+                self.logger.error('Neighbourhood failure for %s: %s' % (
                     failure.wof_id, failure.reason))
-                self.logger.debug(failure.message)
+                self.logger.info(failure.message)
         self.logger.info('Fetching raw neighbourhoods ... done')
 
         self.logger.info('Inserting %d neighbourhoods ...' %
