@@ -711,6 +711,13 @@ def generate_tile_expiry_list(zoom, diffs):
     return coord_ints
 
 
+def log_failure(logger, failure):
+    if not (failure.skipped or failure.funky or failure.superseded):
+        failure_message_one_line = failure.message.replace('\n', ' | ')
+        logger.error('Neighbourhood failure for %s: %s - %s' % (
+            failure.wof_id, failure.reason, failure_message_one_line))
+
+
 class WofProcessor(object):
 
     def __init__(self, fetcher, model, redis_cache_index, intersector,
@@ -845,10 +852,7 @@ class WofProcessor(object):
         n_funky = 0
         for failure in failures:
             failure_wof_id = failure.wof_id
-            if not (failure.skipped or failure.funky or failure.superseded):
-                self.logger.error('Neighbourhood failure for %s: %s' % (
-                    failure_wof_id, failure.reason))
-                self.logger.info(failure.message)
+            log_failure(self.logger, failure)
 
             if failure.funky:
                 n_funky += 1
@@ -1001,10 +1005,7 @@ class WofInitialLoader(object):
         neighbourhoods, failures = self.fetcher.fetch_raw_neighbourhoods(
             neighbourhood_metas)
         for failure in failures:
-            if not (failure.skipped or failure.funky or failure.superseded):
-                self.logger.error('Neighbourhood failure for %s: %s' % (
-                    failure.wof_id, failure.reason))
-                self.logger.info(failure.message)
+            log_failure(self.logger, failure)
         self.logger.info('Fetching raw neighbourhoods ... done')
 
         self.logger.info('Inserting %d neighbourhoods ...' %
