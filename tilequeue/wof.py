@@ -559,12 +559,15 @@ class WofModel(object):
         def nullable_int(x):
             return 'NULL' if x is None else str(x)
 
+        def escape_string(s):
+            return s.replace("'", "''")
+
         def gen_data(n):
             return dict(
                 table=self.table,
                 placetype=neighbourhood_placetypes_to_int[n.placetype],
-                name=n.name,
-                hash=n.hash,
+                name=escape_string(n.name),
+                hash=escape_string(n.hash),
                 n_photos=nullable_int(n.n_photos),
                 area=nullable_int(n.area),
                 min_zoom=n.min_zoom,
