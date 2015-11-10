@@ -714,7 +714,7 @@ def generate_tile_expiry_list(zoom, diffs):
 def log_failure(logger, failure):
     if not (failure.skipped or failure.funky or failure.superseded):
         failure_message_one_line = failure.message.replace('\n', ' | ')
-        logger.error('Neighbourhood failure for %s: %s - %s' % (
+        logger.error('Neighbourhood failure for %d: %r - %r' % (
             failure.wof_id, failure.reason, failure_message_one_line))
 
 
