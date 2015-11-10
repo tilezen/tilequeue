@@ -1,7 +1,6 @@
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
-from itertools import imap
 from operator import attrgetter
 from shapely import geos
 from tilequeue.tile import coord_marshall_int
@@ -556,60 +555,32 @@ class WofModel(object):
             self, neighbourhoods_to_add, neighbourhoods_to_update,
             ids_to_remove):
 
-        def nullable_int(x):
-            return 'NULL' if x is None else str(x)
+        geos.WKBWriter.defaults['include_srid'] = True
 
         def gen_data(n):
+            geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
+            geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
             return dict(
                 table=self.table,
                 placetype=neighbourhood_placetypes_to_int[n.placetype],
                 name=n.name,
                 hash=n.hash,
-                n_photos=nullable_int(n.n_photos),
-                area=nullable_int(n.area),
+                n_photos=n.n_photos,
+                area=n.area,
                 min_zoom=n.min_zoom,
                 max_zoom=n.max_zoom,
-                is_landuse_aoi=('NULL' if n.is_landuse_aoi is None else
-                                ('true' if n.is_landuse_aoi else 'false')),
+                is_landuse_aoi=n.is_landuse_aoi,
                 label_position=n.label_position.wkb_hex,
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
             )
 
-        # set up all the sync updates in advance
         if ids_to_remove:
-            ids_to_remove_str = ', '.join(imap(str, ids_to_remove))
+            ids_to_remove_str = ', '.join(map(str, ids_to_remove))
         if neighbourhoods_to_update:
-            updates = []
-            for n in neighbourhoods_to_update:
-                update_data = gen_data(n)
-                update_sql = (
-                    'UPDATE %(table)s SET '
-                    'placetype=%(placetype)d, '
-                    "name='%(name)s', "
-                    "hash='%(hash)s', "
-                    'n_photos=%(n_photos)s, '
-                    'area=%(area)s, '
-                    'min_zoom=%(min_zoom)s, '
-                    'max_zoom=%(max_zoom)s, '
-                    'is_landuse_aoi=%(is_landuse_aoi)s, '
-                    'label_position=ST_SetSRID'
-                    "('%(label_position)s'::geometry, 900913), "
-                    "geometry=ST_SetSRID('%(geometry)s'::geometry, 900913) "
-                    'WHERE wof_id=%(wof_id)s' % update_data)
-                updates.append(update_sql)
+            update_data = map(gen_data, neighbourhoods_to_update)
         if neighbourhoods_to_add:
-            addition_tuples = []
-            for n in neighbourhoods_to_add:
-                addition = gen_data(n)
-                addition_tuple = (
-                    "(%(wof_id)d, %(placetype)d, '%(name)s', '%(hash)s', "
-                    '%(n_photos)s, %(area)s, %(min_zoom)s, %(max_zoom)s, '
-                    '%(is_landuse_aoi)s, '
-                    "ST_SetSRID('%(label_position)s'::geometry, 900913), "
-                    "ST_SetSRID('%(geometry)s'::geometry, 900913))" % addition)
-                addition_tuples.append(addition_tuple)
-            inserts = ', '.join(addition_tuples)
+            insert_data = map(gen_data, neighbourhoods_to_add)
 
         # this closes the connection
         with closing(self._create_conn()) as conn:
@@ -617,15 +588,39 @@ class WofModel(object):
             with conn as conn:
                 # this frees any resources associated with the cursor
                 with conn.cursor() as cursor:
+
                     if ids_to_remove:
-                        cursor.execute('DELETE FROM %s WHERE wof_id IN (%s)' %
-                                       (self.table, ids_to_remove_str))
-                    if neighbourhoods_to_update:
-                        for update_sql in updates:
-                            cursor.execute(update_sql)
-                    if neighbourhoods_to_add:
                         cursor.execute(
-                            'INSERT INTO %s VALUES %s' % (self.table, inserts))
+                            'DELETE FROM %s WHERE wof_id IN (%s)' %
+                            (self.table, ids_to_remove_str))
+
+                    if neighbourhoods_to_update:
+                        cursor.executemany(
+                            'UPDATE ' + self.table + ' SET '
+                            'placetype=%(placetype)s, '
+                            'name=%(name)s, '
+                            'hash=%(hash)s, '
+                            'n_photos=%(n_photos)s, '
+                            'area=%(area)s, '
+                            'min_zoom=%(min_zoom)s, '
+                            'max_zoom=%(max_zoom)s, '
+                            'is_landuse_aoi=%(is_landuse_aoi)s, '
+                            'label_position=%(label_position)s, '
+                            'geometry=%(geometry)s '
+                            'WHERE wof_id=%(wof_id)s',
+                            update_data)
+
+                    if neighbourhoods_to_add:
+                        cursor.executemany(
+                            'INSERT INTO ' + self.table + ' '
+                            '(wof_id, placetype, name, hash, n_photos, area, '
+                            'min_zoom, max_zoom, is_landuse_aoi, '
+                            'label_position, geometry) '
+                            'VALUES (%(wof_id)s, %(placetype)s, %(name)s, '
+                            '%(hash)s, %(n_photos)s, %(area)s, %(min_zoom)s, '
+                            '%(max_zoom)s, %(is_landuse_aoi)s, '
+                            '%(label_position)s, %(geometry)s)',
+                            insert_data)
 
     def insert_neighbourhoods(self, neighbourhoods):
         # create this whole input file like object outside of the transaction
