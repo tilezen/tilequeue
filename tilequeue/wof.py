@@ -868,7 +868,6 @@ class WofProcessor(object):
                 # this means that we had a value for superseded_by in
                 # the raw json, but not in the meta file
                 # this should get treated as a removal
-                ids_to_remove.add(failure_wof_id)
                 superseded_by_wof_ids.add(failure_wof_id)
 
             failed_wof_ids.add(failure_wof_id)
@@ -896,6 +895,7 @@ class WofProcessor(object):
         if superseded_by_wof_ids:
             for n in prev_neighbourhoods:
                 if n.wof_id in superseded_by_wof_ids:
+                    ids_to_remove.add(n.wof_id)
                     diffs.append((n, None))
 
         # if the neighbourhood became funky and we had it in our
