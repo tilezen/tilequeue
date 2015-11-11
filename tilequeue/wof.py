@@ -849,13 +849,18 @@ class WofProcessor(object):
         # also keep track of these ids to remove from the diffs too
         failed_wof_ids = set()
         superseded_by_wof_ids = set()
-        n_funky = 0
+        funky_wof_ids = set()
         for failure in failures:
             failure_wof_id = failure.wof_id
             log_failure(self.logger, failure)
 
             if failure.funky:
-                n_funky += 1
+                # this scenario is triggered for new neighbourhoods,
+                # or if a neighbourhood became funky
+                # we handle both of these scenarios in tests later on,
+                # but for now we just track the id of the funky
+                # neighbourhoods
+                funky_wof_ids.add(failure_wof_id)
 
             if failure.superseded:
                 self.logger.warn(
@@ -863,7 +868,6 @@ class WofProcessor(object):
                 # this means that we had a value for superseded_by in
                 # the raw json, but not in the meta file
                 # this should get treated as a removal
-                ids_to_remove.add(failure_wof_id)
                 superseded_by_wof_ids.add(failure_wof_id)
 
             failed_wof_ids.add(failure_wof_id)
@@ -871,11 +875,12 @@ class WofProcessor(object):
             ids_to_update.discard(failure_wof_id)
 
         # we'll only log the number of funky records that we found
-        if n_funky:
-            self.logger.warn('Number of funky neighbourhoods: %d' % n_funky)
+        if funky_wof_ids:
+            self.logger.warn('Number of funky neighbourhoods: %d' %
+                             len(funky_wof_ids))
 
         # now we'll want to ensure that the failed ids are not present
-        # in the diffs
+        # in any additions or updates
         new_diffs = []
         for n1, n2 in diffs:
             if n2 is None or n2.wof_id not in failed_wof_ids:
@@ -890,6 +895,15 @@ class WofProcessor(object):
         if superseded_by_wof_ids:
             for n in prev_neighbourhoods:
                 if n.wof_id in superseded_by_wof_ids:
+                    ids_to_remove.add(n.wof_id)
+                    diffs.append((n, None))
+
+        # if the neighbourhood became funky and we had it in our
+        # existing set, we'll want to remove it
+        if funky_wof_ids:
+            for n in prev_neighbourhoods:
+                if n.wof_id in funky_wof_ids:
+                    ids_to_remove.add(n.wof_id)
                     diffs.append((n, None))
 
         sync_neighbourhoods_thread = None
