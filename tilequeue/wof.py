@@ -903,7 +903,7 @@ class WofProcessor(object):
         if funky_wof_ids:
             for n in prev_neighbourhoods:
                 if n.wof_id in funky_wof_ids:
-                    ids_to_remove.add(failure_wof_id)
+                    ids_to_remove.add(n.wof_id)
                     diffs.append((n, None))
 
         sync_neighbourhoods_thread = None
