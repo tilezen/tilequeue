@@ -6,20 +6,17 @@ from shapely import geos
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import mercator_point_to_coord
+from tilequeue.tile import reproject_lnglat_to_mercator
 import csv
 import json
 import os.path
 import psycopg2
-import pyproj
 import Queue
 import requests
 import shapely.geometry
 import shapely.ops
 import shapely.wkb
 import threading
-
-merc_proj = pyproj.Proj(init='epsg:3857')
-latlng_proj = pyproj.Proj(proj='latlong')
 
 
 def generate_csv_lines(requests_result):
@@ -47,10 +44,6 @@ Neighbourhood = namedtuple(
     'Neighbourhood',
     'wof_id placetype name hash label_position geometry n_photos area '
     'min_zoom max_zoom is_landuse_aoi')
-
-
-def reproject_lnglat_to_mercator(x, y):
-    return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):

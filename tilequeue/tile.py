@@ -4,7 +4,12 @@ from ModestMaps.Core import Point
 from TileStache.Geography import SphericalMercator
 from TileStache.Goodies.VecTiles.server import tolerances
 import math
+import pyproj
 import time
+
+
+merc_proj = pyproj.Proj(init='epsg:3857')
+latlng_proj = pyproj.Proj(proj='latlong')
 
 
 # TODO: use a namedtuple instead
@@ -95,6 +100,10 @@ def coord_to_bounds(coord):
 
     bounds = (minx, miny, maxx, maxy)
     return bounds
+
+
+def reproject_lnglat_to_mercator(x, y):
+    return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
 spherical_mercator = SphericalMercator()
