@@ -1,6 +1,14 @@
 CHANGELOG
 =========
 
+v0.5.0
+------
+* Configure better defaults in sample config
+* Add WOF neighbourhood processing
+  - add command to load initial neighbourhoods to database
+  - add command to track updates
+* Create abstraction to factor out threaded enqueueing
+
 v0.4.1
 ------
 * Add bbox_intersection filter for Jinja, which allows clipping to the query bounding box.
