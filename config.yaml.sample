@@ -8,6 +8,7 @@ store:
   # The following store properties are s3 specific.
   path: osm
   reduced-redundancy: true
+  date-prefix: 19851026
 aws:
   credentials:
     aws_access_key_id: <aws_access_key_id>

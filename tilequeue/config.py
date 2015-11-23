@@ -20,6 +20,7 @@ class Configuration(object):
         self.s3_bucket = self._cfg('store name')
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
+        self.s3_date_prefix = self._cfg('store date-prefix')
 
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
@@ -108,7 +109,8 @@ def default_yml_config():
             'type': 's3',
             'name': None,
             'path': 'osm',
-            'reduced-redundancy': False
+            'reduced-redundancy': False,
+            'date-prefix': '',
         },
         'aws': {
             'credentials': {
