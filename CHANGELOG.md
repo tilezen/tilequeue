@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v0.5.1
+------
+* Move reproject_lnglat_to_mercator function for outside usage
+
 v0.5.0
 ------
 * Configure better defaults in sample config
