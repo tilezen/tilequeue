@@ -300,7 +300,8 @@ def make_store(store_type, store_name, cfg):
         from tilequeue.store import make_s3_store
         return make_s3_store(
             cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
-            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy)
+            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy,
+            date_prefix=cfg.s3_date_prefix)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))

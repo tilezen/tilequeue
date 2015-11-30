@@ -2,20 +2,48 @@
 
 from boto import connect_s3
 from boto.s3.bucket import Bucket
-from TileStache.S3 import tile_key
+import md5
 import os
+
+
+def calc_hash(s):
+    m = md5.new()
+    m.update(s)
+    md5_hash = m.hexdigest()
+    return md5_hash[:5]
+
+
+def s3_tile_key(date, path, layer, coord, extension):
+    path_to_hash = '/%(path)s/%(layer)s/%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
+        path=path,
+        layer=layer,
+        z=coord.zoom,
+        x=coord.column,
+        y=coord.row,
+        ext=extension,
+    )
+    md5_hash = calc_hash(path_to_hash)
+    s3_path = '%(date)s/%(md5)s/%(path_to_hash)s' % dict(
+        date=date,
+        md5=md5_hash,
+        path_to_hash=path_to_hash,
+    )
+    return s3_path
 
 
 class S3(object):
 
-    def __init__(self, bucket, layer_name, path='', reduced_redundancy=False):
+    def __init__(
+            self, bucket, layer_name, date_prefix, path, reduced_redundancy):
         self.bucket = bucket
-        self.layer = StubLayer(layer_name)
+        self.layer = layer_name
+        self.date_prefix = date_prefix
         self.path = path
         self.reduced_redundancy = reduced_redundancy
 
     def write_tile(self, tile_data, coord, format):
-        key_name = tile_key(self.layer, coord, format.extension, self.path)
+        key_name = s3_tile_key(
+            self.date_prefix, self.path, self.layer, coord, format.extension)
         key = self.bucket.new_key(key_name)
         key.set_contents_from_string(
             tile_data,
@@ -25,21 +53,13 @@ class S3(object):
         )
 
     def read_tile(self, coord, format):
-        key_name = tile_key(self.layer, coord, format.extension, self.path)
+        key_name = s3_tile_key(
+            self.date_prefix, self.path, self.layer, coord, format.extension)
         key = self.bucket.get_key(key_name)
         if key is None:
             return None
         tile_data = key.get_contents_as_string()
         return tile_data
-
-
-class StubLayer(object):
-
-    def __init__(self, layer_name):
-        self.layer_name = layer_name
-
-    def name(self):
-        return self.layer_name
 
 
 def make_dir_path(base_path, coord):
@@ -115,7 +135,9 @@ class Memory(object):
 
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
-                  layer_name='all', path='', reduced_redundancy=False):
+                  layer_name='all', path='osm', reduced_redundancy=False,
+                  date_prefix=''):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
-    return S3(bucket, layer_name, path, reduced_redundancy)
+    s3_store = S3(bucket, layer_name, date_prefix, path, reduced_redundancy)
+    return s3_store
