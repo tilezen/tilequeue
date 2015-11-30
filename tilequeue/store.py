@@ -23,17 +23,11 @@ def s3_tile_key(date, path, layer, coord, extension):
         ext=extension,
     )
     md5_hash = calc_hash(path_to_hash)
-    s3_path = ('%(date)s/%(md5)s/'
-               '%(path)s/%(layer)s/%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
-                   path=path,
-                   layer=layer,
-                   z=coord.zoom,
-                   x=coord.column,
-                   y=coord.row,
-                   ext=extension,
-                   date=date,
-                   md5=md5_hash,
-               ))
+    s3_path = '%(date)s/%(md5)s/%(path_to_hash)s' % dict(
+        date=date,
+        md5=md5_hash,
+        path_to_hash=path_to_hash,
+    )
     return s3_path
 
 
