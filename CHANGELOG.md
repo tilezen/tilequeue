@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v0.6.0
+------
+* Added a date prefix to be used to distinguish between different versions of the tiles in the store. This means it's not necessary to create a new bucket for each release.
+* Added a hash prefix for files stored in an S3 bucket. This is recommended practice for distributing load for a bucket across an S3 cluster.
+
 v0.5.1
 ------
 * Move reproject_lnglat_to_mercator function for outside usage
