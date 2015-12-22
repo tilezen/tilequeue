@@ -214,7 +214,18 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     label_lat = props.get('lbl:latitude')
     label_lng = props.get('lbl:longitude')
     if label_lat is None or label_lng is None:
-        return failure('Missing lbl:latitude or lbl:longitude')
+        # first, try to fall back to geom:* when lbl:* is missing. we'd prefer
+        # to have lbl:*, but it's better to have _something_ than nothing.
+        label_lat = props.get('geom:latitude')
+        label_lng = props.get('geom:longitude')
+
+        if label_lat is None or label_lng is None:
+            return failure('Missing lbl:latitude or lbl:longitude and ' +
+                           'geom:latitude or geom:longitude')
+
+        else:
+            self.logger.warn('Missing lbl:latitude or lbl:longitude for %d' %
+                             wof_id)
 
     try:
         label_lat = float(label_lat)
