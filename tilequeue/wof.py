@@ -223,10 +223,6 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
             return failure('Missing lbl:latitude or lbl:longitude and ' +
                            'geom:latitude or geom:longitude')
 
-        else:
-            self.logger.warn('Missing lbl:latitude or lbl:longitude for %d' %
-                             wof_id)
-
     try:
         label_lat = float(label_lat)
         label_lng = float(label_lng)
