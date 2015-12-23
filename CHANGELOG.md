@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v0.6.1
+------
+* Made the WOF processor robust to missing `lbl:longitude` and `lbl:latitude` properties by falling back to the geometry's position. This isn't as good as the label position, but better than erroring.
+
 v0.6.0
 ------
 * Added a date prefix to be used to distinguish between different versions of the tiles in the store. This means it's not necessary to create a new bucket for each release.
