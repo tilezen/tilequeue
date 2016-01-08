@@ -844,6 +844,7 @@ class WofProcessor(object):
         else:
             self.logger.info('No raw neighbourhoods found to fetch')
             raw_neighbourhoods = ()
+            failures = []
 
         # we should just remove any neighbourhoods from add/update lists
         # also keep track of these ids to remove from the diffs too
