@@ -109,14 +109,14 @@ def _make_requests_session_with_retries(max_retries):
     a = HTTPAdapter(
         max_retries=Retry(
             total=max_retries,
-            status_forcelist=[ # this is a list of statuses to consider to be an
-                               # error and retry.
-                429, # Too many requests (i.e: back off)
-                500, # Generic internal server error
-                502, # Bad Gateway - i.e: upstream failure
-                503, # Unavailable, temporarily
-                504, # Gateway timeout
-                522  # Origin connection timed out
+            status_forcelist=[  # this is a list of statuses to consider to be
+                                # an error and retry.
+                429,  # Too many requests (i.e: back off)
+                500,  # Generic internal server error
+                502,  # Bad Gateway - i.e: upstream failure
+                503,  # Unavailable, temporarily
+                504,  # Gateway timeout
+                522   # Origin connection timed out
             ]
         ))
 

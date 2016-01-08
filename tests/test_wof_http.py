@@ -26,7 +26,7 @@ class _NullWofModel(object):
     def sync_neighbourhoods(
             self, neighbourhoods_to_add, neighbourhoods_to_update,
             ids_to_remove):
-        self.added   = self.added   + len(neighbourhoods_to_add)
+        self.added = self.added + len(neighbourhoods_to_add)
         self.updated = self.updated + len(neighbourhoods_to_update)
         self.removed = self.removed + len(ids_to_remove)
 
@@ -53,7 +53,6 @@ class _WofErrorHandler(http.BaseHTTPRequestHandler):
         request_count = self.wof_ctx.request_counts.get(self.path, 0)
 
         if request_count < self.wof_ctx.failure_count:
-            print "ERROR because %r < %r" % (request_count, self.wof_ctx.failure_count)
             self.wof_ctx.request_counts[self.path] = request_count + 1
             self.send_response(self.wof_ctx.failure_code)
             self.end_headers()
@@ -75,8 +74,8 @@ class _NullRedisTOI(object):
         return []
 
 
-# guard function to run a test HTTP server on another thread and reap it when it
-# goes out of scope.
+# guard function to run a test HTTP server on another thread and reap it when
+# it goes out of scope.
 @contextlib.contextmanager
 def _test_http_server(handler):
     server = Server('127.0.0.1', 0, 'http', handler)
@@ -109,20 +108,34 @@ class TestWofHttp(unittest.TestCase):
         context = _WofHandlerContext(num_failures, {
             '/meta/neighbourhoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,geom_latitude,geom_longitude,id,inception,iso,lastmodified,lbl_latitude,lbl_longitude,name,parent_id,path,placetype,source,superseded_by,supersedes\n"
-                "\"0,0,0,0\",u,,00000000000000000000000000000000,,00000000000000000000000000000000,0,0,1,u,,0,0,0,Null Island,-1,1/1.geojson,neighbourhood,null,,"
+                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
+                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
+                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
+                "source,superseded_by,supersedes\n"
+                "\"0,0,0,0\",u,,00000000000000000000000000000000,,"
+                "00000000000000000000000000000000,0,0,1,u,,0,0,0,Null Island,"
+                "-1,1/1.geojson,neighbourhood,null,,\n"
             ),
             '/meta/microhoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,geom_latitude,geom_longitude,id,inception,iso,lastmodified,lbl_latitude,lbl_longitude,name,parent_id,path,placetype,source,superseded_by,supersedes"
+                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
+                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
+                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
+                "source,superseded_by,supersedes\n"
             ),
             '/meta/macrohoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,geom_latitude,geom_longitude,id,inception,iso,lastmodified,lbl_latitude,lbl_longitude,name,parent_id,path,placetype,source,superseded_by,supersedes"
+                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
+                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
+                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
+                "source,superseded_by,supersedes\n"
             ),
             '/data/1/1.geojson': (
                 'application/json; charset=utf-8',
-                '{"id":1,"type":"Feature","properties":{"wof:id":1,"wof:name":"Null Island","lbl:latitude":0.0,"lbl:longitude":0.0,"wof:placetype":"neighbourhood"},"geometry":{"coordinates":[0,0],"type":"Point"}}'
+                '{"id":1,"type":"Feature","properties":{"wof:id":1,' +
+                '"wof:name":"Null Island","lbl:latitude":0.0,' +
+                '"lbl:longitude":0.0,"wof:placetype":"neighbourhood"},' +
+                '"geometry":{"coordinates":[0,0],"type":"Point"}}'
             )
         }, failure_code)
 
@@ -165,15 +178,15 @@ class TestWofHttp(unittest.TestCase):
     def test_with_single_failure(self):
         self._simple_test(1, 502)
 
-    # however, if we try to fetch a URL and it's missing then that really should
-    # be an error - probably indicates that we're not using the right logic to
-    # form the URLs.
+    # however, if we try to fetch a URL and it's missing then that really
+    # should be an error - probably indicates that we're not using the right
+    # logic to form the URLs.
     def test_with_missing(self):
-        with self.assertRaises(AssertionError) as a:
+        with self.assertRaises(AssertionError):
             self._simple_test(1, 404)
 
     # if we try to fetch a URL and it's forbidden then that really should be an
     # error - probably indicates a configuration problem with WOF.
     def test_with_forbidden(self):
-        with self.assertRaises(AssertionError) as a:
+        with self.assertRaises(AssertionError):
             self._simple_test(1, 403)
