@@ -117,7 +117,9 @@ def _make_requests_session_with_retries(max_retries):
                 503,  # Unavailable, temporarily
                 504,  # Gateway timeout
                 522   # Origin connection timed out
-            ]
+            ],
+            backoff_factor=1.0  # back off for 0s, 1s, 3s, 7s, etc... after
+                                # each successive failure. (factor*(2^N-1))
         ))
 
     # use retry for both HTTP and HTTPS connections.
