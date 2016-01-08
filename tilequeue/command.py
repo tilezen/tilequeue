@@ -940,6 +940,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
         wof_cfg['macrohoods-meta-url'],
         wof_cfg['data-prefix-url'],
         n_raw_neighbourhood_fetch_threads,
+        wof_cfg.get('max-retries', 0)
     )
     model = make_wof_model(wof_cfg['postgresql'])
 
