@@ -101,8 +101,37 @@ def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
         yield neighbourhood_meta
 
 
-def fetch_wof_url_meta_neighbourhoods(url, placetype):
-    r = requests.get(url, stream=True)
+def _make_requests_session_with_retries(max_retries):
+    from requests.adapters import HTTPAdapter
+    from requests.packages.urllib3.util import Retry
+
+    s = requests.Session()
+    a = HTTPAdapter(
+        max_retries=Retry(
+            total=max_retries,
+            status_forcelist=[  # this is a list of statuses to consider to be
+                                # an error and retry.
+                429,  # Too many requests (i.e: back off)
+                500,  # Generic internal server error
+                502,  # Bad Gateway - i.e: upstream failure
+                503,  # Unavailable, temporarily
+                504,  # Gateway timeout
+                522   # Origin connection timed out
+            ],
+            backoff_factor=1.0  # back off for 0s, 1s, 3s, 7s, etc... after
+                                # each successive failure. (factor*(2^N-1))
+        ))
+
+    # use retry for both HTTP and HTTPS connections.
+    s.mount('http://', a)
+    s.mount('https://', a)
+
+    return s
+
+
+def fetch_wof_url_meta_neighbourhoods(url, placetype, max_retries):
+    s = _make_requests_session_with_retries(max_retries)
+    r = s.get(url, stream=True)
     assert r.status_code == 200, 'Failure requesting: %s' % url
 
     csv_line_generator = generate_csv_lines(r)
@@ -277,9 +306,10 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     return neighbourhood
 
 
-def fetch_url_raw_neighbourhood(url, neighbourhood_meta):
+def fetch_url_raw_neighbourhood(url, neighbourhood_meta, max_retries):
     try:
-        r = requests.get(url)
+        s = _make_requests_session_with_retries(max_retries)
+        r = s.get(url)
     except Exception, e:
         # if there is an IO error when fetching the url itself, we'll
         # want to halt too
@@ -335,12 +365,13 @@ def generate_wof_url(url_prefix, wof_id):
     return wof_url
 
 
-def make_fetch_raw_url_fn(data_url_prefix):
+def make_fetch_raw_url_fn(data_url_prefix, max_retries):
     def fn(neighbourhood_meta):
         wof_url = generate_wof_url(
             data_url_prefix, neighbourhood_meta.wof_id)
         neighbourhood = fetch_url_raw_neighbourhood(wof_url,
-                                                    neighbourhood_meta)
+                                                    neighbourhood_meta,
+                                                    max_retries)
         return neighbourhood
     return fn
 
@@ -417,27 +448,29 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
 class WofUrlNeighbourhoodFetcher(object):
 
     def __init__(self, neighbourhood_url, microhood_url, macrohood_url,
-                 data_url_prefix, n_threads):
+                 data_url_prefix, n_threads, max_retries):
         self.neighbourhood_url = neighbourhood_url
         self.microhood_url = microhood_url
         self.macrohood_url = macrohood_url
         self.data_url_prefix = data_url_prefix
         self.n_threads = n_threads
+        self.max_retries = max_retries
 
     def fetch_meta_neighbourhoods(self):
         return fetch_wof_url_meta_neighbourhoods(
-            self.neighbourhood_url, 'neighbourhood')
+            self.neighbourhood_url, 'neighbourhood', self.max_retries)
 
     def fetch_meta_microhoods(self):
         return fetch_wof_url_meta_neighbourhoods(
-            self.microhood_url, 'microhood')
+            self.microhood_url, 'microhood', self.max_retries)
 
     def fetch_meta_macrohoods(self):
         return fetch_wof_url_meta_neighbourhoods(
-            self.macrohood_url, 'macrohood')
+            self.macrohood_url, 'macrohood', self.max_retries)
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
-        url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix)
+        url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix,
+                                             self.max_retries)
         neighbourhoods, failures = threaded_fetch(
             neighbourhood_metas, self.n_threads, url_fetch_fn)
         return neighbourhoods, failures
@@ -844,6 +877,7 @@ class WofProcessor(object):
         else:
             self.logger.info('No raw neighbourhoods found to fetch')
             raw_neighbourhoods = ()
+            failures = []
 
         # we should just remove any neighbourhoods from add/update lists
         # also keep track of these ids to remove from the diffs too
@@ -1031,10 +1065,10 @@ class WofInitialLoader(object):
 
 def make_wof_url_neighbourhood_fetcher(
         neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
-        n_threads):
+        n_threads, max_retries):
     fetcher = WofUrlNeighbourhoodFetcher(
         neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
-        n_threads)
+        n_threads, max_retries)
     return fetcher
 
 

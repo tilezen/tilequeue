@@ -43,7 +43,8 @@ setup(name='tilequeue',
       ],
       test_suite='tests',
       tests_require=[
-          'mock'
+          'mock',
+          'httptestserver'
       ],
       entry_points=dict(
           console_scripts=[
