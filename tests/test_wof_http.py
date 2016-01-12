@@ -9,6 +9,7 @@ import contextlib
 from httptestserver import Server
 from tilequeue.wof import make_wof_url_neighbourhood_fetcher, \
     WofProcessor
+import datetime
 
 
 # a mock wof model which does nothing - these tests are about
@@ -32,6 +33,9 @@ class _NullWofModel(object):
 
     def insert_neighbourhoods(self, neighbourhoods):
         pass
+
+    def update_visible_timestamp(self, zoom, day):
+        return set()
 
 
 class _WofHandlerContext(object):
@@ -161,8 +165,9 @@ class TestWofHttp(unittest.TestCase):
 
             logger = _SimpleLogger(False)
 
+            today = datetime.date.today()
             processor = WofProcessor(fetcher, model, redis, intersector,
-                                     enqueuer, logger)
+                                     enqueuer, logger, today)
             processor()
 
         self.assertEqual(model.added, 1)
