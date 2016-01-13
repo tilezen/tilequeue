@@ -169,8 +169,8 @@ class HostAffinityConnectionPool(object):
                         try:
                             conn = self._make_conn(conn_info_with_host)
                         except:
-                            print 'Error creating new connection to host: %s' % \
-                                host
+                            print 'Error creating new connection to host: %s' \
+                                % host
                             # When connections are fecthed for this
                             # host again, new ones will attempt to be
                             # created at that point

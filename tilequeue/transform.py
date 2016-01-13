@@ -45,6 +45,13 @@ def apply_to_all_coords(fn):
     return lambda shape: transform(shape, fn)
 
 
+# function which returns its argument, used to assign to a function variable
+# to use as a null transform. flake8 insists that it be named and not a
+# lambda.
+def _noop(shape):
+    return shape
+
+
 def transform_feature_layers_shape(feature_layers, format, scale,
                                    unpadded_bounds, padded_bounds, coord):
     if format in (json_format, topojson_format):
@@ -54,7 +61,7 @@ def transform_feature_layers_shape(feature_layers, format, scale,
             rescale_point(unpadded_bounds, scale))
     else:
         # in case we add a new format, default to no transformation
-        transform_fn = lambda shape: shape
+        transform_fn = _noop
 
     shape_unpadded_bounds = geometry.box(*unpadded_bounds)
     is_vtm_format = format == vtm_format
