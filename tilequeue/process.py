@@ -7,6 +7,7 @@ from tilequeue.tile import pad_bounds_for_zoom
 from tilequeue.tile import tolerance_for_zoom
 from tilequeue.transform import mercator_point_to_wgs84
 from tilequeue.transform import transform_feature_layers_shape
+from tilequeue.transform import calculate_padded_bounds
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
@@ -170,7 +171,6 @@ def _visible_shape(shape, meters_per_pixel):
 
 def _simplify_data(feature_layers, bounds, zoom):
     tolerance = tolerance_for_zoom(zoom)
-    shape_bounds = geometry.box(*bounds)
 
     meters_per_pixel = _find_meters_per_pixel(zoom)
 
@@ -180,6 +180,9 @@ def _simplify_data(feature_layers, bounds, zoom):
 
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
+        clip_factor = layer_datum.get('clip_factor', 1.0)
+        layer_padded_bounds = \
+            calculate_padded_bounds(clip_factor, bounds)
 
         # The logic behind simplifying before intersecting rather than the
         # other way around is extensively explained here:
@@ -200,7 +203,7 @@ def _simplify_data(feature_layers, bounds, zoom):
                 # bounding box first. See here for an explanation:
                 # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
 
-                min_x, min_y, max_x, max_y = shape_bounds.bounds
+                min_x, min_y, max_x, max_y = layer_padded_bounds.bounds
                 gutter_bbox_size = (max_x - min_x) * 0.1
                 gutter_bbox = geometry.box(
                     min_x - gutter_bbox_size,
@@ -213,7 +216,7 @@ def _simplify_data(feature_layers, bounds, zoom):
                 shape = _make_valid_if_necessary(simplified_shape)
 
             if is_clipped:
-                shape = shape.intersection(shape_bounds)
+                shape = shape.intersection(layer_padded_bounds)
 
             if should_simplify and not simplify_before_intersect:
                 simplified_shape = shape.simplify(tolerance,
