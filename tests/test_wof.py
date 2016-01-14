@@ -84,3 +84,36 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         dx, dy = diffs[0]
         self.assertEqual(dx, x)
         self.assertEqual(dy, y)
+
+
+class TestNeighbourhoodSupersededBy(unittest.TestCase):
+
+    def _check_is_superseded(self, json, wof_id, superseded_by):
+        from tilequeue.wof import create_neighbourhood_from_json, \
+            NeighbourhoodFailure, NeighbourhoodMeta
+
+        meta = NeighbourhoodMeta(
+            wof_id, 'neighbourhood', '', '', None
+        )
+        n = create_neighbourhood_from_json(json, meta)
+        self.assertIsInstance(n, NeighbourhoodFailure)
+        self.assertEqual(n.wof_id, wof_id, "%s: %s" % (n.reason, n.message))
+        self.assertTrue(n.superseded, "%s: %s" % (n.reason, n.message))
+
+    def test_neighbourhood_superseded_by(self):
+        self._check_is_superseded(
+            {'properties': {
+                'wof:id': 12345,
+                'wof:superseded_by': [12346]
+            }},
+            12345,
+            [12346])
+
+    def test_neighbourhood_superseded_by_multiple(self):
+        self._check_is_superseded(
+            {'properties': {
+                'wof:id': 12345,
+                'wof:superseded_by': [12346, 12347]
+            }},
+            12345,
+            [12346, 12347])
