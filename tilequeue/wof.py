@@ -17,6 +17,7 @@ import shapely.geometry
 import shapely.ops
 import shapely.wkb
 import threading
+import edtf
 
 
 def generate_csv_lines(requests_result):
@@ -43,7 +44,7 @@ NeighbourhoodMeta = namedtuple(
 Neighbourhood = namedtuple(
     'Neighbourhood',
     'wof_id placetype name hash label_position geometry n_photos area '
-    'min_zoom max_zoom is_landuse_aoi')
+    'min_zoom max_zoom is_landuse_aoi inception cessation')
 
 
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
@@ -174,6 +175,19 @@ class NeighbourhoodFailure(object):
         self.superseded = superseded
 
 
+# given a string, parse it as EDTF while allowing a single 'u' or None to mean
+# completely unknown, and return the EDTF object.
+def _normalize_edtf(s):
+    if s is not None and s != 'u':
+        try:
+            return edtf.EDTF(s)
+        except:
+            pass
+
+    # when all else fails, return the "most unknown" EDTF.
+    return edtf.EDTF('uuuu')
+
+
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
 
     def failure(reason):
@@ -299,10 +313,25 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     else:
         area = None
 
+    # for the purposes of display, we only care about the times when something
+    # should first start to be shown, and the time when it should stop
+    # showing.
+    edtf_inception = _normalize_edtf(props.get('edtf:inception'))
+    edtf_cessation = _normalize_edtf(props.get('edtf:cessation'))
+    edtf_deprecated = _normalize_edtf(props.get('edtf:deprecated'))
+
+    # the 'edtf:inception' property gives us approximately the former and we
+    # take the earliest date it could mean. the 'edtf:cessation' and
+    # 'edtf:deprecated' would both stop the item showing, so we take the
+    # earliest of each's latest possible date.
+    inception = edtf_inception.earliest_date()
+    cessation = min(edtf_cessation.latest_date(),
+                    edtf_deprecated.latest_date())
+
     neighbourhood = Neighbourhood(
-        wof_id, placetype, name, neighbourhood_meta.hash,
-        label_position, shape_mercator, n_photos, area,
-        min_zoom, max_zoom, is_landuse_aoi)
+        wof_id, placetype, name, neighbourhood_meta.hash, label_position,
+        shape_mercator, n_photos, area, min_zoom, max_zoom, is_landuse_aoi,
+        inception, cessation)
     return neighbourhood
 
 
@@ -540,6 +569,9 @@ def create_neighbourhood_file_object(neighbourhoods):
         else:
             buf.write('%s\t' % ('true' if n.is_landuse_aoi else 'false'))
 
+        buf.write('%s\t' % escape_string(n.inception.isoformat()))
+        buf.write('%s\t' % escape_string(n.cessation.isoformat()))
+
         geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
         buf.write(n.label_position.wkb_hex)
         buf.write('\t')
@@ -603,6 +635,8 @@ class WofModel(object):
                 min_zoom=n.min_zoom,
                 max_zoom=n.max_zoom,
                 is_landuse_aoi=n.is_landuse_aoi,
+                inception=n.inception,
+                cessation=n.cessation,
                 label_position=n.label_position.wkb_hex,
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
@@ -638,6 +672,8 @@ class WofModel(object):
                             'min_zoom=%(min_zoom)s, '
                             'max_zoom=%(max_zoom)s, '
                             'is_landuse_aoi=%(is_landuse_aoi)s, '
+                            'inception=%(inception)s, '
+                            'cessation=%(cessation)s, '
                             'label_position=%(label_position)s, '
                             'geometry=%(geometry)s '
                             'WHERE wof_id=%(wof_id)s',
@@ -648,10 +684,12 @@ class WofModel(object):
                             'INSERT INTO ' + self.table + ' '
                             '(wof_id, placetype, name, hash, n_photos, area, '
                             'min_zoom, max_zoom, is_landuse_aoi, '
+                            'inception, cessation, '
                             'label_position, geometry) '
                             'VALUES (%(wof_id)s, %(placetype)s, %(name)s, '
                             '%(hash)s, %(n_photos)s, %(area)s, %(min_zoom)s, '
                             '%(max_zoom)s, %(is_landuse_aoi)s, '
+                            '%(inception)s, %(cessation)s, '
                             '%(label_position)s, %(geometry)s)',
                             insert_data)
 
@@ -664,6 +702,38 @@ class WofModel(object):
             with conn as conn:
                 with conn.cursor() as cursor:
                     cursor.copy_from(nf, self.table)
+
+    # update the whole table so that the `is_visible` flag is accurate for the
+    # `current_date`. this returns a list of coords at `zoom` which have
+    # changed visibility from true to false or vice-versa.
+    def update_visible_timestamp(self, zoom, current_date):
+        coords = set()
+
+        def coord_int(row):
+            x, y = row
+            return coord_int_at_mercator_point(zoom, x, y)
+
+        # close the connection
+        with closing(self._create_conn()) as conn:
+            # commit the transaction
+            with conn as conn:
+                with conn.cursor() as cursor:
+                    # select the x, y position of the label for each WOF
+                    # neighbourhood that changed visibility when the date
+                    # was updated to `current_date`.
+                    cursor.execute(
+                        'SELECT st_x(n.label_position) as x, '
+                        '       st_y(n.label_position) as y '
+                        'FROM ('
+                        '  SELECT wof_update_visible_ids(%s::date) AS id '
+                        ') u '
+                        'JOIN wof_neighbourhood n '
+                        'ON n.wof_id = u.id',
+                        (current_date.isoformat(),))
+                    for result in cursor:
+                        coords.add(coord_int(result))
+
+        return coords
 
 
 def diff_neighbourhoods(xs, ys):
@@ -754,7 +824,7 @@ def log_failure(logger, failure):
 class WofProcessor(object):
 
     def __init__(self, fetcher, model, redis_cache_index, intersector,
-                 coords_enqueuer, logger):
+                 coords_enqueuer, logger, current_date):
         self.fetcher = fetcher
         self.model = model
         self.redis_cache_index = redis_cache_index
@@ -763,6 +833,7 @@ class WofProcessor(object):
         self.logger = logger
         self.zoom_expiry = 18
         self.zoom_until = 11
+        self.current_date = current_date
 
     def __call__(self):
         # perform IO to get old/new neighbourhoods and tiles of
@@ -995,6 +1066,21 @@ class WofProcessor(object):
 
         self.logger.info('Have tiles of interest')
 
+        # we need to finish sync'ing neighbourhoods before we flip the
+        # visibility flag and enqueue coordinates
+        if sync_neighbourhoods_thread is not None:
+            sync_neighbourhoods_thread.join()
+            self.logger.info("Sync'ing neighbourhoods ... done")
+
+        # update the current timestamp, returning the list of coords that
+        # have changed visibility.
+        visibility_updates = \
+            self.model.update_visible_timestamp(
+                self.zoom_expiry, self.current_date)
+        self.logger.info('Have %d tile expiries from visibility changes.'
+                         % len(visibility_updates))
+        expired_coord_ints.update(visibility_updates)
+
         if diffs:
             # intersect the tiles of interest with the expired coords from
             # the neighbourhood diff
@@ -1009,12 +1095,6 @@ class WofProcessor(object):
         else:
             self.logger.info('No diffs found, no need to intersect')
             coords = ()
-
-        # we need to finish sync'ing neighbourhoods before we enqueue
-        # coordinates
-        if sync_neighbourhoods_thread is not None:
-            sync_neighbourhoods_thread.join()
-            self.logger.info("Sync'ing neighbourhoods ... done")
 
         if coords:
             self.logger.info('Asking enqueuer to enqueue %d coords ...' %
@@ -1084,13 +1164,14 @@ def make_wof_model(postgresql_conn_info):
 
 
 def make_wof_processor(
-        fetcher, model, redis_cache_index, sqs_queue, n_threads, logger):
+        fetcher, model, redis_cache_index, sqs_queue, n_threads, logger,
+        current_date):
     from tilequeue.command import explode_and_intersect
     from tilequeue.command import ThreadedEnqueuer
     threaded_enqueuer = ThreadedEnqueuer(sqs_queue, n_threads, logger)
     wof_processor = WofProcessor(
         fetcher, model, redis_cache_index, explode_and_intersect,
-        threaded_enqueuer, logger)
+        threaded_enqueuer, logger, current_date)
     return wof_processor
 
 

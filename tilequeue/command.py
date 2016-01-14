@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import yaml
+import datetime
 
 
 def create_command_parser(fn):
@@ -945,9 +946,10 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     model = make_wof_model(wof_cfg['postgresql'])
 
     n_enqueue_threads = 20
+    current_date = datetime.date.today()
     processor = make_wof_processor(
         fetcher, model, peripherals.redis_cache_index, peripherals.queue,
-        n_enqueue_threads, logger)
+        n_enqueue_threads, logger, current_date)
 
     logger.info('Processing ...')
     processor()
