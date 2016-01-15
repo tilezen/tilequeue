@@ -45,6 +45,16 @@ def apply_to_all_coords(fn):
     return lambda shape: transform(shape, fn)
 
 
+# returns a geometry which is the given bounds expanded by `factor`. that is,
+# if the original shape was a 1x1 box, the new one will be `factor`x`factor`
+# box, with the same centroid as the original box.
+def calculate_padded_bounds(factor, bounds):
+    min_x, min_y, max_x, max_y = bounds
+    dx = 0.5 * (max_x - min_x) * (factor - 1.0)
+    dy = 0.5 * (max_y - min_y) * (factor - 1.0)
+    return geometry.box(min_x - dx, min_y - dy, max_x + dx, max_y + dy)
+
+
 # function which returns its argument, used to assign to a function variable
 # to use as a null transform. flake8 insists that it be named and not a
 # lambda.
@@ -71,6 +81,9 @@ def transform_feature_layers_shape(feature_layers, format, scale,
         transformed_features = []
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
+        clip_factor = layer_datum.get('clip_factor', 1.0)
+        layer_padded_bounds = \
+            calculate_padded_bounds(clip_factor, unpadded_bounds)
 
         for shape, props, feature_id in feature_layer['features']:
 
@@ -81,9 +94,9 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                     continue
                 # now we know that we should include the geometry, but
                 # if the geometry should be clipped, we'll clip to the
-                # unpadded bounds
+                # layer-specific padded bounds
                 if is_clipped:
-                    shape = shape.intersection(shape_unpadded_bounds)
+                    shape = shape.intersection(layer_padded_bounds)
 
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
