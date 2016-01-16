@@ -11,6 +11,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
 from tilequeue.query import jinja_filter_bbox_filter
 from tilequeue.query import jinja_filter_bbox_intersection
+from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
@@ -324,6 +325,7 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
     environment.filters['geometry'] = jinja_filter_geometry
     environment.filters['bbox_filter'] = jinja_filter_bbox_filter
     environment.filters['bbox_intersection'] = jinja_filter_bbox_intersection
+    environment.filters['bbox'] = jinja_filter_bbox
 
     for layer_name, layer_config in layers_config.items():
         template_name = layer_config['template']
