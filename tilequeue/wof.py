@@ -1058,7 +1058,7 @@ class WofProcessor(object):
                 'Found %d expired tiles' % len(expired_coord_ints))
         else:
             self.logger.info('No diffs found, not generating expired coords')
-            expired_coord_ints = ()
+            expired_coord_ints = set()
 
         # ensure we're done fetching the tiles of interest by this point
         toi_thread.join()
