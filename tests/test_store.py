@@ -55,3 +55,18 @@ class TestTileDirectory(unittest.TestCase):
                     'Tile data written to file does not match the input data')
 
             os.remove(expected_path)
+
+
+class TestStoreKey(unittest.TestCase):
+
+    def test_example_coord(self):
+        from tilequeue.store import s3_tile_key
+        from tilequeue.tile import deserialize_coord
+        from tilequeue.format import json_format
+        coord = deserialize_coord('8/72/105')
+        date_str = '20160121'
+        path = 'osm'
+        layer = 'all'
+        tile_key = s3_tile_key(date_str, path, layer, coord,
+                               json_format.extension)
+        self.assertEqual(tile_key, '/20160121/b707d/osm/all/8/72/105.json')
