@@ -69,4 +69,4 @@ class TestStoreKey(unittest.TestCase):
         layer = 'all'
         tile_key = s3_tile_key(date_str, path, layer, coord,
                                json_format.extension)
-        self.assertEqual(tile_key, '20160121/b707d/osm/all/8/72/105.json')
+        self.assertEqual(tile_key, '/20160121/b707d/osm/all/8/72/105.json')
