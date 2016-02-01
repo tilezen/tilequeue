@@ -81,10 +81,11 @@ def uniquify_generator(generator):
         yield tile
 
 
-def make_queue(queue_type, queue_name, redis_client, cfg):
+def make_queue(queue_type, queue_name, redis_client,
+               aws_access_key_id=None, aws_secret_access_key=None):
     if queue_type == 'sqs':
         return make_sqs_queue(queue_name, redis_client,
-                              cfg.aws_access_key_id, cfg.aws_secret_access_key)
+                              aws_access_key_id, aws_secret_access_key)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -1024,7 +1025,9 @@ def tilequeue_main(argv_args=None):
     cfg = make_config_from_argparse(args.config)
     redis_client = make_redis_client(cfg)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
-    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg),
-                              make_queue(cfg.queue_type, cfg.queue_name,
-                                         redis_client, cfg))
+    queue = make_queue(
+        cfg.queue_type, cfg.queue_name, redis_client,
+        aws_access_key_id=cfg.aws_access_key_id,
+        aws_secret_access_key=cfg.aws_secret_access_key)
+    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue)
     args.func(cfg, peripherals)
