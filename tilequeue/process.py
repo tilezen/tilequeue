@@ -11,6 +11,7 @@ from tilequeue.transform import calculate_padded_bounds
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
+from inspect import getargspec
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -65,11 +66,17 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data,
-                      zoom):
+                      zoom, bounds):
 
     for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
         params = step['params']
+
+        # inspect the function to tell if it has kwarg called 'bounds'
+        # and, if so, update the params to include the tile coordinate.
+        if 'bounds' in getargspec(fn).args:
+            params = params.copy()
+            params['bounds'] = bounds
 
         layer = fn(feature_layers, zoom, **params)
         if layer is not None:
@@ -281,7 +288,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord.zoom)
+        processed_feature_layers, post_process_data, coord.zoom,
+        unpadded_bounds)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
