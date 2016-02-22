@@ -343,7 +343,7 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
             is_clipped=layer_config.get('clip', True),
             clip_factor=layer_config.get('clip_factor', 1.0),
             geometry_types=layer_config['geometry_types'],
-            transform_fn_names=layer_config['transform'],
+            transform_fn_names=layer_config.get('transform', []),
             sort_fn_name=layer_config.get('sort'),
             simplify_before_intersect=layer_config.get(
                 'simplify_before_intersect', False),
