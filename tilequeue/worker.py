@@ -145,10 +145,10 @@ class DataFetch(object):
             metadata = data['metadata']
             metadata['timing']['fetch_seconds'] = time.time() - start
 
-            # if we are at zoom level 18, it will serve as a metatile
+            # if we are at zoom level 16, it will serve as a metatile
             # to derive the tiles underneath it
             cut_coords = None
-            if coord.zoom == 18:
+            if coord.zoom == 16:
                 cut_coords = []
                 async_jobs = []
                 children_until = 20
