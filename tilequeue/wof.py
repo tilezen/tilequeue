@@ -281,7 +281,7 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
         return failure('Missing wof:placetype')
 
     default_min_zoom = 15
-    default_max_zoom = 18
+    default_max_zoom = 16
 
     min_zoom = props.get('mz:min_zoom')
     if min_zoom is None:
@@ -831,7 +831,7 @@ class WofProcessor(object):
         self.intersector = intersector
         self.coords_enqueuer = coords_enqueuer
         self.logger = logger
-        self.zoom_expiry = 18
+        self.zoom_expiry = 16
         self.zoom_until = 11
         self.current_date = current_date
 
