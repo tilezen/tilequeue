@@ -736,7 +736,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     coords = []
     for coord_int in tiles_of_interest:
         coord = coord_unmarshall_int(coord_int)
-        if coord.zoom <= 18:
+        if coord.zoom <= 16:
             coords.append(coord)
 
     enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
