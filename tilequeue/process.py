@@ -248,9 +248,26 @@ def _simplify_data(feature_layers, bounds, zoom):
     return simplified_feature_layers
 
 
+def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
+                           padded_bounds, unpadded_bounds_wgs84, coord, layer):
+    # perform format specific transformations
+    transformed_feature_layers = transform_feature_layers_shape(
+        feature_layers, format, scale, unpadded_bounds,
+        padded_bounds, coord)
+
+    # use the formatter to generate the tile
+    tile_data_file = StringIO()
+    format.format_tile(tile_data_file, transformed_feature_layers, coord,
+                       unpadded_bounds, unpadded_bounds_wgs84)
+    tile = tile_data_file.getvalue()
+
+    formatted_tile = dict(format=format, tile=tile, coord=coord, layer=layer)
+    return formatted_tile
+
+
 def _process_feature_layers(feature_layers, coord, post_process_data,
                             formats, unpadded_bounds, padded_bounds,
-                            scale):
+                            scale, layers_to_format):
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -296,7 +313,6 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
         processed_feature_layers, padded_bounds, coord.zoom)
 
     # topojson formatter expects bounds to be in wgs84
-    unpadded_bounds_merc = unpadded_bounds
     unpadded_bounds_wgs84 = (
         mercator_point_to_wgs84(unpadded_bounds[:2]) +
         mercator_point_to_wgs84(unpadded_bounds[2:4]))
@@ -304,20 +320,26 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     # now, perform the format specific transformations
     # and format the tile itself
     formatted_tiles = []
+    layer = 'all'
     for format in formats:
-        # perform format specific transformations
-        transformed_feature_layers = transform_feature_layers_shape(
-            processed_feature_layers, format, scale, unpadded_bounds,
-            padded_bounds, coord)
-
-        # use the formatter to generate the tile
-        tile_data_file = StringIO()
-        format.format_tile(tile_data_file, transformed_feature_layers, coord,
-                           unpadded_bounds_merc, unpadded_bounds_wgs84)
-        tile = tile_data_file.getvalue()
-
-        formatted_tile = dict(format=format, tile=tile, coord=coord)
+        formatted_tile = _create_formatted_tile(
+            feature_layers, format, scale, unpadded_bounds, padded_bounds,
+            unpadded_bounds_wgs84, coord, layer)
         formatted_tiles.append(formatted_tile)
+
+    # this assumes that we only store single layers, and no combinations
+    for layer, formats, zoom_start, zoom_until in layers_to_format:
+        if not (zoom_start <= coord.zoom <= zoom_until):
+            continue
+        for feature_layer in processed_feature_layers:
+            if feature_layer['name'] == layer:
+                pruned_feature_layers = [feature_layer]
+                for format in formats:
+                    formatted_tile = _create_formatted_tile(
+                        pruned_feature_layers, format, scale, unpadded_bounds,
+                        padded_bounds, unpadded_bounds_wgs84, coord, layer)
+                    formatted_tiles.append(formatted_tile)
+                    break
 
     return formatted_tiles
 
@@ -326,7 +348,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
-                  unpadded_bounds, padded_bounds, cut_coords, scale=4096):
+                  unpadded_bounds, padded_bounds, cut_coords, layers_to_format,
+                  scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
 
@@ -342,11 +365,12 @@ def process_coord(coord, feature_layers, post_process_data, formats,
                                               shape_cut_padded_bounds)
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
-                unpadded_cut_bounds, padded_cut_bounds, scale)
+                unpadded_cut_bounds, padded_cut_bounds, scale,
+                layers_to_format)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        padded_bounds, scale)
+        padded_bounds, scale, layers_to_format)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles
