@@ -81,6 +81,19 @@ class Configuration(object):
         self.reload_templates = process_cfg['reload-templates']
         self.output_formats = process_cfg['formats']
 
+        layers_to_format_cfg = process_cfg.get('layers-to-format')
+        layers_to_format = []
+        from tilequeue.command import lookup_formats
+        for layer_to_format_cfg in layers_to_format_cfg:
+            layer_name = layer_to_format_cfg['layer']
+            format_names = layer_to_format_cfg['formats']
+            formats = lookup_formats(format_names)
+            zoom_start = int(layer_to_format_cfg.get('zoom-start', 0))
+            zoom_until = int(layer_to_format_cfg.get('zoom-until', 20))
+            layer_to_format = layer_name, formats, zoom_start, zoom_until
+            layers_to_format.append(layer_to_format)
+        self.layers_to_format = layers_to_format
+
         self.postgresql_conn_info = self.yml['postgresql']
         dbnames = self.postgresql_conn_info.get('dbnames')
         assert dbnames is not None, 'Missing postgresql dbnames'
@@ -156,7 +169,8 @@ def default_yml_config():
             'query-config': None,
             'template-path': None,
             'reload-templates': False,
-            'formats': ('json',),
+            'formats': ['json'],
+            'layers-to-format': [],
         },
         'logging': {
             'config': None

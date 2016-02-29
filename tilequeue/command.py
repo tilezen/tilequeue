@@ -438,9 +438,9 @@ def tilequeue_process(cfg, peripherals):
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
         peripherals.redis_cache_index, logger)
 
-    data_processor = ProcessAndFormatData(post_process_data, formats,
-                                          sql_data_fetch_queue,
-                                          processor_queue, logger)
+    data_processor = ProcessAndFormatData(
+        post_process_data, formats, sql_data_fetch_queue, processor_queue,
+        cfg.layers_to_format, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
                            store, logger)

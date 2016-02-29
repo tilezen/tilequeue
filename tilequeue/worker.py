@@ -201,12 +201,13 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, logger):
+                 output_queue, layers_to_format, logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
         self.input_queue = input_queue
         self.output_queue = output_queue
+        self.layers_to_format = layers_to_format
         self.logger = logger
 
     def __call__(self, stop):
@@ -235,7 +236,7 @@ class ProcessAndFormatData(object):
                 formatted_tiles = process_coord(
                     coord, feature_layers, self.post_process_data,
                     self.formats, unpadded_bounds, padded_bounds,
-                    cut_coords)
+                    cut_coords, self.layers_to_format)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
@@ -295,7 +296,8 @@ class S3Storage(object):
                         # cut children tiles that have separate zooms
                         # too
                         formatted_tile['coord'],
-                        formatted_tile['format']))
+                        formatted_tile['format'],
+                        formatted_tile['layer']))
                 async_jobs.append(async_result)
 
             async_exc_info = None

@@ -34,16 +34,15 @@ def s3_tile_key(date, path, layer, coord, extension):
 class S3(object):
 
     def __init__(
-            self, bucket, layer_name, date_prefix, path, reduced_redundancy):
+            self, bucket, date_prefix, path, reduced_redundancy):
         self.bucket = bucket
-        self.layer = layer_name
         self.date_prefix = date_prefix
         self.path = path
         self.reduced_redundancy = reduced_redundancy
 
-    def write_tile(self, tile_data, coord, format):
+    def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
-            self.date_prefix, self.path, self.layer, coord, format.extension)
+            self.date_prefix, self.path, layer, coord, format.extension)
         key = self.bucket.new_key(key_name)
         key.set_contents_from_string(
             tile_data,
@@ -52,9 +51,9 @@ class S3(object):
             reduced_redundancy=self.reduced_redundancy,
         )
 
-    def read_tile(self, coord, format):
+    def read_tile(self, coord, format, layer):
         key_name = s3_tile_key(
-            self.date_prefix, self.path, self.layer, coord, format.extension)
+            self.date_prefix, self.path, layer, coord, format.extension)
         key = self.bucket.get_key(key_name)
         if key is None:
             return None
@@ -62,15 +61,15 @@ class S3(object):
         return tile_data
 
 
-def make_dir_path(base_path, coord):
-    path = os.path.join(base_path,
-                        str(int(coord.zoom)), str(int(coord.column)))
+def make_dir_path(base_path, coord, layer):
+    path = os.path.join(
+        base_path, layer, str(int(coord.zoom)), str(int(coord.column)))
     return path
 
 
-def make_file_path(base_path, coord, extension):
+def make_file_path(base_path, coord, layer, extension):
     basefile_path = os.path.join(
-        base_path,
+        base_path, layer,
         str(int(coord.zoom)), str(int(coord.column)), str(int(coord.row)))
     ext_str = '.%s' % extension
     full_path = basefile_path + ext_str
@@ -92,18 +91,20 @@ class TileDirectory(object):
 
         self.base_path = base_path
 
-    def write_tile(self, tile_data, coord, format):
-        dir_path = make_dir_path(self.base_path, coord)
+    def write_tile(self, tile_data, coord, format, layer):
+        dir_path = make_dir_path(self.base_path, coord, layer)
         try:
             os.makedirs(dir_path)
         except OSError:
             pass
-        file_path = make_file_path(self.base_path, coord, format.extension)
+        file_path = make_file_path(self.base_path, coord, layer,
+                                   format.extension)
         with open(file_path, 'w') as tile_fp:
             tile_fp.write(tile_data)
 
-    def read_tile(self, coord, format):
-        file_path = make_file_path(self.base_path, coord, format.extension)
+    def read_tile(self, coord, format, layer):
+        file_path = make_file_path(self.base_path, coord, layer,
+                                   format.extension)
         try:
             with open(file_path, 'r') as tile_fp:
                 tile_data = tile_fp.read()
@@ -123,21 +124,20 @@ class Memory(object):
     def __init__(self):
         self.data = None
 
-    def write_tile(self, tile_data, coord, format):
-        self.data = tile_data, coord, format
+    def write_tile(self, tile_data, coord, format, layer):
+        self.data = tile_data, coord, format, layer
 
-    def read_tile(self, coord, format):
+    def read_tile(self, coord, format, layer):
         if self.data is None:
             return None
-        tile_data, coord, format = self.data
+        tile_data, coord, format, layer = self.data
         return tile_data
 
 
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
-                  layer_name='all', path='osm', reduced_redundancy=False,
-                  date_prefix=''):
+                  path='osm', reduced_redundancy=False, date_prefix=''):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
-    s3_store = S3(bucket, layer_name, date_prefix, path, reduced_redundancy)
+    s3_store = S3(bucket, date_prefix, path, reduced_redundancy)
     return s3_store
