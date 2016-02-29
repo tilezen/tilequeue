@@ -72,7 +72,7 @@ class TestCliConfiguration(unittest.TestCase):
         # just assert some of the defaults are set
         self._assert_cfg(cfg,
                          dict(s3_path='osm',
-                              output_formats=('json',),
+                              output_formats=['json'],
                               seed_all_zoom_start=None,
                               seed_all_zoom_until=None))
 
@@ -82,6 +82,6 @@ class TestCliConfiguration(unittest.TestCase):
             dict(store=dict(path='custompath')))
         self._assert_cfg(cfg,
                          dict(s3_path='custompath',
-                              output_formats=('json',),
+                              output_formats=['json'],
                               seed_all_zoom_start=None,
                               seed_all_zoom_until=None))
