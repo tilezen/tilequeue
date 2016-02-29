@@ -36,6 +36,10 @@ class RoadSortKeyTest(unittest.TestCase):
         sort_key = self._call_fut_with_prop('highway=residential')
         self.assertEqual(337, sort_key)
 
+    def test_unclassified(self):
+        sort_key = self._call_fut_with_prop('highway=unclassified')
+        self.assertEqual(337, sort_key)
+
     def test_ne_unknown(self):
         sort_key = self._call_fut_with_prop('type=Unknown')
         self.assertEqual(337, sort_key)
