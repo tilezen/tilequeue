@@ -20,29 +20,17 @@ class RoadSortKeyTest(unittest.TestCase):
         val = float(val)
         return self._call_fut({key: val}, zoom, shape, fid)
 
-    def test_tunnel(self):
-        sort_key = self._call_fut_with_prop('tunnel=yes')
-        self.assertEqual(295, sort_key)
-
     def test_layer_low(self):
         sort_key = self._call_fut_with_float_prop('layer=-5')
         self.assertEqual(300, sort_key)
 
+    def test_tunnel(self):
+        sort_key = self._call_fut_with_prop('tunnel=yes')
+        self.assertEqual(305, sort_key)
+
     def test_default_road(self):
         sort_key = self._call_fut({})
-        self.assertEqual(335, sort_key)
-
-    def test_residential(self):
-        sort_key = self._call_fut_with_prop('highway=residential')
-        self.assertEqual(337, sort_key)
-
-    def test_unclassified(self):
-        sort_key = self._call_fut_with_prop('highway=unclassified')
-        self.assertEqual(337, sort_key)
-
-    def test_ne_unknown(self):
-        sort_key = self._call_fut_with_prop('type=Unknown')
-        self.assertEqual(337, sort_key)
+        self.assertEqual(355, sort_key)
 
     def test_railway_service_highway(self):
         props = dict(
@@ -51,55 +39,67 @@ class RoadSortKeyTest(unittest.TestCase):
             highway='service'
         )
         sort_key = self._call_fut(props)
-        self.assertEqual(334, sort_key)
+        self.assertEqual(355, sort_key)
+
+    def test_residential(self):
+        sort_key = self._call_fut_with_prop('highway=residential')
+        self.assertEqual(360, sort_key)
+
+    def test_unclassified(self):
+        sort_key = self._call_fut_with_prop('highway=unclassified')
+        self.assertEqual(360, sort_key)
+
+    def test_ne_unknown(self):
+        sort_key = self._call_fut_with_prop('type=Unknown')
+        self.assertEqual(360, sort_key)
 
     def test_link(self):
         sort_key = self._call_fut_with_prop('highway=primary_link')
-        self.assertEqual(338, sort_key)
+        self.assertEqual(375, sort_key)
 
     def test_tertiary(self):
         sort_key = self._call_fut_with_prop('highway=tertiary')
-        self.assertEqual(339, sort_key)
+        self.assertEqual(376, sort_key)
 
     def test_ne_track(self):
         sort_key = self._call_fut_with_prop('type=Track')
-        self.assertEqual(339, sort_key)
+        self.assertEqual(376, sort_key)
 
     def test_primary(self):
         sort_key = self._call_fut_with_prop('highway=primary')
-        self.assertEqual(341, sort_key)
+        self.assertEqual(378, sort_key)
 
     def test_ne_road(self):
         sort_key = self._call_fut_with_prop('type=Road')
-        self.assertEqual(341, sort_key)
+        self.assertEqual(378, sort_key)
 
     def test_trunk(self):
         sort_key = self._call_fut_with_prop('highway=trunk')
-        self.assertEqual(342, sort_key)
+        self.assertEqual(379, sort_key)
 
     def test_ne_secondary_highway(self):
         sort_key = self._call_fut_with_prop('type=Secondary Highway')
-        self.assertEqual(342, sort_key)
+        self.assertEqual(379, sort_key)
 
     def test_railway(self):
         sort_key = self._call_fut_with_prop('railway=rail')
-        self.assertEqual(343, sort_key)
+        self.assertEqual(380, sort_key)
 
     def test_motorway(self):
         sort_key = self._call_fut_with_prop('highway=motorway')
-        self.assertEqual(344, sort_key)
+        self.assertEqual(381, sort_key)
 
     def test_ne_major_highway(self):
         sort_key = self._call_fut_with_prop('type=Major Highway')
-        self.assertEqual(344, sort_key)
+        self.assertEqual(381, sort_key)
 
     def test_bridge(self):
         sort_key = self._call_fut_with_prop('bridge=yes')
-        self.assertEqual(375, sort_key)
+        self.assertEqual(405, sort_key)
 
     def test_aerialway(self):
         sort_key = self._call_fut_with_prop('aerialway=gondola')
-        self.assertEqual(387, sort_key)
+        self.assertEqual(442, sort_key)
 
     def test_layer_high(self):
         sort_key = self._call_fut_with_float_prop('layer=5')
