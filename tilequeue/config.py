@@ -169,8 +169,8 @@ def default_yml_config():
             'query-config': None,
             'template-path': None,
             'reload-templates': False,
-            'formats': ('json',),
-            'layers-to-format': (),
+            'formats': ['json'],
+            'layers-to-format': [],
         },
         'logging': {
             'config': None
