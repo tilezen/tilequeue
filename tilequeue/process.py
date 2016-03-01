@@ -81,8 +81,15 @@ def _postprocess_data(feature_layers, post_process_data,
                       tile_coord, unpadded_bounds, padded_bounds,
                       config_file_path, cache):
 
-    for step in post_process_data:
+    for step_index, step in enumerate(post_process_data):
         fn = loadClassPath(step['fn_name'])
+
+        # ensure a separate cache for each step, so that different
+        # post-process steps can't tread on each others' caches.
+        step_cache = cache.get(step_index)
+        if step_cache is None:
+            step_cache = dict()
+            cache[step_index] = step_cache
 
         ctx = Context(
             feature_layers=feature_layers,
@@ -91,7 +98,7 @@ def _postprocess_data(feature_layers, post_process_data,
             padded_bounds=padded_bounds,
             config_file_path=config_file_path,
             params=step['params'],
-            cache=cache)
+            cache=step_cache)
 
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
