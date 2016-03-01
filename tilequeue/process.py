@@ -323,8 +323,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     layer = 'all'
     for format in formats:
         formatted_tile = _create_formatted_tile(
-            feature_layers, format, scale, unpadded_bounds, padded_bounds,
-            unpadded_bounds_wgs84, coord, layer)
+            processed_feature_layers, format, scale, unpadded_bounds,
+            padded_bounds, unpadded_bounds_wgs84, coord, layer)
         formatted_tiles.append(formatted_tile)
 
     # this assumes that we only store single layers, and no combinations
