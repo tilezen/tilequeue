@@ -42,6 +42,7 @@ import threading
 import time
 import yaml
 import datetime
+import os.path
 
 
 def create_command_parser(fn):
@@ -440,7 +441,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.layers_to_format, logger)
+        cfg.layers_to_format, logger, os.path.dirname(cfg.query_cfg))
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
                            store, logger)

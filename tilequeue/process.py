@@ -12,6 +12,7 @@ from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
 from inspect import getargspec
+from collections import namedtuple
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -60,25 +61,40 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
     return preproc_feature_layers
 
 
+# shared context for all the post-processor functions. this single object can
+# be passed around rather than needing all the parameters to be explicit.
+Context = namedtuple('Context',
+                     ['feature_layers', # the feature layers list
+                      'tile_coord', # the original tile coordinate object
+                      'unpadded_bounds', # the latlon bounds of the tile
+                      'padded_bounds', # the padded bounds of the tile
+                      'config_file_path', # filesystem path to the config file
+                      'params' # user configuration parameters from that file
+                     ])
+
+
 # post-process all the layers simultaneously, which allows new
 # layers to be created from processing existing ones (e.g: for
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data,
-                      zoom, bounds):
+                      tile_coord, unpadded_bounds, padded_bounds,
+                      config_file_path):
 
     for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
-        params = step['params']
 
-        # inspect the function to tell if it has kwarg called 'bounds'
-        # and, if so, update the params to include the tile coordinate.
-        if 'bounds' in getargspec(fn).args:
-            params = params.copy()
-            params['bounds'] = bounds
+        ctx = Context(
+            feature_layers=feature_layers,
+            tile_coord=tile_coord,
+            unpadded_bounds=unpadded_bounds,
+            padded_bounds=padded_bounds,
+            config_file_path=config_file_path,
+            params=step['params'])
 
-        layer = fn(feature_layers, zoom, **params)
+        layer = fn(ctx)
+        feature_layers = ctx.feature_layers
         if layer is not None:
             for index, feature_layer in enumerate(feature_layers):
                 layer_datum = feature_layer['layer_datum']
@@ -267,7 +283,7 @@ def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
 
 def _process_feature_layers(feature_layers, coord, post_process_data,
                             formats, unpadded_bounds, padded_bounds,
-                            scale, layers_to_format):
+                            scale, layers_to_format, config_file_path):
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -305,8 +321,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord.zoom,
-        unpadded_bounds)
+        processed_feature_layers, post_process_data, coord, unpadded_bounds,
+        padded_bounds, config_file_path)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
@@ -349,7 +365,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, padded_bounds, cut_coords, layers_to_format,
-                  scale=4096):
+                  config_file_path, scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
 
@@ -366,11 +382,11 @@ def process_coord(coord, feature_layers, post_process_data, formats,
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
                 unpadded_cut_bounds, padded_cut_bounds, scale,
-                layers_to_format)
+                layers_to_format, config_file_path)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        padded_bounds, scale, layers_to_format)
+        padded_bounds, scale, layers_to_format, config_file_path)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles
