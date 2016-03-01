@@ -68,7 +68,8 @@ Context = namedtuple('Context',
                       'unpadded_bounds',   # the latlon bounds of the tile
                       'padded_bounds',     # the padded bounds of the tile
                       'config_file_path',  # filesystem path to the config file
-                      'params'])           # user configuration parameters
+                      'params',            # user configuration parameters
+                      'cache'])            # a cache across requests
 
 
 # post-process all the layers simultaneously, which allows new
@@ -78,7 +79,7 @@ Context = namedtuple('Context',
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data,
                       tile_coord, unpadded_bounds, padded_bounds,
-                      config_file_path):
+                      config_file_path, cache):
 
     for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
@@ -89,7 +90,8 @@ def _postprocess_data(feature_layers, post_process_data,
             unpadded_bounds=unpadded_bounds,
             padded_bounds=padded_bounds,
             config_file_path=config_file_path,
-            params=step['params'])
+            params=step['params'],
+            cache=cache)
 
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
@@ -281,7 +283,8 @@ def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
 
 def _process_feature_layers(feature_layers, coord, post_process_data,
                             formats, unpadded_bounds, padded_bounds,
-                            scale, layers_to_format, config_file_path):
+                            scale, layers_to_format, config_file_path,
+                            cache):
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -320,7 +323,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
         processed_feature_layers, post_process_data, coord, unpadded_bounds,
-        padded_bounds, config_file_path)
+        padded_bounds, config_file_path, cache)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
@@ -363,7 +366,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, padded_bounds, cut_coords, layers_to_format,
-                  config_file_path, scale=4096):
+                  config_file_path, cache, scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
 
@@ -380,11 +383,11 @@ def process_coord(coord, feature_layers, post_process_data, formats,
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
                 unpadded_cut_bounds, padded_cut_bounds, scale,
-                layers_to_format, config_file_path)
+                layers_to_format, config_file_path, cache)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        padded_bounds, scale, layers_to_format, config_file_path)
+        padded_bounds, scale, layers_to_format, config_file_path, cache)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles

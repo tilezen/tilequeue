@@ -210,6 +210,7 @@ class ProcessAndFormatData(object):
         self.layers_to_format = layers_to_format
         self.logger = logger
         self.config_file_path = config_file_path
+        self.cache = dict()
 
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
@@ -237,7 +238,8 @@ class ProcessAndFormatData(object):
                 formatted_tiles = process_coord(
                     coord, feature_layers, self.post_process_data,
                     self.formats, unpadded_bounds, padded_bounds,
-                    cut_coords, self.layers_to_format, self.config_file_path)
+                    cut_coords, self.layers_to_format, self.config_file_path,
+                    self.cache)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
