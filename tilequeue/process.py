@@ -11,7 +11,6 @@ from tilequeue.transform import calculate_padded_bounds
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
-from inspect import getargspec
 from collections import namedtuple
 
 
@@ -64,13 +63,12 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 # shared context for all the post-processor functions. this single object can
 # be passed around rather than needing all the parameters to be explicit.
 Context = namedtuple('Context',
-                     ['feature_layers', # the feature layers list
-                      'tile_coord', # the original tile coordinate object
-                      'unpadded_bounds', # the latlon bounds of the tile
-                      'padded_bounds', # the padded bounds of the tile
-                      'config_file_path', # filesystem path to the config file
-                      'params' # user configuration parameters from that file
-                     ])
+                     ['feature_layers',    # the feature layers list
+                      'tile_coord',        # the original tile coordinate obj
+                      'unpadded_bounds',   # the latlon bounds of the tile
+                      'padded_bounds',     # the padded bounds of the tile
+                      'config_file_path',  # filesystem path to the config file
+                      'params'])           # user configuration parameters
 
 
 # post-process all the layers simultaneously, which allows new
