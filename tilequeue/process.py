@@ -11,7 +11,7 @@ from tilequeue.transform import calculate_padded_bounds
 from TileStache.Config import loadClassPath
 from TileStache.Goodies.VecTiles.server import make_transform_fn
 from TileStache.Goodies.VecTiles.server import resolve_transform_fns
-from inspect import getargspec
+from collections import namedtuple
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -60,25 +60,38 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
     return preproc_feature_layers
 
 
+# shared context for all the post-processor functions. this single object can
+# be passed around rather than needing all the parameters to be explicit.
+Context = namedtuple('Context',
+                     ['feature_layers',    # the feature layers list
+                      'tile_coord',        # the original tile coordinate obj
+                      'unpadded_bounds',   # the latlon bounds of the tile
+                      'padded_bounds',     # the padded bounds of the tile
+                      'params',            # user configuration parameters
+                      'resources'])        # resources declared in config
+
+
 # post-process all the layers simultaneously, which allows new
 # layers to be created from processing existing ones (e.g: for
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data,
-                      zoom, bounds):
+                      tile_coord, unpadded_bounds, padded_bounds):
 
     for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
-        params = step['params']
 
-        # inspect the function to tell if it has kwarg called 'bounds'
-        # and, if so, update the params to include the tile coordinate.
-        if 'bounds' in getargspec(fn).args:
-            params = params.copy()
-            params['bounds'] = bounds
+        ctx = Context(
+            feature_layers=feature_layers,
+            tile_coord=tile_coord,
+            unpadded_bounds=unpadded_bounds,
+            padded_bounds=padded_bounds,
+            params=step['params'],
+            resources=step['resources'])
 
-        layer = fn(feature_layers, zoom, **params)
+        layer = fn(ctx)
+        feature_layers = ctx.feature_layers
         if layer is not None:
             for index, feature_layer in enumerate(feature_layers):
                 layer_datum = feature_layer['layer_datum']
@@ -305,8 +318,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord.zoom,
-        unpadded_bounds)
+        processed_feature_layers, post_process_data, coord, unpadded_bounds,
+        padded_bounds)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
