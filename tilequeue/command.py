@@ -29,6 +29,7 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
+from TileStache.Config import loadClassPath
 from urllib2 import urlopen
 import argparse
 import logging
@@ -43,6 +44,7 @@ import time
 import yaml
 import datetime
 import os.path
+import traceback
 
 
 def create_command_parser(fn):
@@ -311,7 +313,44 @@ def make_store(store_type, store_name, cfg):
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
 
 
-def parse_layer_data(query_cfg, template_path, reload_templates):
+def _parse_postprocess_resources(post_process_item, cfg_path):
+    resources_cfg = post_process_item.get('resources', {})
+    resources = {}
+
+    for resource_name, resource_cfg in resources_cfg.iteritems():
+        resource_type = resource_cfg.get('type')
+        init_fn_name = resource_cfg.get('init_fn')
+
+        assert resource_type, 'Missing type in resource %r' \
+            % resource_name
+        assert init_fn_name, 'Missing init function name in ' \
+            'resource %r' % resource_name
+
+        try:
+            fn = loadClassPath(init_fn_name)
+
+        except:
+            raise Exception('Unable to init resource %r with function %r due '
+                            'to %s' % (resource_name, init_fn_name,
+                                       "".join(traceback.format_exception(
+                                           *sys.exc_info()))))
+
+        if resource_type == 'file':
+            path = resource_cfg.get('path')
+            assert path, 'Resource %r of type file is missing the ' \
+                'path parameter' % resource_name
+
+            with open(os.path.join(cfg_path, path), 'r') as fh:
+                resources[resource_name] = fn(fh)
+
+        else:
+            raise Exception('Resource type %r is not supported'
+                            % resource_type)
+
+    return resources
+
+
+def parse_layer_data(query_cfg, template_path, reload_templates, cfg_path):
     if reload_templates:
         from tilequeue.query import DevJinjaQueryGenerator
     else:
@@ -357,12 +396,17 @@ def parse_layer_data(query_cfg, template_path, reload_templates):
     for post_process_item in post_process_config:
         fn_name = post_process_item.get('fn')
         assert fn_name, 'Missing post process config fn'
+
         params = post_process_item.get('params')
         if params is None:
             params = {}
+
+        resources = _parse_postprocess_resources(post_process_item, cfg_path)
+
         post_process_data.append(dict(
             fn_name=fn_name,
-            params=dict(params)))
+            params=dict(params),
+            resources=resources))
 
     return all_layer_data, layer_data, post_process_data
 
@@ -377,7 +421,8 @@ def tilequeue_process(cfg, peripherals):
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
     all_layer_data, layer_data, post_process_data = parse_layer_data(
-        query_cfg, cfg.template_path, cfg.reload_templates)
+        query_cfg, cfg.template_path, cfg.reload_templates,
+        os.path.dirname(cfg.query_cfg))
 
     formats = lookup_formats(cfg.output_formats)
 
@@ -441,7 +486,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.layers_to_format, logger, os.path.dirname(cfg.query_cfg))
+        cfg.layers_to_format, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
                            store, logger)

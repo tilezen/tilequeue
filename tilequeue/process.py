@@ -67,9 +67,8 @@ Context = namedtuple('Context',
                       'tile_coord',        # the original tile coordinate obj
                       'unpadded_bounds',   # the latlon bounds of the tile
                       'padded_bounds',     # the padded bounds of the tile
-                      'config_file_path',  # filesystem path to the config file
                       'params',            # user configuration parameters
-                      'cache'])            # a cache across requests
+                      'resources'])        # resources declared in config
 
 
 # post-process all the layers simultaneously, which allows new
@@ -78,27 +77,18 @@ Context = namedtuple('Context',
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(feature_layers, post_process_data,
-                      tile_coord, unpadded_bounds, padded_bounds,
-                      config_file_path, cache):
+                      tile_coord, unpadded_bounds, padded_bounds):
 
     for step_index, step in enumerate(post_process_data):
         fn = loadClassPath(step['fn_name'])
-
-        # ensure a separate cache for each step, so that different
-        # post-process steps can't tread on each others' caches.
-        step_cache = cache.get(step_index)
-        if step_cache is None:
-            step_cache = dict()
-            cache[step_index] = step_cache
 
         ctx = Context(
             feature_layers=feature_layers,
             tile_coord=tile_coord,
             unpadded_bounds=unpadded_bounds,
             padded_bounds=padded_bounds,
-            config_file_path=config_file_path,
             params=step['params'],
-            cache=step_cache)
+            resources=step['resources'])
 
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
@@ -290,8 +280,7 @@ def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
 
 def _process_feature_layers(feature_layers, coord, post_process_data,
                             formats, unpadded_bounds, padded_bounds,
-                            scale, layers_to_format, config_file_path,
-                            cache):
+                            scale, layers_to_format):
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -330,7 +319,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
         processed_feature_layers, post_process_data, coord, unpadded_bounds,
-        padded_bounds, config_file_path, cache)
+        padded_bounds)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
@@ -373,7 +362,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, padded_bounds, cut_coords, layers_to_format,
-                  config_file_path, cache, scale=4096):
+                  scale=4096):
     shape_padded_bounds = geometry.box(*padded_bounds)
     feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
 
@@ -390,11 +379,11 @@ def process_coord(coord, feature_layers, post_process_data, formats,
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
                 unpadded_cut_bounds, padded_cut_bounds, scale,
-                layers_to_format, config_file_path, cache)
+                layers_to_format)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        padded_bounds, scale, layers_to_format, config_file_path, cache)
+        padded_bounds, scale, layers_to_format)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles
