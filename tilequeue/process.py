@@ -79,7 +79,7 @@ Context = namedtuple('Context',
 def _postprocess_data(feature_layers, post_process_data,
                       tile_coord, unpadded_bounds, padded_bounds):
 
-    for step_index, step in enumerate(post_process_data):
+    for step in post_process_data:
         fn = loadClassPath(step['fn_name'])
 
         ctx = Context(
