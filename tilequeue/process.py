@@ -244,8 +244,12 @@ def _simplify_data(feature_layers, bounds, zoom):
                 shape = _make_valid_if_necessary(simplified_shape)
 
             # this could alter multipolygon geometries
-            shape = _visible_shape(shape, meters_per_pixel)
-            if shape is None:
+            if zoom < simplify_until:
+                shape = _visible_shape(shape, meters_per_pixel)
+
+            # don't keep features which have been simplified to empty or
+            # None.
+            if shape is None or shape.is_empty:
                 continue
 
             simplified_feature = shape, props, feature_id
