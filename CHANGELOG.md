@@ -1,6 +1,15 @@
 CHANGELOG
 =========
 
+v0.8.0
+------
+* Use an empty list if the 'transforms' parameter is missing, rather than raise KeyError.
+* Metatile at z16
+* Support storing individual formatted layers
+* Pass context object to post-process functions.
+* Add resource abstraction to manage transforms with io requirements
+* Don't filter out small features at z16, which may be needed for subsequent zooms
+
 v0.7.1
 ------
 * Eliminate extra slash in S3 filename. [Issue](https://github.com/mapzen/tilequeue/pull/65).
