@@ -45,8 +45,14 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
                 continue
 
             feature_id = row.pop('__id__')
-            props = dict((k, v) for k, v in row.items()
-                         if v is not None)
+            props = dict()
+            for k, v in row.iteritems():
+                if v is None:
+                    continue
+                if k == 'mz_properties':
+                    props.update(v)
+                else:
+                    props[k] = v
 
             feature = shape, props, feature_id
             features.append(feature)

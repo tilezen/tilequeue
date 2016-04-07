@@ -1,5 +1,6 @@
 from itertools import chain
 from itertools import cycle
+from psycopg2.extras import register_hstore
 import psycopg2
 import threading
 
@@ -267,6 +268,7 @@ class DBAffinityConnectionsNoLimit(object):
     def _make_conn(self, conn_info):
         conn = psycopg2.connect(**conn_info)
         conn.set_session(readonly=True, autocommit=True)
+        register_hstore(conn)
         return conn
 
     def get_conns(self):
