@@ -36,7 +36,7 @@ def rescale_point(bounds, scale):
         x = xfac * (x - minx)
         y = yfac * (y - miny)
 
-        return x, y
+        return round(x), round(y)
 
     return fn
 
@@ -66,7 +66,10 @@ def transform_feature_layers_shape(feature_layers, format, scale,
                                    unpadded_bounds, padded_bounds, coord):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
-    elif format in (mvt_format, vtm_format):
+    elif format == mvt_format:
+        # quantization is handled by the mapbox-vector-tile library
+        transform_fn = _noop
+    elif format == vtm_format:
         transform_fn = apply_to_all_coords(
             rescale_point(unpadded_bounds, scale))
     else:

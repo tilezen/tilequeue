@@ -77,7 +77,7 @@ def format_topojson(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
 
 
 def format_mvt(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
-    mvt_merge(fp, feature_layers, coord)
+    mvt_merge(fp, feature_layers, coord, bounds_merc)
 
 
 def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_wgs84):
