@@ -50,7 +50,9 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
                 if v is None:
                     continue
                 if k == 'mz_properties':
-                    props.update(v)
+                    for output_key, output_val in v.items():
+                        if output_val is not None:
+                            props[output_key] = output_val
                 else:
                     props[k] = v
 
