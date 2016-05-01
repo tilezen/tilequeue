@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+v0.9.0
+------
+* Delegate quantization to mapbox-vector-tile. See [#82](https://github.com/mapzen/tilequeue/issues/82).
+* Expand mz_properties in features. See [#81](https://github.com/mapzen/tilequeue/pull/81).
+* Exclude null values from yaml output. See [#84](https://github.com/mapzen/tilequeue/pull/84).
+* Remove outdated tests exercising a transform that is no longer used. See [6de8f00](https://github.com/mapzen/tilequeue/commit/6de8f00579840794bdb7febd4e113a5cd976421a).
+
 v0.8.0
 ------
 * Use an empty list if the 'transforms' parameter is missing, rather than raise KeyError.
