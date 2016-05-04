@@ -104,10 +104,12 @@ def transform_feature_layers_shape(feature_layers, format, scale,
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
 
-            # the formatters all expect wkb
-            wkb = dumps(shape)
+            if format.supports_shapely_geometry:
+                geom = shape
+            else:
+                geom = dumps(shape)
 
-            transformed_features.append((wkb, props, feature_id))
+            transformed_features.append((geom, props, feature_id))
 
         transformed_feature_layer = dict(
             name=feature_layer['name'],

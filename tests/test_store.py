@@ -39,7 +39,7 @@ class TestTileDirectory(unittest.TestCase):
         layer = 'all'
         for tile_data, (z, c, r), fmt in tiles_to_write:
             coords_obj = Coordinate(row=r, column=c, zoom=z)
-            format_obj = format.OutputFormat(fmt, fmt, None, None, None)
+            format_obj = format.OutputFormat(fmt, fmt, None, None, None, False)
             tile_dir.write_tile(tile_data, coords_obj, format_obj, layer)
 
             expected_filename = '{0}/{1}/{2}/{3}.{4}'.format(
