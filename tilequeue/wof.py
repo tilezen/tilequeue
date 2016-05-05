@@ -30,11 +30,13 @@ neighbourhood_placetypes_to_int = dict(
     neighbourhood=1,
     microhood=2,
     macrohood=3,
+    borough=4,
 )
 neighbourhood_int_to_placetypes = {
     1: 'neighbourhood',
     2: 'microhood',
     3: 'macrohood',
+    4: 'borough',
 }
 
 
@@ -477,10 +479,11 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
 class WofUrlNeighbourhoodFetcher(object):
 
     def __init__(self, neighbourhood_url, microhood_url, macrohood_url,
-                 data_url_prefix, n_threads, max_retries):
+                 borough_url, data_url_prefix, n_threads, max_retries):
         self.neighbourhood_url = neighbourhood_url
         self.microhood_url = microhood_url
         self.macrohood_url = macrohood_url
+        self.borough_url = borough_url
         self.data_url_prefix = data_url_prefix
         self.n_threads = n_threads
         self.max_retries = max_retries
@@ -496,6 +499,10 @@ class WofUrlNeighbourhoodFetcher(object):
     def fetch_meta_macrohoods(self):
         return fetch_wof_url_meta_neighbourhoods(
             self.macrohood_url, 'macrohood', self.max_retries)
+
+    def fetch_meta_boroughs(self):
+        return fetch_wof_url_meta_neighbourhoods(
+            self.borough_url, 'borough', self.max_retries)
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
         url_fetch_fn = make_fetch_raw_url_fn(self.data_url_prefix,
@@ -527,6 +534,9 @@ class WofFilesystemNeighbourhoodFetcher(object):
 
     def fetch_meta_macrohoods(self):
         return self._fetch_meta_neighbourhoods('macrohood')
+
+    def fetch_meta_boroughs(self):
+        return self._fetch_meta_neighbourhoods('borough')
 
     def fetch_raw_neighbourhoods(self, neighbourhood_metas):
         data_prefix = os.path.join(
@@ -844,6 +854,7 @@ class WofProcessor(object):
         meta_neighbourhoods_queue = Queue.Queue(1)
         meta_microhoods_queue = Queue.Queue(1)
         meta_macrohoods_queue = Queue.Queue(1)
+        meta_boroughs_queue = Queue.Queue(1)
         toi_queue = Queue.Queue(1)
 
         # functions for the threads
@@ -886,6 +897,12 @@ class WofProcessor(object):
                 meta_macrohoods_queue))
         meta_macrohoods_thread.start()
 
+        meta_boroughs_thread = threading.Thread(
+            target=make_fetch_meta_csv_fn(
+                self.fetcher.fetch_meta_boroughs,
+                meta_boroughs_queue))
+        meta_boroughs_thread.start()
+
         toi_thread = threading.Thread(target=fetch_toi)
         toi_thread.start()
 
@@ -895,6 +912,7 @@ class WofProcessor(object):
         meta_neighbourhoods_thread.join()
         meta_microhoods_thread.join()
         meta_macrohoods_thread.join()
+        meta_boroughs_thread.join()
 
         self.logger.info('Fetching old and new neighbourhoods ... done')
 
@@ -902,10 +920,12 @@ class WofProcessor(object):
         meta_neighbourhoods = meta_neighbourhoods_queue.get()
         meta_microhoods = meta_microhoods_queue.get()
         meta_macrohoods = meta_macrohoods_queue.get()
+        meta_boroughs = meta_boroughs_queue.get()
 
         # each of these has the appropriate placetype set now
         meta_neighbourhoods = (
-            meta_neighbourhoods + meta_microhoods + meta_macrohoods)
+            meta_neighbourhoods + meta_microhoods + meta_macrohoods +
+            meta_boroughs)
 
         self.logger.info('Diffing neighbourhoods ...')
         by_neighborhood_id = attrgetter('wof_id')
@@ -1126,8 +1146,13 @@ class WofInitialLoader(object):
         macrohood_metas = list(self.fetcher.fetch_meta_macrohoods())
         self.logger.info('Fetching meta macrohoods csv ... done')
 
+        self.logger.info('Fetching meta boroughs csv ...')
+        borough_metas = list(self.fetcher.fetch_meta_boroughs())
+        self.logger.info('Fetching meta boroughs csv ... done')
+
         neighbourhood_metas = (
-            neighbourhood_metas + microhood_metas + macrohood_metas)
+            neighbourhood_metas + microhood_metas + macrohood_metas +
+            borough_metas)
 
         self.logger.info('Fetching raw neighbourhoods ...')
         neighbourhoods, failures = self.fetcher.fetch_raw_neighbourhoods(
@@ -1144,11 +1169,11 @@ class WofInitialLoader(object):
 
 
 def make_wof_url_neighbourhood_fetcher(
-        neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
-        n_threads, max_retries):
+        neighbourhood_url, microhood_url, macrohood_url, borough_url,
+        data_prefix_url, n_threads, max_retries):
     fetcher = WofUrlNeighbourhoodFetcher(
-        neighbourhood_url, microhood_url, macrohood_url, data_prefix_url,
-        n_threads, max_retries)
+        neighbourhood_url, microhood_url, macrohood_url, borough_url,
+        data_prefix_url, n_threads, max_retries)
     return fetcher
 
 

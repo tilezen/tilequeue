@@ -989,6 +989,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
         wof_cfg['neighbourhoods-meta-url'],
         wof_cfg['microhoods-meta-url'],
         wof_cfg['macrohoods-meta-url'],
+        wof_cfg['boroughs-meta-url'],
         wof_cfg['data-prefix-url'],
         n_raw_neighbourhood_fetch_threads,
         wof_cfg.get('max-retries', 0)
