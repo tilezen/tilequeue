@@ -153,6 +153,7 @@ class TestWofHttp(unittest.TestCase):
                 server.url('/meta/neighbourhoods.csv'),
                 server.url('/meta/microhoods.csv'),
                 server.url('/meta/macrohoods.csv'),
+                server.url('/meta/boroughs.csv'),
                 server.url('/data'),
                 1, max_retries)
             redis = _NullRedisTOI()

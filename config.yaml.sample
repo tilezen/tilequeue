@@ -73,6 +73,7 @@ wof:
   neighbourhoods-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-neighbourhood-latest.csv
   microhoods-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-microhood-latest.csv
   macrohoods-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-macrohood-latest.csv
+  boroughs-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-borough-latest.csv
   # url path prefix for wof raw data
   data-prefix-url: http://whosonfirst.mapzen.com/data
   # filesystem path to wof data checkout
