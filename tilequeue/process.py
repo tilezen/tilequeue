@@ -177,13 +177,13 @@ def _find_meters_per_pixel(zoom):
 # per pixel. for multipolygons, will filter out any subpolygons that
 # should not be visible, which means that the shape could have been
 # altered
-def _visible_shape(shape, meters_per_pixel):
+def _visible_shape(shape, area_threshold_meters):
     if shape is None:
         return None
     elif shape.type == 'MultiPolygon':
         visible_shapes = []
         for subshape in shape.geoms:
-            subshape = _visible_shape(subshape, meters_per_pixel)
+            subshape = _visible_shape(subshape, area_threshold_meters)
             if subshape:
                 visible_shapes.append(subshape)
         if visible_shapes:
@@ -192,7 +192,7 @@ def _visible_shape(shape, meters_per_pixel):
             return None
     elif shape.type == 'Polygon':
         shape_meters = shape.area
-        return shape if shape_meters >= meters_per_pixel else None
+        return shape if shape_meters >= area_threshold_meters else None
     else:
         return shape
 
@@ -211,6 +211,8 @@ def _simplify_data(feature_layers, bounds, zoom):
         clip_factor = layer_datum.get('clip_factor', 1.0)
         layer_padded_bounds = \
             calculate_padded_bounds(clip_factor, bounds)
+        area_threshold_pixels = layer_datum['area_threshold']
+        area_threshold_meters = meters_per_pixel * area_threshold_pixels
 
         # The logic behind simplifying before intersecting rather than the
         # other way around is extensively explained here:
@@ -253,7 +255,7 @@ def _simplify_data(feature_layers, bounds, zoom):
 
             # this could alter multipolygon geometries
             if zoom < simplify_until:
-                shape = _visible_shape(shape, meters_per_pixel)
+                shape = _visible_shape(shape, area_threshold_meters)
 
             # don't keep features which have been simplified to empty or
             # None.

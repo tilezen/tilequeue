@@ -371,6 +371,7 @@ def parse_layer_data(query_cfg, template_path, reload_templates, cfg_path):
     for layer_name, layer_config in layers_config.items():
         template_name = layer_config['template']
         start_zoom = layer_config['start_zoom']
+        area_threshold = int(layer_config.get('area-inclusion-threshold', 1))
         if reload_templates:
             query_generator = DevJinjaQueryGenerator(
                 environment, template_name, start_zoom)
@@ -388,6 +389,7 @@ def parse_layer_data(query_cfg, template_path, reload_templates, cfg_path):
             simplify_before_intersect=layer_config.get(
                 'simplify_before_intersect', False),
             simplify_start=layer_config.get('simplify_start', 0),
+            area_threshold=area_threshold,
         )
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
@@ -420,9 +422,9 @@ def tilequeue_process(cfg, peripherals):
 
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
-    all_layer_data, layer_data, post_process_data = parse_layer_data(
-        query_cfg, cfg.template_path, cfg.reload_templates,
-        os.path.dirname(cfg.query_cfg))
+    all_layer_data, layer_data, post_process_data = (
+        parse_layer_data(query_cfg, cfg.template_path, cfg.reload_templates,
+                         os.path.dirname(cfg.query_cfg)))
 
     formats = lookup_formats(cfg.output_formats)
 
