@@ -1,13 +1,16 @@
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
+from datetime import datetime
 from operator import attrgetter
+from psycopg2.extras import register_hstore
 from shapely import geos
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import mercator_point_to_coord
 from tilequeue.tile import reproject_lnglat_to_mercator
 import csv
+import edtf
 import json
 import os.path
 import psycopg2
@@ -17,7 +20,6 @@ import shapely.geometry
 import shapely.ops
 import shapely.wkb
 import threading
-import edtf
 
 
 def generate_csv_lines(requests_result):
@@ -46,7 +48,7 @@ NeighbourhoodMeta = namedtuple(
 Neighbourhood = namedtuple(
     'Neighbourhood',
     'wof_id placetype name hash label_position geometry n_photos area '
-    'min_zoom max_zoom is_landuse_aoi inception cessation')
+    'min_zoom max_zoom is_landuse_aoi inception cessation l10n_names')
 
 
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
@@ -330,10 +332,25 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     cessation = min(edtf_cessation.latest_date(),
                     edtf_deprecated.latest_date())
 
+    # grab any names in other languages
+    lang_suffix_size = len('_preferred') * -1
+    l10n_names = {}
+    for k, v in props.iteritems():
+        if not v:
+            continue
+        if not k.startswith('name:') or not k.endswith('_preferred'):
+            continue
+        if isinstance(v, list):
+            v = v[0]
+        lang = k[:lang_suffix_size]
+        l10n_names[lang] = v
+    if not l10n_names:
+        l10n_names = None
+
     neighbourhood = Neighbourhood(
         wof_id, placetype, name, neighbourhood_meta.hash, label_position,
         shape_mercator, n_photos, area, min_zoom, max_zoom, is_landuse_aoi,
-        inception, cessation)
+        inception, cessation, l10n_names)
     return neighbourhood
 
 
@@ -547,7 +564,10 @@ class WofFilesystemNeighbourhoodFetcher(object):
         return neighbourhoods, failures
 
 
-def create_neighbourhood_file_object(neighbourhoods):
+def create_neighbourhood_file_object(neighbourhoods, curdate=None):
+    if curdate is None:
+        curdate = datetime.now()
+
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
 
@@ -579,15 +599,32 @@ def create_neighbourhood_file_object(neighbourhoods):
         else:
             buf.write('%s\t' % ('true' if n.is_landuse_aoi else 'false'))
 
-        buf.write('%s\t' % escape_string(n.inception.isoformat()))
-        buf.write('%s\t' % escape_string(n.cessation.isoformat()))
-
         geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
         buf.write(n.label_position.wkb_hex)
         buf.write('\t')
 
         geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
         buf.write(n.geometry.wkb_hex)
+        buf.write('\t')
+
+        buf.write('%s\t' % n.inception.isoformat())
+        buf.write('%s\t' % n.cessation.isoformat())
+
+        is_visible = n.inception < curdate and n.cessation >= curdate
+        is_visible_str = 't' if is_visible else 'f'
+        buf.write('%s\t' % is_visible_str)
+
+        if n.l10n_names:
+            hstore_items = []
+            for k, v in n.l10n_names.items():
+                hstore_items.append('%s=>%s' % (
+                    escape_string(k),
+                    escape_string(v)))
+            hstore_items_str = ','.join(hstore_items)
+            buf.write('%s' % hstore_items_str)
+        else:
+            buf.write('\\N')
+
         buf.write('\n')
 
     buf.seek(0)
@@ -603,6 +640,7 @@ class WofModel(object):
 
     def _create_conn(self):
         conn = psycopg2.connect(**self.postgresql_conn_info)
+        register_hstore(conn)
         conn.set_session(autocommit=False)
         return conn
 
@@ -635,6 +673,7 @@ class WofModel(object):
         def gen_data(n):
             geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
             geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
+
             return dict(
                 table=self.table,
                 placetype=neighbourhood_placetypes_to_int[n.placetype],
@@ -650,6 +689,7 @@ class WofModel(object):
                 label_position=n.label_position.wkb_hex,
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
+                l10n_name=n.l10n_names,
             )
 
         if ids_to_remove:
@@ -685,6 +725,7 @@ class WofModel(object):
                             'inception=%(inception)s, '
                             'cessation=%(cessation)s, '
                             'label_position=%(label_position)s, '
+                            'l10n_name=%(l10n_name)s, '
                             'geometry=%(geometry)s '
                             'WHERE wof_id=%(wof_id)s',
                             update_data)
@@ -695,12 +736,12 @@ class WofModel(object):
                             '(wof_id, placetype, name, hash, n_photos, area, '
                             'min_zoom, max_zoom, is_landuse_aoi, '
                             'inception, cessation, '
-                            'label_position, geometry) '
+                            'label_position, geometry, l10n_name) '
                             'VALUES (%(wof_id)s, %(placetype)s, %(name)s, '
                             '%(hash)s, %(n_photos)s, %(area)s, %(min_zoom)s, '
                             '%(max_zoom)s, %(is_landuse_aoi)s, '
                             '%(inception)s, %(cessation)s, '
-                            '%(label_position)s, %(geometry)s)',
+                            '%(label_position)s, %(geometry)s, %(l10n_name)s)',
                             insert_data)
 
     def insert_neighbourhoods(self, neighbourhoods):
