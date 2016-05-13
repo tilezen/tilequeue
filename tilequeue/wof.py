@@ -333,7 +333,7 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
                     edtf_deprecated.latest_date())
 
     # grab any names in other languages
-    lang_suffix_size = len('_preferred') * -1
+    lang_suffix_size = len('_preferred')
     l10n_names = {}
     for k, v in props.iteritems():
         if not v:
@@ -342,7 +342,7 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
             continue
         if isinstance(v, list):
             v = v[0]
-        lang = k[:lang_suffix_size]
+        lang = k[:-lang_suffix_size]
         l10n_names[lang] = v
     if not l10n_names:
         l10n_names = None
