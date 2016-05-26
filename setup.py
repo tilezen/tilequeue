@@ -41,7 +41,6 @@ setup(name='tilequeue',
           'PyYAML',
           'redis',
           'requests',
-          'TileStache',
       ],
       test_suite='tests',
       tests_require=[

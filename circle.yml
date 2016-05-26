@@ -8,7 +8,7 @@ dependencies:
 
 test:
   override:
+    - find . -not -path '*/.eggs/*' -not -path '*OSciMap4*' -name '*.py' | xargs flake8
     - pip install -U 'mock==1.2.0'
     - pip install -U httptestserver
     - python setup.py test
-    - find . -not -path '*/.eggs/*' -name '*.py' | xargs flake8

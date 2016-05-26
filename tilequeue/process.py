@@ -5,13 +5,28 @@ from shapely.wkb import loads
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import pad_bounds_for_zoom
 from tilequeue.tile import tolerance_for_zoom
-from tilequeue.transform import mercator_point_to_wgs84
+from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
 from tilequeue.transform import calculate_padded_bounds
 from TileStache.Config import loadClassPath
-from TileStache.Goodies.VecTiles.server import make_transform_fn
-from TileStache.Goodies.VecTiles.server import resolve_transform_fns
 from collections import namedtuple
+
+
+def make_transform_fn(transform_fns):
+    if not transform_fns:
+        return None
+
+    def transform_fn(shape, properties, fid, zoom):
+        for fn in transform_fns:
+            shape, properties, fid = fn(shape, properties, fid, zoom)
+        return shape, properties, fid
+    return transform_fn
+
+
+def resolve_transform_fns(fn_dotted_names):
+    if not fn_dotted_names:
+        return None
+    return map(loadClassPath, fn_dotted_names)
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -275,8 +290,9 @@ def _simplify_data(feature_layers, bounds, zoom):
     return simplified_feature_layers
 
 
-def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
-                           padded_bounds, unpadded_bounds_wgs84, coord, layer):
+def _create_formatted_tile(
+        feature_layers, format, scale, unpadded_bounds,
+        padded_bounds, unpadded_bounds_lnglat, coord, layer):
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
         feature_layers, format, scale, unpadded_bounds,
@@ -285,7 +301,7 @@ def _create_formatted_tile(feature_layers, format, scale, unpadded_bounds,
     # use the formatter to generate the tile
     tile_data_file = StringIO()
     format.format_tile(tile_data_file, transformed_feature_layers, coord,
-                       unpadded_bounds, unpadded_bounds_wgs84)
+                       unpadded_bounds, unpadded_bounds_lnglat)
     tile = tile_data_file.getvalue()
 
     formatted_tile = dict(format=format, tile=tile, coord=coord, layer=layer)
@@ -339,10 +355,10 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     processed_feature_layers = _simplify_data(
         processed_feature_layers, padded_bounds, coord.zoom)
 
-    # topojson formatter expects bounds to be in wgs84
-    unpadded_bounds_wgs84 = (
-        mercator_point_to_wgs84(unpadded_bounds[:2]) +
-        mercator_point_to_wgs84(unpadded_bounds[2:4]))
+    # topojson formatter expects bounds to be in lnglat
+    unpadded_bounds_lnglat = (
+        mercator_point_to_lnglat(unpadded_bounds[0], unpadded_bounds[1]) +
+        mercator_point_to_lnglat(unpadded_bounds[2], unpadded_bounds[3]))
 
     # now, perform the format specific transformations
     # and format the tile itself
@@ -351,7 +367,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
-            padded_bounds, unpadded_bounds_wgs84, coord, layer)
+            padded_bounds, unpadded_bounds_lnglat, coord, layer)
         formatted_tiles.append(formatted_tile)
 
     # this assumes that we only store single layers, and no combinations
@@ -364,7 +380,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
                 for format in formats:
                     formatted_tile = _create_formatted_tile(
                         pruned_feature_layers, format, scale, unpadded_bounds,
-                        padded_bounds, unpadded_bounds_wgs84, coord, layer)
+                        padded_bounds, unpadded_bounds_lnglat, coord, layer)
                     formatted_tiles.append(formatted_tile)
                     break
 
