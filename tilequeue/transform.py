@@ -1,19 +1,17 @@
 from shapely import geometry
+from shapely.ops import transform
 from shapely.wkb import dumps
 from tilequeue.format import json_format
 from tilequeue.format import mvt_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
-from TileStache.Goodies.VecTiles.ops import transform
 import math
 
 
 half_circumference_meters = 20037508.342789244
 
 
-def mercator_point_to_wgs84(point):
-    x, y = point
-
+def mercator_point_to_lnglat(x, y, z=None):
     x /= half_circumference_meters
     y /= half_circumference_meters
 
@@ -28,9 +26,7 @@ def mercator_point_to_wgs84(point):
 def rescale_point(bounds, scale):
     minx, miny, maxx, maxy = bounds
 
-    def fn(point):
-        x, y = point
-
+    def fn(x, y, z=None):
         xfac = scale / (maxx - minx)
         yfac = scale / (maxy - miny)
         x = xfac * (x - minx)
@@ -42,7 +38,7 @@ def rescale_point(bounds, scale):
 
 
 def apply_to_all_coords(fn):
-    return lambda shape: transform(shape, fn)
+    return lambda shape: transform(fn, shape)
 
 
 # returns a geometry which is the given bounds expanded by `factor`. that is,
@@ -65,7 +61,7 @@ def _noop(shape):
 def transform_feature_layers_shape(feature_layers, format, scale,
                                    unpadded_bounds, padded_bounds, coord):
     if format in (json_format, topojson_format):
-        transform_fn = apply_to_all_coords(mercator_point_to_wgs84)
+        transform_fn = apply_to_all_coords(mercator_point_to_lnglat)
     elif format == mvt_format:
         # quantization is handled by the mapbox-vector-tile library
         transform_fn = _noop

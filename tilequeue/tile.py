@@ -1,8 +1,5 @@
 from itertools import chain
 from ModestMaps.Core import Coordinate
-from ModestMaps.Core import Point
-from TileStache.Geography import SphericalMercator
-from TileStache.Goodies.VecTiles.server import tolerances
 import math
 import pyproj
 import time
@@ -106,23 +103,37 @@ def reproject_lnglat_to_mercator(x, y):
     return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
-spherical_mercator = SphericalMercator()
+# mercator <-> point conversions ported from tilestache
+earth_radius = 6378137
+earth_circum = 2 * math.pi * earth_radius
+coord_mercator_point_zoom = math.log(earth_circum) / math.log(2)
+half_earth_circum = earth_circum / 2
 
 
 def mercator_point_to_coord(z, x, y):
-    point = Point(x, y)
-    coord = spherical_mercator.projCoordinate(point)
+    coord = Coordinate(
+        column=x + half_earth_circum,
+        row=half_earth_circum - y,
+        zoom=coord_mercator_point_zoom,
+    )
     coord = coord.zoomTo(z).container()
     return coord
 
 
+def coord_to_mercator_point(coord):
+    coord = coord.zoomTo(coord_mercator_point_zoom)
+    x = coord.column - half_earth_circum
+    y = half_earth_circum - coord.row
+    return x, y
+
+
 def coord_to_mercator_bounds(coord):
-    ul = spherical_mercator.coordinateProj(coord)
-    lr = spherical_mercator.coordinateProj(coord.down().right())
-    minx = min(ul.x, lr.x)
-    miny = min(ul.y, lr.y)
-    maxx = max(ul.x, lr.x)
-    maxy = max(ul.y, lr.y)
+    ul_x, ul_y = coord_to_mercator_point(coord)
+    lr_x, lr_y = coord_to_mercator_point(coord.down().right())
+    minx = min(ul_x, lr_x)
+    miny = min(ul_y, lr_y)
+    maxx = max(ul_x, lr_x)
+    maxy = max(ul_y, lr_y)
     return minx, miny, maxx, maxy
 
 
@@ -281,6 +292,9 @@ def coord_children_range(coord, zoom_until):
                 next_children.append(child)
         children_to_process = next_children
         cur_zoom += 1
+
+
+tolerances = [6378137 * 2 * math.pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
 
 def tolerance_for_zoom(zoom):

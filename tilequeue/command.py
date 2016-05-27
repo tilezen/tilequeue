@@ -29,8 +29,8 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
-from TileStache.Config import loadClassPath
 from urllib2 import urlopen
+from zope.dottedname.resolve import resolve
 import argparse
 import logging
 import logging.config
@@ -327,7 +327,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
             'resource %r' % resource_name
 
         try:
-            fn = loadClassPath(init_fn_name)
+            fn = resolve(init_fn_name)
 
         except:
             raise Exception('Unable to init resource %r with function %r due '
