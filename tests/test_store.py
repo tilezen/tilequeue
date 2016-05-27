@@ -17,6 +17,7 @@ class TestTileDirectory(unittest.TestCase):
 
     def test_write_tile(self):
         from ModestMaps.Core import Coordinate
+        from tilequeue import format
         from tilequeue import store
         import os
         # Verify that the `TileDirectory` directory gets created.

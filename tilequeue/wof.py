@@ -328,9 +328,9 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     # take the earliest date it could mean. the 'edtf:cessation' and
     # 'edtf:deprecated' would both stop the item showing, so we take the
     # earliest of each's latest possible date.
-    inception = edtf_inception.earliest_date()
-    cessation = min(edtf_cessation.latest_date(),
-                    edtf_deprecated.latest_date())
+    inception = edtf_inception.date_earliest()
+    cessation = min(edtf_cessation.date_latest(),
+                    edtf_deprecated.date_latest())
 
     # grab any names in other languages
     lang_suffix_size = len('_preferred')
