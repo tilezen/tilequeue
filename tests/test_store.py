@@ -3,24 +3,22 @@ Tests for `tilequeue.store`.
 '''
 
 import unittest
-from tilequeue import store
-from tilequeue import format
-from ModestMaps.Core import Coordinate
-import os
-import shutil
-import tempfile
 
 
 class TestTileDirectory(unittest.TestCase):
 
     def setUp(self):
+        import tempfile
         self.dir_path = tempfile.mkdtemp()
 
     def tearDown(self):
+        import shutil
         shutil.rmtree(self.dir_path)
 
     def test_write_tile(self):
-
+        from ModestMaps.Core import Coordinate
+        from tilequeue import store
+        import os
         # Verify that the `TileDirectory` directory gets created.
         tile_dir = store.TileDirectory(self.dir_path)
         self.assertTrue(
