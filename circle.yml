@@ -1,7 +1,7 @@
 dependencies:
   pre:
+    - pip install -Ur requirements.txt
     - pip install -U flake8
-    - pip install -U python-dateutil
     - python setup.py develop
 
 test:
