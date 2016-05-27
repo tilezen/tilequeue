@@ -41,6 +41,7 @@ setup(name='tilequeue',
           'PyYAML',
           'redis',
           'requests',
+          'zope.dottedname',
       ],
       test_suite='tests',
       tests_require=[

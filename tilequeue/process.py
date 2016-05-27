@@ -1,3 +1,4 @@
+from collections import namedtuple
 from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
@@ -5,11 +6,10 @@ from shapely.wkb import loads
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import pad_bounds_for_zoom
 from tilequeue.tile import tolerance_for_zoom
+from tilequeue.transform import calculate_padded_bounds
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
-from tilequeue.transform import calculate_padded_bounds
-from TileStache.Config import loadClassPath
-from collections import namedtuple
+from zope.dottedname.resolve import resolve
 
 
 def make_transform_fn(transform_fns):
@@ -26,7 +26,7 @@ def make_transform_fn(transform_fns):
 def resolve_transform_fns(fn_dotted_names):
     if not fn_dotted_names:
         return None
-    return map(loadClassPath, fn_dotted_names)
+    return map(resolve, fn_dotted_names)
 
 
 def _preprocess_data(feature_layers, shape_padded_bounds):
@@ -103,7 +103,7 @@ def _postprocess_data(feature_layers, post_process_data,
                       tile_coord, unpadded_bounds, padded_bounds):
 
     for step in post_process_data:
-        fn = loadClassPath(step['fn_name'])
+        fn = resolve(step['fn_name'])
 
         ctx = Context(
             feature_layers=feature_layers,
@@ -339,7 +339,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
-            sort_fn = loadClassPath(sort_fn_name)
+            sort_fn = resolve(sort_fn_name)
             processed_features = sort_fn(processed_features, coord.zoom)
 
         feature_layer = dict(name=layer_name, features=processed_features,
