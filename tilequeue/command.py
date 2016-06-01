@@ -350,7 +350,42 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def parse_layer_data(query_cfg, template_path, reload_templates, cfg_path):
+def _bounds_pad_no_buf(bounds):
+    return bounds
+
+
+def _create_query_bounds_pad_fn(buffer_cfg, layer_name):
+    # because we aren't changing the queries to have different bounds
+    # specifiers for each geometry type, we take the largest buffer
+    # size and use that as the bounds.
+
+    if not buffer_cfg:
+        return _bounds_pad_no_buf
+
+    largest_buf = 0
+    for format_ext, format_cfg in buffer_cfg.items():
+        format_layer_cfg = format_cfg.get('layer', {}).get(layer_name)
+        format_geometry_cfg = format_cfg.get('geometry', {})
+        if format_layer_cfg:
+            for geometry_type, buffer_size in format_layer_cfg.items():
+                largest_buf = max(largest_buf, buffer_size)
+        if format_geometry_cfg:
+            for geometry_type, buffer_size in format_geometry_cfg.items():
+                largest_buf = max(largest_buf, buffer_size)
+
+    if largest_buf == 0:
+        return _bounds_pad_no_buf
+
+    def bounds_pad(bounds):
+        return (
+            bounds[0] - largest_buf, bounds[1] - largest_buf,
+            bounds[2] + largest_buf, bounds[3] + largest_buf,
+        )
+    return bounds_pad
+
+
+def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
+                     cfg_path):
     if reload_templates:
         from tilequeue.query import DevJinjaQueryGenerator
     else:
@@ -390,6 +425,8 @@ def parse_layer_data(query_cfg, template_path, reload_templates, cfg_path):
                 'simplify_before_intersect', False),
             simplify_start=layer_config.get('simplify_start', 0),
             area_threshold=area_threshold,
+            query_bounds_pad_fn=_create_query_bounds_pad_fn(
+                buffer_cfg, layer_name),
         )
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
@@ -423,8 +460,9 @@ def tilequeue_process(cfg, peripherals):
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
     all_layer_data, layer_data, post_process_data = (
-        parse_layer_data(query_cfg, cfg.template_path, cfg.reload_templates,
-                         os.path.dirname(cfg.query_cfg)))
+        parse_layer_data(
+            query_cfg, cfg.buffer_cfg, cfg.template_path, cfg.reload_templates,
+            os.path.dirname(cfg.query_cfg)))
 
     formats = lookup_formats(cfg.output_formats)
 
@@ -488,7 +526,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.layers_to_format, logger)
+        cfg.layers_to_format, cfg.buffer_cfg, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
                            store, logger)

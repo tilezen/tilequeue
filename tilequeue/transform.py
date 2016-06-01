@@ -1,10 +1,11 @@
+from numbers import Number
 from shapely import geometry
 from shapely.ops import transform
 from shapely.wkb import dumps
 from tilequeue.format import json_format
-from tilequeue.format import mvt_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
+from tilequeue.tile import bounds_buffer
 import math
 
 
@@ -58,44 +59,83 @@ def _noop(shape):
     return shape
 
 
-def transform_feature_layers_shape(feature_layers, format, scale,
-                                   unpadded_bounds, padded_bounds, coord):
+def calc_buffered_bounds(
+        format, bounds, meters_per_pixel, layer_name, geometry_type,
+        buffer_cfg):
+    """
+    Calculate the buffered bounds per format per layer based on config.
+    """
+
+    if not buffer_cfg:
+        return bounds
+
+    format_buffer_cfg = buffer_cfg.get(format.extension)
+    if format_buffer_cfg is None:
+        return bounds
+
+    if geometry_type.startswith('Multi'):
+        geometry_type = geometry_type[len('Multi'):]
+    geometry_type = geometry_type.lower()
+
+    per_layer_cfg = format_buffer_cfg.get('layer', {}).get(layer_name)
+    if per_layer_cfg is not None:
+        layer_geom_pixels = per_layer_cfg.get(geometry_type)
+        if layer_geom_pixels is not None:
+            assert isinstance(layer_geom_pixels, Number)
+            result = bounds_buffer(
+                bounds, meters_per_pixel * layer_geom_pixels)
+            return result
+
+    by_geometry_pixels = format_buffer_cfg.get('geometry', {}).get(
+        geometry_type)
+    if by_geometry_pixels is not None:
+        assert isinstance(by_geometry_pixels, Number)
+        result = bounds_buffer(bounds, meters_per_pixel * by_geometry_pixels)
+        return result
+
+    return bounds
+
+
+def transform_feature_layers_shape(
+        feature_layers, format, scale, unpadded_bounds, coord,
+        meters_per_pixel, buffer_cfg):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_lnglat)
-    elif format == mvt_format:
-        # quantization is handled by the mapbox-vector-tile library
-        transform_fn = _noop
     elif format == vtm_format:
         transform_fn = apply_to_all_coords(
             rescale_point(unpadded_bounds, scale))
     else:
-        # in case we add a new format, default to no transformation
+        # mvt and unknown formats get no geometry transformation
         transform_fn = _noop
 
-    shape_unpadded_bounds = geometry.box(*unpadded_bounds)
-    is_vtm_format = format == vtm_format
+    # shape_unpadded_bounds = geometry.box(*unpadded_bounds)
 
     transformed_feature_layers = []
     for feature_layer in feature_layers:
+        layer_name = feature_layer['name']
         transformed_features = []
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
         clip_factor = layer_datum.get('clip_factor', 1.0)
-        layer_padded_bounds = \
-            calculate_padded_bounds(clip_factor, unpadded_bounds)
 
         for shape, props, feature_id in feature_layer['features']:
 
-            if not is_vtm_format:
-                # for non vtm formats, we need to explicitly check if
-                # the geometry intersects with the unpadded bounds
-                if not shape_unpadded_bounds.intersects(shape):
-                    continue
+            buffer_padded_bounds = calc_buffered_bounds(
+                format, unpadded_bounds, meters_per_pixel, layer_name,
+                shape.type, buffer_cfg)
+            shape_buf_bounds = geometry.box(*buffer_padded_bounds)
+
+            if not shape_buf_bounds.intersects(shape):
+                continue
+
+            if is_clipped:
                 # now we know that we should include the geometry, but
                 # if the geometry should be clipped, we'll clip to the
                 # layer-specific padded bounds
-                if is_clipped:
-                    shape = shape.intersection(layer_padded_bounds)
+                layer_padded_bounds = calculate_padded_bounds(
+                    clip_factor, buffer_padded_bounds)
+
+                shape = shape.intersection(layer_padded_bounds)
 
             # perform the format specific geometry transformations
             shape = transform_fn(shape)

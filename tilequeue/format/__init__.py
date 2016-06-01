@@ -93,12 +93,15 @@ vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm, 3,
                           False)
 mvt_format = OutputFormat('MVT', 'mvt', 'application/x-protobuf',
                           format_mvt, 4, True)
+# buffered mvt - same exact format as mvt, but has separate buffer config
+mvtb_format = mvt_format
 
 extension_to_format = dict(
     json=json_format,
     topojson=topojson_format,
     vtm=vtm_format,
     mvt=mvt_format,
+    mvtb=mvtb_format,
 )
 
 name_to_format = {

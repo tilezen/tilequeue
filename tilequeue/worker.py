@@ -183,7 +183,6 @@ class DataFetch(object):
                 coord=coord,
                 feature_layers=fetch_data['feature_layers'],
                 unpadded_bounds=fetch_data['unpadded_bounds'],
-                padded_bounds=fetch_data['padded_bounds'],
                 cut_coords=cut_coords,
             )
 
@@ -201,13 +200,14 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, layers_to_format, logger):
+                 output_queue, layers_to_format, buffer_cfg, logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.layers_to_format = layers_to_format
+        self.buffer_cfg = buffer_cfg
         self.logger = logger
 
     def __call__(self, stop):
@@ -226,7 +226,6 @@ class ProcessAndFormatData(object):
 
             coord = data['coord']
             feature_layers = data['feature_layers']
-            padded_bounds = data['padded_bounds']
             unpadded_bounds = data['unpadded_bounds']
             cut_coords = data['cut_coords']
 
@@ -235,8 +234,8 @@ class ProcessAndFormatData(object):
             try:
                 formatted_tiles = process_coord(
                     coord, feature_layers, self.post_process_data,
-                    self.formats, unpadded_bounds, padded_bounds,
-                    cut_coords, self.layers_to_format)
+                    self.formats, unpadded_bounds, cut_coords,
+                    self.layers_to_format, self.buffer_cfg)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (

@@ -1,7 +1,6 @@
 from psycopg2.extras import RealDictCursor
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from tilequeue.tile import coord_to_mercator_bounds
-from tilequeue.tile import pad_bounds_for_zoom
 import sys
 
 
@@ -64,21 +63,26 @@ def jinja_filter_bbox(bounds, srid=900913):
     return bbox
 
 
-def build_feature_queries(bounds, layer_data, zoom):
+def build_feature_queries(unpadded_bounds, layer_data, zoom):
     queries_to_execute = []
     for layer_datum in layer_data:
+        query_bounds_pad_fn = layer_datum['query_bounds_pad_fn']
+        if query_bounds_pad_fn:
+            padded_bounds = query_bounds_pad_fn(unpadded_bounds)
+        else:
+            padded_bounds = unpadded_bounds
         query_generator = layer_datum['query_generator']
-        query = query_generator(bounds, zoom)
-        queries_to_execute.append((layer_datum, query))
+        query = query_generator(padded_bounds, zoom)
+        queries_to_execute.append((layer_datum, query, padded_bounds))
     return queries_to_execute
 
 
-def execute_query(conn, query, layer_datum):
+def execute_query(conn, query, layer_datum, padded_bounds):
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
-        return rows, layer_datum
+        return rows, layer_datum, padded_bounds
     except:
         # If any exception occurs during query execution, close the
         # connection to ensure it is not in an invalid state. The
@@ -92,29 +96,33 @@ def execute_query(conn, query, layer_datum):
 
 
 def trim_layer_datum(layer_datum):
-    layer_datum_result = dict([(k, v) for k, v in layer_datum.items()
-                               if k != 'query_generator'])
+    layer_datum_result = dict(
+        [(k, v) for k, v in layer_datum.items()
+         if k not in ('query_generator', 'query_bounds_pad_fn')])
     return layer_datum_result
 
 
-def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, bounds):
+def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, unpadded_bounds):
 
     queries_to_execute = build_feature_queries(
-        bounds, layer_data, zoom)
+        unpadded_bounds, layer_data, zoom)
 
     empty_results = []
     async_results = []
-    for (layer_datum, query), sql_conn in zip(queries_to_execute, sql_conns):
+    for (layer_datum, query, padded_bounds), sql_conn in zip(
+            queries_to_execute, sql_conns):
+        layer_datum = trim_layer_datum(layer_datum)
         if query is None:
             empty_feature_layer = dict(
                 name=layer_datum['name'],
                 features=[],
-                layer_datum=trim_layer_datum(layer_datum),
+                layer_datum=layer_datum,
+                padded_bounds=padded_bounds,
             )
             empty_results.append(empty_feature_layer)
         else:
             async_result = thread_pool.apply_async(
-                execute_query, (sql_conn, query, layer_datum))
+                execute_query, (sql_conn, query, layer_datum, padded_bounds))
             async_results.append(async_result)
 
     return empty_results, async_results
@@ -137,10 +145,6 @@ class DataFetcher(object):
             layer_data = self.layer_data
         zoom = coord.zoom
         unpadded_bounds = coord_to_mercator_bounds(coord)
-        # the vtm renderer needs features a little surrounding the
-        # bounding box as well, these padded bounds are used in the
-        # queries
-        padded_bounds = pad_bounds_for_zoom(unpadded_bounds, zoom)
 
         sql_conns, conn_info = self.sql_conn_pool.get_conns()
         try:
@@ -148,14 +152,13 @@ class DataFetcher(object):
             # issue a single set of queries to the database for all
             # formats
             empty_results, async_results = enqueue_queries(
-                sql_conns, self.io_pool, layer_data, zoom,
-                padded_bounds)
+                sql_conns, self.io_pool, layer_data, zoom, unpadded_bounds)
 
             feature_layers = []
             async_exception = None
             for async_result in async_results:
                 try:
-                    rows, layer_datum = async_result.get()
+                    rows, layer_datum, padded_bounds = async_result.get()
                 except:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     async_exception = exc_value
@@ -182,12 +185,11 @@ class DataFetcher(object):
                     row['__geometry__'] = geometry_bytes
                     read_rows.append(row)
 
-                # trim off query generator key
-                layer_datum_result = trim_layer_datum(layer_datum)
-
                 feature_layer = dict(
                     name=layer_datum['name'], features=read_rows,
-                    layer_datum=layer_datum_result)
+                    layer_datum=layer_datum,
+                    padded_bounds=padded_bounds,
+                )
                 feature_layers.append(feature_layer)
 
             # bail if an error occurred
