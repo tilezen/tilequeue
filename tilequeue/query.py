@@ -1,5 +1,6 @@
 from psycopg2.extras import RealDictCursor
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
+from tilequeue.process import _find_meters_per_pixel
 from tilequeue.tile import coord_to_mercator_bounds
 import sys
 
@@ -64,10 +65,11 @@ def jinja_filter_bbox(bounds, srid=900913):
 
 
 def build_feature_queries(unpadded_bounds, layer_data, zoom):
+    meters_per_pixel = _find_meters_per_pixel(zoom)
     queries_to_execute = []
     for layer_datum in layer_data:
         query_bounds_pad_fn = layer_datum['query_bounds_pad_fn']
-        padded_bounds = query_bounds_pad_fn(unpadded_bounds)
+        padded_bounds = query_bounds_pad_fn(unpadded_bounds, meters_per_pixel)
         query_generator = layer_datum['query_generator']
         query = query_generator(padded_bounds, zoom)
         queries_to_execute.append((layer_datum, query, padded_bounds))

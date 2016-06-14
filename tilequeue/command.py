@@ -14,6 +14,7 @@ from tilequeue.query import jinja_filter_bbox_intersection
 from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
+from tilequeue.tile import bounds_buffer
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
@@ -350,7 +351,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def _bounds_pad_no_buf(bounds):
+def _bounds_pad_no_buf(bounds, meters_per_pixel):
     return bounds
 
 
@@ -376,11 +377,11 @@ def _create_query_bounds_pad_fn(buffer_cfg, layer_name):
     if largest_buf == 0:
         return _bounds_pad_no_buf
 
-    def bounds_pad(bounds):
-        return (
-            bounds[0] - largest_buf, bounds[1] - largest_buf,
-            bounds[2] + largest_buf, bounds[3] + largest_buf,
-        )
+    def bounds_pad(bounds, meters_per_pixel):
+        offset = meters_per_pixel * largest_buf
+        result = bounds_buffer(bounds, offset)
+        return result
+
     return bounds_pad
 
 

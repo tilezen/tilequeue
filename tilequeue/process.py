@@ -130,14 +130,14 @@ def _postprocess_data(
     return feature_layers
 
 
-def _cut_coord(feature_layers, unpadded_bounds, buffer_cfg):
+def _cut_coord(feature_layers, unpadded_bounds, meters_per_pixel, buffer_cfg):
     from tilequeue.command import _create_query_bounds_pad_fn
     cut_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
         padded_bounds_fn = _create_query_bounds_pad_fn(
             buffer_cfg, feature_layer['name'])
-        padded_bounds = padded_bounds_fn(unpadded_bounds)
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
         shape_padded_bounds = geometry.box(*padded_bounds)
         cut_features = []
         for feature in features:
@@ -413,8 +413,10 @@ def process_coord(coord, feature_layers, post_process_data, formats,
         for cut_coord in cut_coords:
             unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
 
+            meters_per_pixel = _find_meters_per_pixel(cut_coord.zoom)
             child_feature_layers = _cut_coord(
-                feature_layers, unpadded_cut_bounds, buffer_cfg)
+                feature_layers, unpadded_cut_bounds, meters_per_pixel,
+                buffer_cfg)
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
                 unpadded_cut_bounds, scale, layers_to_format, buffer_cfg)
