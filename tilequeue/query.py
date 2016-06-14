@@ -67,10 +67,7 @@ def build_feature_queries(unpadded_bounds, layer_data, zoom):
     queries_to_execute = []
     for layer_datum in layer_data:
         query_bounds_pad_fn = layer_datum['query_bounds_pad_fn']
-        if query_bounds_pad_fn:
-            padded_bounds = query_bounds_pad_fn(unpadded_bounds)
-        else:
-            padded_bounds = unpadded_bounds
+        padded_bounds = query_bounds_pad_fn(unpadded_bounds)
         query_generator = layer_datum['query_generator']
         query = query_generator(padded_bounds, zoom)
         queries_to_execute.append((layer_datum, query, padded_bounds))
