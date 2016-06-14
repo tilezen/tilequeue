@@ -78,7 +78,9 @@ def _preprocess_data(feature_layers):
         preproc_feature_layer = dict(
             name=layer_datum['name'],
             layer_datum=layer_datum,
-            features=features)
+            features=features,
+            padded_bounds=padded_bounds,
+        )
         preproc_feature_layers.append(preproc_feature_layer)
 
     return preproc_feature_layers
@@ -153,7 +155,9 @@ def _cut_coord(feature_layers, unpadded_bounds, meters_per_pixel, buffer_cfg):
         cut_feature_layer = dict(
             name=feature_layer['name'],
             layer_datum=feature_layer['layer_datum'],
-            features=cut_features)
+            features=cut_features,
+            padded_bounds=padded_bounds,
+        )
         cut_feature_layers.append(cut_feature_layer)
 
     return cut_feature_layers
@@ -231,7 +235,7 @@ def _simplify_data(
 
         padded_bounds_fn = _create_query_bounds_pad_fn(
             buffer_cfg, feature_layer['name'])
-        padded_bounds = padded_bounds_fn(unpadded_bounds)
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
         layer_padded_bounds = \
             calculate_padded_bounds(clip_factor, padded_bounds)
         area_threshold_pixels = layer_datum['area_threshold']
@@ -292,6 +296,7 @@ def _simplify_data(
             name=feature_layer['name'],
             features=simplified_features,
             layer_datum=layer_datum,
+            padded_bounds=padded_bounds,
         )
         simplified_feature_layers.append(simplified_feature_layer)
 
@@ -352,8 +357,12 @@ def _process_feature_layers(
             sort_fn = resolve(sort_fn_name)
             processed_features = sort_fn(processed_features, coord.zoom)
 
-        feature_layer = dict(name=layer_name, features=processed_features,
-                             layer_datum=layer_datum)
+        feature_layer = dict(
+            name=layer_name,
+            features=processed_features,
+            layer_datum=layer_datum,
+            padded_bounds=feature_layer['padded_bounds'],
+        )
         processed_feature_layers.append(feature_layer)
 
     # post-process data here, before it gets formatted
