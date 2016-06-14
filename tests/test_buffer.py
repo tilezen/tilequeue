@@ -6,7 +6,7 @@ class QueryBoundsTest(unittest.TestCase):
     def _call_fut(self, bounds, layer_name, buffer_cfg):
         from tilequeue.command import _create_query_bounds_pad_fn
         fn = _create_query_bounds_pad_fn(buffer_cfg, layer_name)
-        result = fn(bounds)
+        result = fn(bounds, 1)
         return result
 
     def test_no_bounds(self):
