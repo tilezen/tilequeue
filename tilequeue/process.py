@@ -3,6 +3,8 @@ from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
+from tilequeue.tile import calc_meters_per_pixel_area
+from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import tolerance_for_zoom
 from tilequeue.transform import calculate_padded_bounds
@@ -132,14 +134,15 @@ def _postprocess_data(
     return feature_layers
 
 
-def _cut_coord(feature_layers, unpadded_bounds, meters_per_pixel, buffer_cfg):
+def _cut_coord(
+        feature_layers, unpadded_bounds, meters_per_pixel_dim, buffer_cfg):
     from tilequeue.command import _create_query_bounds_pad_fn
     cut_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
         padded_bounds_fn = _create_query_bounds_pad_fn(
             buffer_cfg, feature_layer['name'])
-        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel_dim)
         shape_padded_bounds = geometry.box(*padded_bounds)
         cut_features = []
         for feature in features:
@@ -184,18 +187,6 @@ def _make_valid_if_necessary(shape):
     return shape
 
 
-# radius from http://wiki.openstreetmap.org/wiki/Zoom_levels
-earth_equatorial_radius_meters = 6372798.2
-earth_equatorial_circumference_meters = 40041472.01586051
-
-
-def _find_meters_per_pixel(zoom):
-    meters_in_dimension = (earth_equatorial_circumference_meters /
-                           (2 ** (zoom + 8)))
-    meters_per_pixel = meters_in_dimension * meters_in_dimension
-    return meters_per_pixel
-
-
 # returns none if the shape is not visible given the number of meters
 # per pixel. for multipolygons, will filter out any subpolygons that
 # should not be visible, which means that the shape could have been
@@ -221,7 +212,8 @@ def _visible_shape(shape, area_threshold_meters):
 
 
 def _simplify_data(
-        feature_layers, unpadded_bounds, zoom, meters_per_pixel, buffer_cfg):
+        feature_layers, unpadded_bounds, zoom, meters_per_pixel_dim,
+        meters_per_pixel_area, buffer_cfg):
     from tilequeue.command import _create_query_bounds_pad_fn
     tolerance = tolerance_for_zoom(zoom)
 
@@ -235,11 +227,11 @@ def _simplify_data(
 
         padded_bounds_fn = _create_query_bounds_pad_fn(
             buffer_cfg, feature_layer['name'])
-        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel_dim)
         layer_padded_bounds = \
             calculate_padded_bounds(clip_factor, padded_bounds)
         area_threshold_pixels = layer_datum['area_threshold']
-        area_threshold_meters = meters_per_pixel * area_threshold_pixels
+        area_threshold_meters = meters_per_pixel_area * area_threshold_pixels
 
         # The logic behind simplifying before intersecting rather than the
         # other way around is extensively explained here:
@@ -305,12 +297,12 @@ def _simplify_data(
 
 def _create_formatted_tile(
         feature_layers, format, scale, unpadded_bounds, unpadded_bounds_lnglat,
-        coord, layer, meters_per_pixel, buffer_cfg):
+        coord, layer, meters_per_pixel_dim, buffer_cfg):
 
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
         feature_layers, format, scale, unpadded_bounds, coord,
-        meters_per_pixel, buffer_cfg)
+        meters_per_pixel_dim, buffer_cfg)
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
@@ -369,12 +361,13 @@ def _process_feature_layers(
     processed_feature_layers = _postprocess_data(
         processed_feature_layers, post_process_data, coord, unpadded_bounds)
 
-    meters_per_pixel = _find_meters_per_pixel(coord.zoom)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
+    meters_per_pixel_area = calc_meters_per_pixel_area(coord.zoom)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
         processed_feature_layers, unpadded_bounds, coord.zoom,
-        meters_per_pixel, buffer_cfg)
+        meters_per_pixel_dim, meters_per_pixel_area, buffer_cfg)
 
     # topojson formatter expects bounds to be in lnglat
     unpadded_bounds_lnglat = (
@@ -388,7 +381,8 @@ def _process_feature_layers(
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
-            unpadded_bounds_lnglat, coord, layer, meters_per_pixel, buffer_cfg)
+            unpadded_bounds_lnglat, coord, layer, meters_per_pixel_dim,
+            buffer_cfg)
         formatted_tiles.append(formatted_tile)
 
     # this assumes that we only store single layers, and no combinations
@@ -401,8 +395,8 @@ def _process_feature_layers(
                 for format in formats:
                     formatted_tile = _create_formatted_tile(
                         pruned_feature_layers, format, scale, unpadded_bounds,
-                        unpadded_bounds_lnglat, coord, layer, meters_per_pixel,
-                        buffer_cfg)
+                        unpadded_bounds_lnglat, coord, layer,
+                        meters_per_pixel_dim, buffer_cfg)
                     formatted_tiles.append(formatted_tile)
                     break
 
@@ -422,9 +416,9 @@ def process_coord(coord, feature_layers, post_process_data, formats,
         for cut_coord in cut_coords:
             unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
 
-            meters_per_pixel = _find_meters_per_pixel(cut_coord.zoom)
+            meters_per_pixel_dim = calc_meters_per_pixel_dim(cut_coord.zoom)
             child_feature_layers = _cut_coord(
-                feature_layers, unpadded_cut_bounds, meters_per_pixel,
+                feature_layers, unpadded_cut_bounds, meters_per_pixel_dim,
                 buffer_cfg)
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,

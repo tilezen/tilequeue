@@ -308,3 +308,19 @@ def bounds_buffer(bounds, buf_size):
         bounds[0] - buf_size, bounds[1] - buf_size,
         bounds[2] + buf_size, bounds[3] + buf_size,
     )
+
+# radius from http://wiki.openstreetmap.org/wiki/Zoom_levels
+earth_equatorial_radius_meters = 6372798.2
+earth_equatorial_circumference_meters = 40041472.01586051
+
+
+def calc_meters_per_pixel_dim(zoom):
+    meters_in_dimension = (earth_equatorial_circumference_meters /
+                           (2 ** (zoom + 8)))
+    return meters_in_dimension
+
+
+def calc_meters_per_pixel_area(zoom):
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(zoom)
+    meters_per_pixel_area = meters_per_pixel_dim * meters_per_pixel_dim
+    return meters_per_pixel_area

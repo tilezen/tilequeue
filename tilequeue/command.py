@@ -351,7 +351,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def _bounds_pad_no_buf(bounds, meters_per_pixel):
+def _bounds_pad_no_buf(bounds, meters_per_pixel_dim):
     return bounds
 
 
@@ -377,8 +377,8 @@ def _create_query_bounds_pad_fn(buffer_cfg, layer_name):
     if largest_buf == 0:
         return _bounds_pad_no_buf
 
-    def bounds_pad(bounds, meters_per_pixel):
-        offset = meters_per_pixel * largest_buf
+    def bounds_pad(bounds, meters_per_pixel_dim):
+        offset = meters_per_pixel_dim * largest_buf
         result = bounds_buffer(bounds, offset)
         return result
 

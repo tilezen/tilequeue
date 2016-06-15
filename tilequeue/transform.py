@@ -60,7 +60,7 @@ def _noop(shape):
 
 
 def calc_buffered_bounds(
-        format, bounds, meters_per_pixel, layer_name, geometry_type,
+        format, bounds, meters_per_pixel_dim, layer_name, geometry_type,
         buffer_cfg):
     """
     Calculate the buffered bounds per format per layer based on config.
@@ -83,14 +83,15 @@ def calc_buffered_bounds(
         if layer_geom_pixels is not None:
             assert isinstance(layer_geom_pixels, Number)
             result = bounds_buffer(
-                bounds, meters_per_pixel * layer_geom_pixels)
+                bounds, meters_per_pixel_dim * layer_geom_pixels)
             return result
 
     by_geometry_pixels = format_buffer_cfg.get('geometry', {}).get(
         geometry_type)
     if by_geometry_pixels is not None:
         assert isinstance(by_geometry_pixels, Number)
-        result = bounds_buffer(bounds, meters_per_pixel * by_geometry_pixels)
+        result = bounds_buffer(
+            bounds, meters_per_pixel_dim * by_geometry_pixels)
         return result
 
     return bounds
@@ -98,7 +99,7 @@ def calc_buffered_bounds(
 
 def transform_feature_layers_shape(
         feature_layers, format, scale, unpadded_bounds, coord,
-        meters_per_pixel, buffer_cfg):
+        meters_per_pixel_dim, buffer_cfg):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_lnglat)
     elif format == vtm_format:
@@ -124,7 +125,7 @@ def transform_feature_layers_shape(
                 continue
 
             buffer_padded_bounds = calc_buffered_bounds(
-                format, unpadded_bounds, meters_per_pixel, layer_name,
+                format, unpadded_bounds, meters_per_pixel_dim, layer_name,
                 shape.type, buffer_cfg)
             shape_buf_bounds = geometry.box(*buffer_padded_bounds)
 

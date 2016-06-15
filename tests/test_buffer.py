@@ -223,3 +223,50 @@ class ClipBoundsTest(unittest.TestCase):
             bounds, ext, layer_name, 'line', meters_per_pixel, buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
         self.assertEquals(result, exp_bounds)
+
+
+class MetersPerPixelDimTest(unittest.TestCase):
+
+    def _call_fut(self, zoom):
+        from tilequeue.tile import calc_meters_per_pixel_dim
+        result = calc_meters_per_pixel_dim(zoom)
+        return result
+
+    def test_z10(self):
+        meters_per_pixel_dim = self._call_fut(10)
+        self.assertAlmostEquals(152.746093811, meters_per_pixel_dim)
+
+    def test_compare_z10_bounds(self):
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import deserialize_coord
+
+        coord = deserialize_coord('10/100/100')
+        merc_bounds = coord_to_mercator_bounds(coord)
+        tile_meters_wide = merc_bounds[2] - merc_bounds[0]
+        exp_meters_per_pixel_dim = tile_meters_wide / 256
+
+        act_meters_per_pixel_dim = self._call_fut(10)
+        self.assertAlmostEquals(
+            exp_meters_per_pixel_dim, act_meters_per_pixel_dim, places=0)
+
+
+class MetersPerPixelAreaTest(unittest.TestCase):
+
+    def _call_fut(self, zoom):
+        from tilequeue.tile import calc_meters_per_pixel_area
+        result = calc_meters_per_pixel_area(zoom)
+        return result
+
+    def test_z10(self):
+        meters_per_pixel_area = self._call_fut(10)
+        self.assertAlmostEquals(23331.3691744, meters_per_pixel_area)
+
+    def test_z10_compare_with_dim(self):
+        from tilequeue.tile import calc_meters_per_pixel_dim
+
+        meters_per_pixel_dim = calc_meters_per_pixel_dim(10)
+        meters_per_pixel_area = self._call_fut(10)
+        exp_meters_per_pixel_area = (
+            meters_per_pixel_dim * meters_per_pixel_dim)
+        self.assertAlmostEquals(
+            exp_meters_per_pixel_area, meters_per_pixel_area)
