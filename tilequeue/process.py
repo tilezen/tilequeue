@@ -4,7 +4,6 @@ from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
 from tilequeue.tile import coord_to_mercator_bounds
-from tilequeue.tile import pad_bounds_for_zoom
 from tilequeue.tile import tolerance_for_zoom
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.transform import mercator_point_to_lnglat
@@ -29,12 +28,14 @@ def resolve_transform_fns(fn_dotted_names):
     return map(resolve, fn_dotted_names)
 
 
-def _preprocess_data(feature_layers, shape_padded_bounds):
+def _preprocess_data(feature_layers):
     preproc_feature_layers = []
 
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         geometry_types = layer_datum['geometry_types']
+        padded_bounds = feature_layer['padded_bounds']
+        shape_padded_bounds = geometry.box(*padded_bounds)
 
         features = []
         for row in feature_layer['features']:
@@ -77,7 +78,9 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
         preproc_feature_layer = dict(
             name=layer_datum['name'],
             layer_datum=layer_datum,
-            features=features)
+            features=features,
+            padded_bounds=padded_bounds,
+        )
         preproc_feature_layers.append(preproc_feature_layer)
 
     return preproc_feature_layers
@@ -89,7 +92,6 @@ Context = namedtuple('Context',
                      ['feature_layers',    # the feature layers list
                       'tile_coord',        # the original tile coordinate obj
                       'unpadded_bounds',   # the latlon bounds of the tile
-                      'padded_bounds',     # the padded bounds of the tile
                       'params',            # user configuration parameters
                       'resources'])        # resources declared in config
 
@@ -99,8 +101,8 @@ Context = namedtuple('Context',
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
-def _postprocess_data(feature_layers, post_process_data,
-                      tile_coord, unpadded_bounds, padded_bounds):
+def _postprocess_data(
+        feature_layers, post_process_data, tile_coord, unpadded_bounds):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
@@ -109,7 +111,6 @@ def _postprocess_data(feature_layers, post_process_data,
             feature_layers=feature_layers,
             tile_coord=tile_coord,
             unpadded_bounds=unpadded_bounds,
-            padded_bounds=padded_bounds,
             params=step['params'],
             resources=step['resources'])
 
@@ -131,10 +132,15 @@ def _postprocess_data(feature_layers, post_process_data,
     return feature_layers
 
 
-def _cut_coord(feature_layers, shape_padded_bounds):
+def _cut_coord(feature_layers, unpadded_bounds, meters_per_pixel, buffer_cfg):
+    from tilequeue.command import _create_query_bounds_pad_fn
     cut_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
+        padded_bounds_fn = _create_query_bounds_pad_fn(
+            buffer_cfg, feature_layer['name'])
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
+        shape_padded_bounds = geometry.box(*padded_bounds)
         cut_features = []
         for feature in features:
             shape, props, feature_id = feature
@@ -149,7 +155,9 @@ def _cut_coord(feature_layers, shape_padded_bounds):
         cut_feature_layer = dict(
             name=feature_layer['name'],
             layer_datum=feature_layer['layer_datum'],
-            features=cut_features)
+            features=cut_features,
+            padded_bounds=padded_bounds,
+        )
         cut_feature_layers.append(cut_feature_layer)
 
     return cut_feature_layers
@@ -212,10 +220,10 @@ def _visible_shape(shape, area_threshold_meters):
         return shape
 
 
-def _simplify_data(feature_layers, bounds, zoom):
+def _simplify_data(
+        feature_layers, unpadded_bounds, zoom, meters_per_pixel, buffer_cfg):
+    from tilequeue.command import _create_query_bounds_pad_fn
     tolerance = tolerance_for_zoom(zoom)
-
-    meters_per_pixel = _find_meters_per_pixel(zoom)
 
     simplified_feature_layers = []
     for feature_layer in feature_layers:
@@ -224,8 +232,12 @@ def _simplify_data(feature_layers, bounds, zoom):
         layer_datum = feature_layer['layer_datum']
         is_clipped = layer_datum['is_clipped']
         clip_factor = layer_datum.get('clip_factor', 1.0)
+
+        padded_bounds_fn = _create_query_bounds_pad_fn(
+            buffer_cfg, feature_layer['name'])
+        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel)
         layer_padded_bounds = \
-            calculate_padded_bounds(clip_factor, bounds)
+            calculate_padded_bounds(clip_factor, padded_bounds)
         area_threshold_pixels = layer_datum['area_threshold']
         area_threshold_meters = meters_per_pixel * area_threshold_pixels
 
@@ -284,6 +296,7 @@ def _simplify_data(feature_layers, bounds, zoom):
             name=feature_layer['name'],
             features=simplified_features,
             layer_datum=layer_datum,
+            padded_bounds=padded_bounds,
         )
         simplified_feature_layers.append(simplified_feature_layer)
 
@@ -291,12 +304,13 @@ def _simplify_data(feature_layers, bounds, zoom):
 
 
 def _create_formatted_tile(
-        feature_layers, format, scale, unpadded_bounds,
-        padded_bounds, unpadded_bounds_lnglat, coord, layer):
+        feature_layers, format, scale, unpadded_bounds, unpadded_bounds_lnglat,
+        coord, layer, meters_per_pixel, buffer_cfg):
+
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
-        feature_layers, format, scale, unpadded_bounds,
-        padded_bounds, coord)
+        feature_layers, format, scale, unpadded_bounds, coord,
+        meters_per_pixel, buffer_cfg)
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
@@ -308,9 +322,10 @@ def _create_formatted_tile(
     return formatted_tile
 
 
-def _process_feature_layers(feature_layers, coord, post_process_data,
-                            formats, unpadded_bounds, padded_bounds,
-                            scale, layers_to_format):
+def _process_feature_layers(
+        feature_layers, coord, post_process_data, formats, unpadded_bounds,
+        scale, layers_to_format, buffer_cfg):
+
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -342,18 +357,24 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
             sort_fn = resolve(sort_fn_name)
             processed_features = sort_fn(processed_features, coord.zoom)
 
-        feature_layer = dict(name=layer_name, features=processed_features,
-                             layer_datum=layer_datum)
+        feature_layer = dict(
+            name=layer_name,
+            features=processed_features,
+            layer_datum=layer_datum,
+            padded_bounds=feature_layer['padded_bounds'],
+        )
         processed_feature_layers.append(feature_layer)
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord, unpadded_bounds,
-        padded_bounds)
+        processed_feature_layers, post_process_data, coord, unpadded_bounds)
+
+    meters_per_pixel = _find_meters_per_pixel(coord.zoom)
 
     # after post processing, perform simplification and clipping
     processed_feature_layers = _simplify_data(
-        processed_feature_layers, padded_bounds, coord.zoom)
+        processed_feature_layers, unpadded_bounds, coord.zoom,
+        meters_per_pixel, buffer_cfg)
 
     # topojson formatter expects bounds to be in lnglat
     unpadded_bounds_lnglat = (
@@ -367,7 +388,7 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
-            padded_bounds, unpadded_bounds_lnglat, coord, layer)
+            unpadded_bounds_lnglat, coord, layer, meters_per_pixel, buffer_cfg)
         formatted_tiles.append(formatted_tile)
 
     # this assumes that we only store single layers, and no combinations
@@ -380,7 +401,8 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
                 for format in formats:
                     formatted_tile = _create_formatted_tile(
                         pruned_feature_layers, format, scale, unpadded_bounds,
-                        padded_bounds, unpadded_bounds_lnglat, coord, layer)
+                        unpadded_bounds_lnglat, coord, layer, meters_per_pixel,
+                        buffer_cfg)
                     formatted_tiles.append(formatted_tile)
                     break
 
@@ -391,29 +413,26 @@ def _process_feature_layers(feature_layers, coord, post_process_data,
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
-                  unpadded_bounds, padded_bounds, cut_coords, layers_to_format,
-                  scale=4096):
-    shape_padded_bounds = geometry.box(*padded_bounds)
-    feature_layers = _preprocess_data(feature_layers, shape_padded_bounds)
+                  unpadded_bounds, cut_coords, layers_to_format,
+                  buffer_cfg, scale=4096):
+    feature_layers = _preprocess_data(feature_layers)
 
     children_formatted_tiles = []
     if cut_coords:
         for cut_coord in cut_coords:
             unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
-            padded_cut_bounds = pad_bounds_for_zoom(unpadded_cut_bounds,
-                                                    cut_coord.zoom)
 
-            shape_cut_padded_bounds = geometry.box(*padded_cut_bounds)
-            child_feature_layers = _cut_coord(feature_layers,
-                                              shape_cut_padded_bounds)
+            meters_per_pixel = _find_meters_per_pixel(cut_coord.zoom)
+            child_feature_layers = _cut_coord(
+                feature_layers, unpadded_cut_bounds, meters_per_pixel,
+                buffer_cfg)
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
-                unpadded_cut_bounds, padded_cut_bounds, scale,
-                layers_to_format)
+                unpadded_cut_bounds, scale, layers_to_format, buffer_cfg)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        padded_bounds, scale, layers_to_format)
+        scale, layers_to_format, buffer_cfg)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles

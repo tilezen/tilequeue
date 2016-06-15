@@ -303,12 +303,8 @@ def tolerance_for_zoom(zoom):
     return tolerance
 
 
-def pad_bounds_for_zoom(bounds, zoom):
-    minx, miny, maxx, maxy = bounds
-    tolerance = tolerance_for_zoom(zoom)
-    padding = 5 * tolerance
-    padded_bounds = (
-        minx - padding, miny - padding,
-        maxx + padding, maxy + padding,
+def bounds_buffer(bounds, buf_size):
+    return (
+        bounds[0] - buf_size, bounds[1] - buf_size,
+        bounds[2] + buf_size, bounds[3] + buf_size,
     )
-    return padded_bounds

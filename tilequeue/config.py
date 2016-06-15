@@ -80,6 +80,7 @@ class Configuration(object):
         self.template_path = process_cfg['template-path']
         self.reload_templates = process_cfg['reload-templates']
         self.output_formats = process_cfg['formats']
+        self.buffer_cfg = process_cfg['buffer']
 
         layers_to_format_cfg = process_cfg.get('layers-to-format')
         layers_to_format = []
@@ -171,6 +172,7 @@ def default_yml_config():
             'reload-templates': False,
             'formats': ['json'],
             'layers-to-format': [],
+            'buffer': {},
         },
         'logging': {
             'config': None
