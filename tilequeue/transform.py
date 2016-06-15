@@ -120,6 +120,9 @@ def transform_feature_layers_shape(
 
         for shape, props, feature_id in feature_layer['features']:
 
+            if shape.is_empty or shape.type == 'GeometryCollection':
+                continue
+
             buffer_padded_bounds = calc_buffered_bounds(
                 format, unpadded_bounds, meters_per_pixel, layer_name,
                 shape.type, buffer_cfg)
