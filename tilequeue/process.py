@@ -3,11 +3,8 @@ from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
-from tilequeue.tile import calc_meters_per_pixel_area
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
-from tilequeue.tile import tolerance_for_zoom
-from tilequeue.transform import calculate_padded_bounds
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
 from zope.dottedname.resolve import resolve
@@ -90,12 +87,14 @@ def _preprocess_data(feature_layers):
 
 # shared context for all the post-processor functions. this single object can
 # be passed around rather than needing all the parameters to be explicit.
-Context = namedtuple('Context',
-                     ['feature_layers',    # the feature layers list
-                      'tile_coord',        # the original tile coordinate obj
-                      'unpadded_bounds',   # the latlon bounds of the tile
-                      'params',            # user configuration parameters
-                      'resources'])        # resources declared in config
+Context = namedtuple('Context', [
+    'feature_layers',    # the feature layers list
+    'tile_coord',        # the original tile coordinate obj
+    'unpadded_bounds',   # the latlon bounds of the tile
+    'params',            # user configuration parameters
+    'resources',         # resources declared in config
+    'buffer_cfg',        # format buffer config
+])
 
 
 # post-process all the layers simultaneously, which allows new
@@ -104,7 +103,8 @@ Context = namedtuple('Context',
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(
-        feature_layers, post_process_data, tile_coord, unpadded_bounds):
+        feature_layers, post_process_data, tile_coord, unpadded_bounds,
+        buffer_cfg):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
@@ -114,7 +114,9 @@ def _postprocess_data(
             tile_coord=tile_coord,
             unpadded_bounds=unpadded_bounds,
             params=step['params'],
-            resources=step['resources'])
+            resources=step['resources'],
+            buffer_cfg=buffer_cfg,
+        )
 
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
@@ -211,90 +213,6 @@ def _visible_shape(shape, area_threshold_meters):
         return shape
 
 
-def _simplify_data(
-        feature_layers, unpadded_bounds, zoom, meters_per_pixel_dim,
-        meters_per_pixel_area, buffer_cfg):
-    from tilequeue.command import _create_query_bounds_pad_fn
-    tolerance = tolerance_for_zoom(zoom)
-
-    simplified_feature_layers = []
-    for feature_layer in feature_layers:
-        simplified_features = []
-
-        layer_datum = feature_layer['layer_datum']
-        is_clipped = layer_datum['is_clipped']
-        clip_factor = layer_datum.get('clip_factor', 1.0)
-
-        padded_bounds_fn = _create_query_bounds_pad_fn(
-            buffer_cfg, feature_layer['name'])
-        padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel_dim)
-        layer_padded_bounds = \
-            calculate_padded_bounds(clip_factor, padded_bounds)
-        area_threshold_pixels = layer_datum['area_threshold']
-        area_threshold_meters = meters_per_pixel_area * area_threshold_pixels
-
-        # The logic behind simplifying before intersecting rather than the
-        # other way around is extensively explained here:
-        # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
-        simplify_before_intersect = layer_datum['simplify_before_intersect']
-
-        # perform any simplification as necessary
-        simplify_start = layer_datum['simplify_start']
-        simplify_until = 16
-        should_simplify = simplify_start <= zoom < simplify_until
-
-        for shape, props, feature_id in feature_layer['features']:
-
-            if should_simplify and simplify_before_intersect:
-                # To reduce the performance hit of simplifying potentially huge
-                # geometries to extract only a small portion of them when
-                # cutting out the actual tile, we cut out a slightly larger
-                # bounding box first. See here for an explanation:
-                # https://github.com/mapzen/TileStache/blob/d52e54975f6ec2d11f63db13934047e7cd5fe588/TileStache/Goodies/VecTiles/server.py#L509,L527
-
-                min_x, min_y, max_x, max_y = layer_padded_bounds.bounds
-                gutter_bbox_size = (max_x - min_x) * 0.1
-                gutter_bbox = geometry.box(
-                    min_x - gutter_bbox_size,
-                    min_y - gutter_bbox_size,
-                    max_x + gutter_bbox_size,
-                    max_y + gutter_bbox_size)
-                clipped_shape = shape.intersection(gutter_bbox)
-                simplified_shape = clipped_shape.simplify(
-                    tolerance, preserve_topology=True)
-                shape = _make_valid_if_necessary(simplified_shape)
-
-            if is_clipped:
-                shape = shape.intersection(layer_padded_bounds)
-
-            if should_simplify and not simplify_before_intersect:
-                simplified_shape = shape.simplify(tolerance,
-                                                  preserve_topology=True)
-                shape = _make_valid_if_necessary(simplified_shape)
-
-            # this could alter multipolygon geometries
-            if zoom < simplify_until:
-                shape = _visible_shape(shape, area_threshold_meters)
-
-            # don't keep features which have been simplified to empty or
-            # None.
-            if shape is None or shape.is_empty:
-                continue
-
-            simplified_feature = shape, props, feature_id
-            simplified_features.append(simplified_feature)
-
-        simplified_feature_layer = dict(
-            name=feature_layer['name'],
-            features=simplified_features,
-            layer_datum=layer_datum,
-            padded_bounds=padded_bounds,
-        )
-        simplified_feature_layers.append(simplified_feature_layer)
-
-    return simplified_feature_layers
-
-
 def _create_formatted_tile(
         feature_layers, format, scale, unpadded_bounds, unpadded_bounds_lnglat,
         coord, layer, meters_per_pixel_dim, buffer_cfg):
@@ -359,15 +277,10 @@ def _process_feature_layers(
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord, unpadded_bounds)
+        processed_feature_layers, post_process_data, coord, unpadded_bounds,
+        buffer_cfg)
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
-    meters_per_pixel_area = calc_meters_per_pixel_area(coord.zoom)
-
-    # after post processing, perform simplification and clipping
-    processed_feature_layers = _simplify_data(
-        processed_feature_layers, unpadded_bounds, coord.zoom,
-        meters_per_pixel_dim, meters_per_pixel_area, buffer_cfg)
 
     # topojson formatter expects bounds to be in lnglat
     unpadded_bounds_lnglat = (
