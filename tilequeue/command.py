@@ -4,6 +4,7 @@ from itertools import chain
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
+from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
@@ -14,7 +15,6 @@ from tilequeue.query import jinja_filter_bbox_intersection
 from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
-from tilequeue.tile import bounds_buffer
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
@@ -351,40 +351,6 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def _bounds_pad_no_buf(bounds, meters_per_pixel_dim):
-    return bounds
-
-
-def _create_query_bounds_pad_fn(buffer_cfg, layer_name):
-    # because we aren't changing the queries to have different bounds
-    # specifiers for each geometry type, we take the largest buffer
-    # size and use that as the bounds.
-
-    if not buffer_cfg:
-        return _bounds_pad_no_buf
-
-    largest_buf = 0
-    for format_ext, format_cfg in buffer_cfg.items():
-        format_layer_cfg = format_cfg.get('layer', {}).get(layer_name)
-        format_geometry_cfg = format_cfg.get('geometry', {})
-        if format_layer_cfg:
-            for geometry_type, buffer_size in format_layer_cfg.items():
-                largest_buf = max(largest_buf, buffer_size)
-        if format_geometry_cfg:
-            for geometry_type, buffer_size in format_geometry_cfg.items():
-                largest_buf = max(largest_buf, buffer_size)
-
-    if largest_buf == 0:
-        return _bounds_pad_no_buf
-
-    def bounds_pad(bounds, meters_per_pixel_dim):
-        offset = meters_per_pixel_dim * largest_buf
-        result = bounds_buffer(bounds, offset)
-        return result
-
-    return bounds_pad
-
-
 def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
                      cfg_path):
     if reload_templates:
@@ -426,7 +392,7 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
                 'simplify_before_intersect', False),
             simplify_start=layer_config.get('simplify_start', 0),
             area_threshold=area_threshold,
-            query_bounds_pad_fn=_create_query_bounds_pad_fn(
+            query_bounds_pad_fn=create_query_bounds_pad_fn(
                 buffer_cfg, layer_name),
         )
         layer_data.append(layer_datum)

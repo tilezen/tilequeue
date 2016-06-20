@@ -3,8 +3,10 @@ from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
+from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
+from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
 from zope.dottedname.resolve import resolve
@@ -34,7 +36,6 @@ def _preprocess_data(feature_layers):
         layer_datum = feature_layer['layer_datum']
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
-        shape_padded_bounds = geometry.box(*padded_bounds)
 
         features = []
         for row in feature_layer['features']:
@@ -56,6 +57,9 @@ def _preprocess_data(feature_layers):
             # any extra features
             # the formatter specific transformations will take
             # care of any additional filtering
+            geom_type_bounds = padded_bounds[
+                normalize_geometry_type(shape.type)]
+            shape_padded_bounds = geometry.box(*geom_type_bounds)
             if not shape_padded_bounds.intersects(shape):
                 continue
 
@@ -93,7 +97,6 @@ Context = namedtuple('Context', [
     'unpadded_bounds',   # the latlon bounds of the tile
     'params',            # user configuration parameters
     'resources',         # resources declared in config
-    'buffer_cfg',        # format buffer config
 ])
 
 
@@ -103,8 +106,7 @@ Context = namedtuple('Context', [
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(
-        feature_layers, post_process_data, tile_coord, unpadded_bounds,
-        buffer_cfg):
+        feature_layers, post_process_data, tile_coord, unpadded_bounds):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
@@ -115,7 +117,6 @@ def _postprocess_data(
             unpadded_bounds=unpadded_bounds,
             params=step['params'],
             resources=step['resources'],
-            buffer_cfg=buffer_cfg,
         )
 
         layer = fn(ctx)
@@ -138,18 +139,20 @@ def _postprocess_data(
 
 def _cut_coord(
         feature_layers, unpadded_bounds, meters_per_pixel_dim, buffer_cfg):
-    from tilequeue.command import _create_query_bounds_pad_fn
     cut_feature_layers = []
     for feature_layer in feature_layers:
         features = feature_layer['features']
-        padded_bounds_fn = _create_query_bounds_pad_fn(
+        padded_bounds_fn = create_query_bounds_pad_fn(
             buffer_cfg, feature_layer['name'])
         padded_bounds = padded_bounds_fn(unpadded_bounds, meters_per_pixel_dim)
-        shape_padded_bounds = geometry.box(*padded_bounds)
+
         cut_features = []
         for feature in features:
             shape, props, feature_id = feature
 
+            geom_type_bounds = padded_bounds[
+                normalize_geometry_type(shape.type)]
+            shape_padded_bounds = geometry.box(*geom_type_bounds)
             if not shape_padded_bounds.intersects(shape):
                 continue
             props_copy = props.copy()
@@ -277,8 +280,7 @@ def _process_feature_layers(
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord, unpadded_bounds,
-        buffer_cfg)
+        processed_feature_layers, post_process_data, coord, unpadded_bounds)
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
 

@@ -1,3 +1,4 @@
+from tilequeue.tile import bounds_buffer
 from yaml import load
 
 
@@ -211,3 +212,49 @@ def make_config_from_argparse(config_path, opencfg=open):
         yml_data = load(config_fp.read())
         cfg = merge_cfg(cfg, yml_data)
     return Configuration(cfg)
+
+
+def _bounds_pad_no_buf(bounds, meters_per_pixel_dim):
+    return dict(
+        point=bounds,
+        line=bounds,
+        polygon=bounds,
+    )
+
+
+def create_query_bounds_pad_fn(buffer_cfg, layer_name):
+
+    if not buffer_cfg:
+        return _bounds_pad_no_buf
+
+    buf_by_type = dict(
+        point=0,
+        line=0,
+        polygon=0,
+    )
+
+    for format_ext, format_cfg in buffer_cfg.items():
+        format_layer_cfg = format_cfg.get('layer', {}).get(layer_name)
+        format_geometry_cfg = format_cfg.get('geometry', {})
+        if format_layer_cfg:
+            for geometry_type, buffer_size in format_layer_cfg.items():
+                buf_by_type[geometry_type] = max(
+                    buf_by_type[geometry_type], buffer_size)
+        if format_geometry_cfg:
+            for geometry_type, buffer_size in format_geometry_cfg.items():
+                buf_by_type[geometry_type] = max(
+                    buf_by_type[geometry_type], buffer_size)
+
+    if (buf_by_type['point'] ==
+            buf_by_type['line'] ==
+            buf_by_type['polygon'] == 0):
+        return _bounds_pad_no_buf
+
+    def bounds_pad(bounds, meters_per_pixel_dim):
+        buffered_by_type = {}
+        for geometry_type in ('point', 'line', 'polygon'):
+            offset = meters_per_pixel_dim * buf_by_type[geometry_type]
+            buffered_by_type[geometry_type] = bounds_buffer(bounds, offset)
+        return buffered_by_type
+
+    return bounds_pad

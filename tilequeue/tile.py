@@ -324,3 +324,20 @@ def calc_meters_per_pixel_area(zoom):
     meters_per_pixel_dim = calc_meters_per_pixel_dim(zoom)
     meters_per_pixel_area = meters_per_pixel_dim * meters_per_pixel_dim
     return meters_per_pixel_area
+
+
+_geom_type_lookup = {
+    'Point': 'point',
+    'MultiPoint': 'point',
+    'LineString': 'line',
+    'MultiLineString': 'line',
+    'Polygon': 'polygon',
+    'MultiPolygon': 'polygon',
+}
+
+
+def normalize_geometry_type(geom_type):
+    result = _geom_type_lookup.get(geom_type)
+    assert result, \
+        'normalize_geometry_type: unknown geometry %s' % geom_type
+    return result
