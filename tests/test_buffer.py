@@ -4,21 +4,21 @@ import unittest
 class QueryBoundsTest(unittest.TestCase):
 
     def _call_fut(self, bounds, layer_name, buffer_cfg):
-        from tilequeue.command import _create_query_bounds_pad_fn
-        fn = _create_query_bounds_pad_fn(buffer_cfg, layer_name)
+        from tilequeue.config import create_query_bounds_pad_fn
+        fn = create_query_bounds_pad_fn(buffer_cfg, layer_name)
         result = fn(bounds, 1)
         return result
 
     def test_no_bounds(self):
         bounds = (0, 0, 1, 1)
         result = self._call_fut(bounds, 'foo', {})
-        self.assertEquals(bounds, result)
+        self.assertEquals(bounds, result['point'])
 
     def test_layer_not_configured(self):
         bounds = (0, 0, 1, 1)
         buffer_cfg = dict(foo={})
         result = self._call_fut(bounds, 'baz', buffer_cfg)
-        self.assertEquals(bounds, result)
+        self.assertEquals(bounds, result['point'])
 
     def test_layer_configured(self):
         bounds = (1, 1, 2, 2)
@@ -33,7 +33,7 @@ class QueryBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEquals(result, exp_bounds)
+        self.assertEquals(result['point'], exp_bounds)
 
     def test_geometry_configured(self):
         bounds = (1, 1, 2, 2)
@@ -46,7 +46,7 @@ class QueryBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEquals(result, exp_bounds)
+        self.assertEquals(result['line'], exp_bounds)
 
     def test_layer_trumps_geometry(self):
         bounds = (2, 2, 3, 3)
@@ -58,15 +58,15 @@ class QueryBoundsTest(unittest.TestCase):
                     }
                 },
                 'geometry': {
-                    'line': 1
+                    'polygon': 1
                 }
             }
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
-        self.assertEquals(result, exp_bounds)
+        self.assertEquals(result['polygon'], exp_bounds)
 
-    def test_max_value_used(self):
+    def test_multiple_bounds(self):
         bounds = (2, 2, 3, 3)
         buffer_cfg = {
             'fmt': {
@@ -79,8 +79,12 @@ class QueryBoundsTest(unittest.TestCase):
             }
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
-        exp_bounds = (0, 0, 5, 5)
-        self.assertEquals(result, exp_bounds)
+
+        exp_bounds_poly = (0, 0, 5, 5)
+        self.assertEquals(result['polygon'], exp_bounds_poly)
+
+        exp_bounds_point = (1, 1, 4, 4)
+        self.assertEquals(result['point'], exp_bounds_point)
 
 
 class ClipBoundsTest(unittest.TestCase):
@@ -97,13 +101,13 @@ class ClipBoundsTest(unittest.TestCase):
 
     def test_empty(self):
         bounds = (1, 1, 2, 2)
-        result = self._call_fut(bounds, 'foo', 'bar', 'point', 1, {})
+        result = self._call_fut(bounds, 'foo', 'bar', 'Point', 1, {})
         self.assertEquals(result, bounds)
 
     def test_diff_format(self):
         bounds = (1, 1, 2, 2)
         ext = 'quux'
-        result = self._call_fut(bounds, ext, 'bar', 'point', 1, dict(foo=42))
+        result = self._call_fut(bounds, ext, 'bar', 'Point', 1, dict(foo=42))
         self.assertEquals(result, bounds)
 
     def test_layer_match(self):
@@ -119,7 +123,8 @@ class ClipBoundsTest(unittest.TestCase):
                 }
             }
         }
-        result = self._call_fut(bounds, ext, layer_name, 'line', 1, buffer_cfg)
+        result = self._call_fut(
+            bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
         self.assertEquals(result, exp_bounds)
 
@@ -134,7 +139,8 @@ class ClipBoundsTest(unittest.TestCase):
                 }
             }
         }
-        result = self._call_fut(bounds, ext, layer_name, 'line', 1, buffer_cfg)
+        result = self._call_fut(
+            bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
         self.assertEquals(result, exp_bounds)
 
@@ -154,7 +160,8 @@ class ClipBoundsTest(unittest.TestCase):
                 }
             }
         }
-        result = self._call_fut(bounds, ext, layer_name, 'line', 1, buffer_cfg)
+        result = self._call_fut(
+            bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
         self.assertEquals(result, exp_bounds)
 
@@ -173,7 +180,8 @@ class ClipBoundsTest(unittest.TestCase):
                 }
             }
         }
-        result = self._call_fut(bounds, ext, layer_name, 'line', 1, buffer_cfg)
+        result = self._call_fut(
+            bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
         self.assertEquals(result, exp_bounds)
 
@@ -204,7 +212,8 @@ class ClipBoundsTest(unittest.TestCase):
                 }
             }
         }
-        result = self._call_fut(bounds, ext, layer_name, 'line', 1, buffer_cfg)
+        result = self._call_fut(
+            bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         self.assertEquals(result, bounds)
 
     def test_meters_per_pixel(self):
@@ -220,7 +229,8 @@ class ClipBoundsTest(unittest.TestCase):
             }
         }
         result = self._call_fut(
-            bounds, ext, layer_name, 'line', meters_per_pixel, buffer_cfg)
+            bounds, ext, layer_name, 'LineString', meters_per_pixel,
+            buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
         self.assertEquals(result, exp_bounds)
 

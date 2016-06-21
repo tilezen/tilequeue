@@ -6,6 +6,7 @@ from tilequeue.format import json_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
 from tilequeue.tile import bounds_buffer
+from tilequeue.tile import normalize_geometry_type
 import math
 
 
@@ -73,9 +74,7 @@ def calc_buffered_bounds(
     if format_buffer_cfg is None:
         return bounds
 
-    if geometry_type.startswith('Multi'):
-        geometry_type = geometry_type[len('Multi'):]
-    geometry_type = geometry_type.lower()
+    geometry_type = normalize_geometry_type(geometry_type)
 
     per_layer_cfg = format_buffer_cfg.get('layer', {}).get(layer_name)
     if per_layer_cfg is not None:
