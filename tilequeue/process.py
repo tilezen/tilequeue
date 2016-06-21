@@ -69,7 +69,8 @@ def _preprocess_data(feature_layers):
                         if output_val is not None:
                             # all other tags are utf8 encoded, encode
                             # these the same way to be consistent
-                            output_key = output_key.encode('utf-8')
+                            if isinstance(output_key, unicode):
+                                output_key = output_key.encode('utf-8')
                             if isinstance(output_val, unicode):
                                 output_val = output_val.encode('utf-8')
                             props[output_key] = output_val
