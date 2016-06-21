@@ -446,7 +446,7 @@ def tilequeue_process(cfg, peripherals):
         # default to number of databases configured
         n_simultaneous_query_sets = len(cfg.postgresql_conn_info['dbnames'])
     assert n_simultaneous_query_sets > 0
-    default_queue_buffer_size = 256
+    default_queue_buffer_size = 128
     n_layers = len(all_layer_data)
     n_formats = len(formats)
     n_simultaneous_s3_storage = cfg.n_simultaneous_s3_storage
