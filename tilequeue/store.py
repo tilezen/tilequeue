@@ -14,8 +14,9 @@ def calc_hash(s):
 
 
 def s3_tile_key(date, path, layer, coord, extension):
-    path_to_hash = '/%(path)s/%(layer)s/%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
-        path=path,
+    prefix = '/%s' % path if path else ''
+    path_to_hash = '%(prefix)s/%(layer)s/%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
+        prefix=prefix,
         layer=layer,
         z=coord.zoom,
         x=coord.column,
