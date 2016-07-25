@@ -182,7 +182,7 @@ class NeighbourhoodFailure(object):
 # given a string, parse it as EDTF while allowing a single 'u' or None to mean
 # completely unknown, and return the EDTF object.
 def _normalize_edtf(s):
-    if s is not None and s != 'u':
+    if s and s != 'u':
         try:
             return edtf.EDTF(s)
         except:
