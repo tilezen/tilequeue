@@ -1,6 +1,19 @@
 CHANGELOG
 =========
 
+v0.10.0
+-------
+* Improve json encoding
+* Add boroughs to wof processing
+* Add support for configurable area thresholds
+* Add l10n names to wof processing
+* Port used TileStache fork code to eliminate dependency
+* Add configurable bounds buffer support
+* Remove simplification, now a vector-datasource transform step
+* Ensure json properties are utf-8 encoded
+* Add support to generate s3 urls with no path
+* Handle empty strings when edtf parsing wof dates
+
 v0.9.0
 ------
 * Delegate quantization to mapbox-vector-tile. See [#82](https://github.com/mapzen/tilequeue/issues/82).
