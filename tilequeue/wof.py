@@ -569,7 +569,7 @@ class WofFilesystemNeighbourhoodFetcher(object):
 
 def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     if curdate is None:
-        curdate = datetime.now()
+        curdate = datetime.now().date()
 
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
