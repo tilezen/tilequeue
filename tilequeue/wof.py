@@ -620,9 +620,13 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
         if n.l10n_names:
             hstore_items = []
             for k, v in n.l10n_names.items():
-                hstore_items.append('%s=>%s' % (
-                    escape_string(k),
-                    escape_string(v)))
+                k = escape_string(k)
+                v = escape_string(v)
+                if ' ' in k:
+                    k = '"%s"' % k
+                if ' ' in v:
+                    v = '"%s"' % v
+                hstore_items.append("%s=>%s" % (k, v))
             hstore_items_str = ','.join(hstore_items)
             buf.write('%s' % hstore_items_str)
         else:
