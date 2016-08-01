@@ -577,7 +577,7 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     buf = StringIO()
 
     def escape_string(s):
-        return s.replace('\t', ' ').replace('\n', ' ')
+        return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
 
     def write_nullable_int(buf, x):
         if x is None:
