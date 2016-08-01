@@ -22,6 +22,9 @@ import shapely.wkb
 import threading
 
 
+DATABASE_SRID = 3857
+
+
 def generate_csv_lines(requests_result):
     for line in requests_result.iter_lines():
         if line:
@@ -599,11 +602,11 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
         else:
             buf.write('%s\t' % ('true' if n.is_landuse_aoi else 'false'))
 
-        geos.lgeos.GEOSSetSRID(n.label_position._geom, 3857)
+        geos.lgeos.GEOSSetSRID(n.label_position._geom, DATABASE_SRID)
         buf.write(n.label_position.wkb_hex)
         buf.write('\t')
 
-        geos.lgeos.GEOSSetSRID(n.geometry._geom, 3857)
+        geos.lgeos.GEOSSetSRID(n.geometry._geom, DATABASE_SRID)
         buf.write(n.geometry.wkb_hex)
         buf.write('\t')
 
@@ -671,8 +674,8 @@ class WofModel(object):
         geos.WKBWriter.defaults['include_srid'] = True
 
         def gen_data(n):
-            geos.lgeos.GEOSSetSRID(n.label_position._geom, 3857)
-            geos.lgeos.GEOSSetSRID(n.geometry._geom, 3857)
+            geos.lgeos.GEOSSetSRID(n.label_position._geom, DATABASE_SRID)
+            geos.lgeos.GEOSSetSRID(n.geometry._geom, DATABASE_SRID)
 
             return dict(
                 table=self.table,
