@@ -579,6 +579,13 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     def escape_string(s):
         return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
 
+    def escape_hstore_string(s):
+        s = escape_string(s)
+        if ' ' in s:
+            s = s.replace('"', '\\\\"')
+            s = '"%s"' % s
+        return s
+
     def write_nullable_int(buf, x):
         if x is None:
             buf.write('\\N\t')
@@ -620,12 +627,8 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
         if n.l10n_names:
             hstore_items = []
             for k, v in n.l10n_names.items():
-                k = escape_string(k)
-                v = escape_string(v)
-                if ' ' in k:
-                    k = '"%s"' % k
-                if ' ' in v:
-                    v = '"%s"' % v
+                k = escape_hstore_string(k)
+                v = escape_hstore_string(v)
                 hstore_items.append("%s=>%s" % (k, v))
             hstore_items_str = ','.join(hstore_items)
             buf.write('%s' % hstore_items_str)
