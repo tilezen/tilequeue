@@ -38,7 +38,7 @@ def jinja_filter_geometry(value):
     return 'ST_AsBinary(%s)' % value
 
 
-def jinja_filter_bbox_filter(bounds, geometry_col_name, srid=900913):
+def jinja_filter_bbox_filter(bounds, geometry_col_name, srid=3857):
     min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
     max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
     bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
@@ -47,7 +47,7 @@ def jinja_filter_bbox_filter(bounds, geometry_col_name, srid=900913):
     return bbox_filter
 
 
-def jinja_filter_bbox_intersection(bounds, geometry_col_name, srid=900913):
+def jinja_filter_bbox_intersection(bounds, geometry_col_name, srid=3857):
     min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
     max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
     bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
@@ -56,7 +56,7 @@ def jinja_filter_bbox_intersection(bounds, geometry_col_name, srid=900913):
     return bbox_intersection
 
 
-def jinja_filter_bbox(bounds, srid=900913):
+def jinja_filter_bbox(bounds, srid=3857):
     min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
     max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
     bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)

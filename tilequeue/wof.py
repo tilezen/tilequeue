@@ -22,6 +22,9 @@ import shapely.wkb
 import threading
 
 
+DATABASE_SRID = 3857
+
+
 def generate_csv_lines(requests_result):
     for line in requests_result.iter_lines():
         if line:
@@ -566,7 +569,7 @@ class WofFilesystemNeighbourhoodFetcher(object):
 
 def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     if curdate is None:
-        curdate = datetime.now()
+        curdate = datetime.now().date()
 
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
@@ -574,7 +577,14 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     buf = StringIO()
 
     def escape_string(s):
-        return s.replace('\t', ' ').replace('\n', ' ')
+        return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
+
+    def escape_hstore_string(s):
+        s = escape_string(s)
+        if ' ' in s:
+            s = s.replace('"', '\\\\"')
+            s = '"%s"' % s
+        return s
 
     def write_nullable_int(buf, x):
         if x is None:
@@ -599,11 +609,11 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
         else:
             buf.write('%s\t' % ('true' if n.is_landuse_aoi else 'false'))
 
-        geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
+        geos.lgeos.GEOSSetSRID(n.label_position._geom, DATABASE_SRID)
         buf.write(n.label_position.wkb_hex)
         buf.write('\t')
 
-        geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
+        geos.lgeos.GEOSSetSRID(n.geometry._geom, DATABASE_SRID)
         buf.write(n.geometry.wkb_hex)
         buf.write('\t')
 
@@ -617,9 +627,9 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
         if n.l10n_names:
             hstore_items = []
             for k, v in n.l10n_names.items():
-                hstore_items.append('%s=>%s' % (
-                    escape_string(k),
-                    escape_string(v)))
+                k = escape_hstore_string(k)
+                v = escape_hstore_string(v)
+                hstore_items.append("%s=>%s" % (k, v))
             hstore_items_str = ','.join(hstore_items)
             buf.write('%s' % hstore_items_str)
         else:
@@ -671,8 +681,8 @@ class WofModel(object):
         geos.WKBWriter.defaults['include_srid'] = True
 
         def gen_data(n):
-            geos.lgeos.GEOSSetSRID(n.label_position._geom, 900913)
-            geos.lgeos.GEOSSetSRID(n.geometry._geom, 900913)
+            geos.lgeos.GEOSSetSRID(n.label_position._geom, DATABASE_SRID)
+            geos.lgeos.GEOSSetSRID(n.geometry._geom, DATABASE_SRID)
 
             return dict(
                 table=self.table,
