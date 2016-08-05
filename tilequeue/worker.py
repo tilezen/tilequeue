@@ -232,7 +232,7 @@ class ProcessAndFormatData(object):
             start = time.time()
 
             try:
-                formatted_tiles = process_coord(
+                formatted_tiles, extra_data = process_coord(
                     coord, feature_layers, self.post_process_data,
                     self.formats, unpadded_bounds, cut_coords,
                     self.layers_to_format, self.buffer_cfg)
@@ -244,6 +244,7 @@ class ProcessAndFormatData(object):
 
             metadata = data['metadata']
             metadata['timing']['process_seconds'] = time.time() - start
+            metadata['layers'] = extra_data
 
             data = dict(
                 metadata=metadata,
@@ -376,19 +377,23 @@ class SqsQueueWriter(object):
             sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
             time_in_queue = now - sqs_timestamp_seconds
 
+            size_as_str = repr(metadata['size'])
+
             self.logger.info(
                 '%s '
                 'data(%.2fs) '
                 'proc(%.2fs) '
                 's3(%.2fs) '
                 'ack(%.2fs) '
-                'sqs(%.2fs) ' % (
+                'sqs(%.2fs) '
+                'size(%s) ' % (
                     serialize_coord(coord),
                     timing['fetch_seconds'],
                     timing['process_seconds'],
                     timing['s3_seconds'],
                     timing['ack_seconds'],
                     time_in_queue,
+                    size_as_str,
                 ))
 
         if not saw_sentinel:
