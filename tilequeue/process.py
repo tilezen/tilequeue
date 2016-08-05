@@ -30,6 +30,23 @@ def resolve_transform_fns(fn_dotted_names):
     return map(resolve, fn_dotted_names)
 
 
+def _sizeof(val):
+    size = 0
+
+    if isinstance(val, dict):
+        for k, v in val.items():
+            size += len(k) + _sizeof(v)
+    elif isinstance(val, list):
+        for v in val:
+            size += _sizeof(v)
+    elif isinstance(val, (str, bytes, unicode)):
+        size += len(val)
+    else:
+        size += getsizeof(val)
+
+    return size
+
+
 def _preprocess_data(feature_layers):
     preproc_feature_layers = []
     extra_data = dict(size={})
@@ -82,10 +99,11 @@ def _preprocess_data(feature_layers):
                             if isinstance(output_val, unicode):
                                 output_val = output_val.encode('utf-8')
                             props[output_key] = output_val
-                            feature_size += len(output_key) + len(output_val)
+                            feature_size += len(output_key) + \
+                                            _sizeof(output_val)
                 else:
                     props[k] = v
-                    feature_size += len(k) + len(v)
+                    feature_size += len(k) + _sizeof(v)
 
             feature = shape, props, feature_id
             features.append(feature)
