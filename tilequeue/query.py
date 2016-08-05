@@ -82,6 +82,7 @@ def execute_query(conn, query, layer_datum, padded_bounds):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
+
         return rows, layer_datum, padded_bounds
     except:
         # If any exception occurs during query execution, close the

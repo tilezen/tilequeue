@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,intersect,drain,enqueue_tiles_of_interest,wof_process_neighbourhoods
+keys=root,process,seed,intersect,drain,enqueue_tiles_of_interest,wof_process_neighbourhoods,query
 
 [handlers]
 keys=consoleHandler
@@ -45,6 +45,12 @@ propagate=0
 level=INFO
 handlers=consoleHandler
 qualName=wof_process_neighbourhoods
+propagate=0
+
+[logger_query]
+level=DEBUG
+handlers=consoleHandler
+qualName=query
 propagate=0
 
 [handler_consoleHandler]

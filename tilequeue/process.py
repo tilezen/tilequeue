@@ -10,6 +10,7 @@ from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
 from zope.dottedname.resolve import resolve
+from sys import getsizeof
 
 
 def make_transform_fn(transform_fns):
@@ -29,8 +30,26 @@ def resolve_transform_fns(fn_dotted_names):
     return map(resolve, fn_dotted_names)
 
 
+def _sizeof(val):
+    size = 0
+
+    if isinstance(val, dict):
+        for k, v in val.items():
+            size += len(k) + _sizeof(v)
+    elif isinstance(val, list):
+        for v in val:
+            size += _sizeof(v)
+    elif isinstance(val, (str, bytes, unicode)):
+        size += len(val)
+    else:
+        size += getsizeof(val)
+
+    return size
+
+
 def _preprocess_data(feature_layers):
     preproc_feature_layers = []
+    extra_data = dict(size={})
 
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
@@ -38,6 +57,7 @@ def _preprocess_data(feature_layers):
         padded_bounds = feature_layer['padded_bounds']
 
         features = []
+        features_size = 0
         for row in feature_layer['features']:
             wkb = bytes(row.pop('__geometry__'))
             shape = loads(wkb)
@@ -65,6 +85,7 @@ def _preprocess_data(feature_layers):
 
             feature_id = row.pop('__id__')
             props = dict()
+            feature_size = getsizeof(feature_id) + len(wkb)
             for k, v in row.iteritems():
                 if v is None:
                     continue
@@ -78,11 +99,17 @@ def _preprocess_data(feature_layers):
                             if isinstance(output_val, unicode):
                                 output_val = output_val.encode('utf-8')
                             props[output_key] = output_val
+                            feature_size += len(output_key) + \
+                                _sizeof(output_val)
                 else:
                     props[k] = v
+                    feature_size += len(k) + _sizeof(v)
 
             feature = shape, props, feature_id
             features.append(feature)
+            features_size += feature_size
+
+        extra_data['size'][layer_datum['name']] = features_size
 
         preproc_feature_layer = dict(
             name=layer_datum['name'],
@@ -92,7 +119,7 @@ def _preprocess_data(feature_layers):
         )
         preproc_feature_layers.append(preproc_feature_layer)
 
-    return preproc_feature_layers
+    return preproc_feature_layers, extra_data
 
 
 # shared context for all the post-processor functions. this single object can
@@ -330,7 +357,7 @@ def _process_feature_layers(
 def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, cut_coords, layers_to_format,
                   buffer_cfg, scale=4096):
-    feature_layers = _preprocess_data(feature_layers)
+    feature_layers, extra_data = _preprocess_data(feature_layers)
 
     children_formatted_tiles = []
     if cut_coords:
@@ -350,4 +377,4 @@ def process_coord(coord, feature_layers, post_process_data, formats,
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
         scale, layers_to_format, buffer_cfg)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
-    return all_formatted_tiles
+    return all_formatted_tiles, extra_data
