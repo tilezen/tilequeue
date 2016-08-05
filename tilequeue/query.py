@@ -3,7 +3,6 @@ from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 import sys
-import logging
 
 
 def generate_query(start_zoom, template, bounds, zoom):
@@ -83,13 +82,6 @@ def execute_query(conn, query, layer_datum, padded_bounds):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute(query)
         rows = list(cursor.fetchall())
-
-        # if we are debugging this layer, then print out the size of the
-        # results returned from the server.
-        if layer_datum.get('debug_query_size'):
-            logger = logging.getLogger('query')
-            logger.debug('Layer[%r]: %d bytes' %
-                         (layer_datum.get('name'), sys.getsizeof(rows)))
 
         return rows, layer_datum, padded_bounds
     except:
