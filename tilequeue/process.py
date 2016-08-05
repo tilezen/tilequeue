@@ -100,7 +100,7 @@ def _preprocess_data(feature_layers):
                                 output_val = output_val.encode('utf-8')
                             props[output_key] = output_val
                             feature_size += len(output_key) + \
-                                            _sizeof(output_val)
+                                _sizeof(output_val)
                 else:
                     props[k] = v
                     feature_size += len(k) + _sizeof(v)
