@@ -377,7 +377,9 @@ class SqsQueueWriter(object):
             sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
             time_in_queue = now - sqs_timestamp_seconds
 
-            size_as_str = repr(metadata['size'])
+            layers = metadata['layers']
+            size = layers['size']
+            size_as_str = repr(size)
 
             self.logger.info(
                 '%s '
