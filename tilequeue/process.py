@@ -23,7 +23,7 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
 
         features = []
         for row in feature_layer['features']:
-            wkb = bytes(row.pop('__geometry__'))
+            wkb = row.pop('__geometry__')
             shape = loads(wkb)
 
             if shape.is_empty:
@@ -47,8 +47,6 @@ def _preprocess_data(feature_layers, shape_padded_bounds):
             feature_id = row.pop('__id__')
             props = dict()
             for k, v in row.iteritems():
-                if v is None:
-                    continue
                 if k == 'mz_properties':
                     for output_key, output_val in v.items():
                         if output_val is not None:

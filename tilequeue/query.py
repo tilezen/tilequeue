@@ -171,16 +171,16 @@ class DataFetcher(object):
 
                 # read the bytes out of each row, otherwise the pickle
                 # will fail because the geometry is a read buffer
+                # only keep values that are not None
                 read_rows = []
                 for row in rows:
-                    geometry = row.pop('__geometry__')
-                    if geometry is None:
-                        # there are cases when the geometry comes back as None
-                        # eg when they are unioned together
-                        continue
-                    geometry_bytes = bytes(geometry)
-                    row['__geometry__'] = geometry_bytes
-                    read_rows.append(row)
+                    read_row = {}
+                    for k, v in row.items():
+                        if isinstance(v, buffer):
+                            v = bytes(v)
+                        if v is not None:
+                            read_row[k] = v
+                    read_rows.append(read_row)
 
                 # trim off query generator key
                 layer_datum_result = trim_layer_datum(layer_datum)
