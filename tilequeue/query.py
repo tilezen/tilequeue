@@ -2,6 +2,7 @@ from psycopg2.extras import RealDictCursor
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
+from tilequeue.transform import calculate_padded_bounds
 import sys
 
 
@@ -54,6 +55,13 @@ def jinja_filter_bbox_intersection(bounds, geometry_col_name, srid=3857):
     bbox = 'ST_SetSrid(%s, %d)' % (bbox_no_srid, srid)
     bbox_intersection = 'st_intersection(%s, %s)' % (geometry_col_name, bbox)
     return bbox_intersection
+
+
+def jinja_filter_bbox_padded_intersection(
+        bounds, geometry_col_name, pad_factor=1.1, srid=3857):
+    padded_bounds = calculate_padded_bounds(pad_factor, bounds)
+    return jinja_filter_bbox_intersection(
+        padded_bounds.bounds, geometry_col_name, srid)
 
 
 def jinja_filter_bbox(bounds, srid=3857):
