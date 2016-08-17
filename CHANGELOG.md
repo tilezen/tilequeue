@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v0.9.1
+------
+* Add support for returning multiple geometries in queries
+* Add filter to intersect with padded bounds
+
 v0.9.0
 ------
 * Delegate quantization to mapbox-vector-tile. See [#82](https://github.com/mapzen/tilequeue/issues/82).
