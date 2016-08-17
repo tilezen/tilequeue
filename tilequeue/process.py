@@ -59,7 +59,7 @@ def _preprocess_data(feature_layers):
         features = []
         features_size = 0
         for row in feature_layer['features']:
-            wkb = bytes(row.pop('__geometry__'))
+            wkb = row.pop('__geometry__')
             shape = loads(wkb)
 
             if shape.is_empty:
@@ -87,8 +87,6 @@ def _preprocess_data(feature_layers):
             props = dict()
             feature_size = getsizeof(feature_id) + len(wkb)
             for k, v in row.iteritems():
-                if v is None:
-                    continue
                 if k == 'mz_properties':
                     for output_key, output_val in v.items():
                         if output_val is not None:
