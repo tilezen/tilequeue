@@ -303,12 +303,15 @@ class S3Storage(object):
                 async_jobs.append(async_result)
 
             async_exc_info = None
-            did_store = None
+            n_stored = 0
+            n_not_stored = 0
             for async_job in async_jobs:
                 try:
-                    result = async_job.get()
-                    if did_store is None:
-                        did_store = result
+                    did_store = async_job.get()
+                    if did_store:
+                        n_stored += 1
+                    else:
+                        n_not_stored += 1
                 except:
                     # it's important to wait for all async jobs to
                     # complete
@@ -326,7 +329,10 @@ class S3Storage(object):
 
             metadata = data['metadata']
             metadata['timing']['s3_seconds'] = time.time() - start
-            metadata['store'] = did_store
+            metadata['store'] = dict(
+                stored=n_stored,
+                not_stored=n_not_stored,
+            )
 
             data = dict(
                 coord=coord,
@@ -387,7 +393,7 @@ class SqsQueueWriter(object):
             size = layers['size']
             size_as_str = repr(size)
 
-            did_store = metadata['store']
+            store_info = metadata['store']
 
             self.logger.info(
                 '%s '
@@ -397,7 +403,8 @@ class SqsQueueWriter(object):
                 'ack(%.2fs) '
                 'sqs(%.2fs) '
                 'size(%s) '
-                'stored(%s) ' % (
+                'stored(%s) '
+                'not_stored(%s)' % (
                     serialize_coord(coord),
                     timing['fetch_seconds'],
                     timing['process_seconds'],
@@ -405,7 +412,8 @@ class SqsQueueWriter(object):
                     timing['ack_seconds'],
                     time_in_queue,
                     size_as_str,
-                    'yes' if did_store else 'no',
+                    store_info['stored'],
+                    store_info['not_stored'],
                 ))
 
         if not saw_sentinel:
