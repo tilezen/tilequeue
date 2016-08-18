@@ -1,6 +1,7 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
+from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
@@ -289,7 +290,8 @@ class S3Storage(object):
             for formatted_tile in data['formatted_tiles']:
 
                 async_result = self.io_pool.apply_async(
-                    self.store.write_tile, (
+                    write_tile_if_changed, (
+                        self.store,
                         formatted_tile['tile'],
                         # important to use the coord from the
                         # formatted tile here, because we could have
@@ -301,9 +303,12 @@ class S3Storage(object):
                 async_jobs.append(async_result)
 
             async_exc_info = None
+            did_store = None
             for async_job in async_jobs:
                 try:
-                    async_job.get()
+                    result = async_job.get()
+                    if did_store is None:
+                        did_store = result
                 except:
                     # it's important to wait for all async jobs to
                     # complete
@@ -321,6 +326,7 @@ class S3Storage(object):
 
             metadata = data['metadata']
             metadata['timing']['s3_seconds'] = time.time() - start
+            metadata['store'] = did_store
 
             data = dict(
                 coord=coord,
@@ -381,6 +387,8 @@ class SqsQueueWriter(object):
             size = layers['size']
             size_as_str = repr(size)
 
+            did_store = metadata['store']
+
             self.logger.info(
                 '%s '
                 'data(%.2fs) '
@@ -388,7 +396,8 @@ class SqsQueueWriter(object):
                 's3(%.2fs) '
                 'ack(%.2fs) '
                 'sqs(%.2fs) '
-                'size(%s) ' % (
+                'size(%s) '
+                'stored(%s) ' % (
                     serialize_coord(coord),
                     timing['fetch_seconds'],
                     timing['process_seconds'],
@@ -396,6 +405,7 @@ class SqsQueueWriter(object):
                     timing['ack_seconds'],
                     time_in_queue,
                     size_as_str,
+                    'yes' if did_store else 'no',
                 ))
 
         if not saw_sentinel:
