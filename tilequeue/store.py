@@ -142,3 +142,19 @@ def make_s3_store(bucket_name,
     bucket = Bucket(conn, bucket_name)
     s3_store = S3(bucket, date_prefix, path, reduced_redundancy)
     return s3_store
+
+
+def write_tile_if_changed(store, tile_data, coord, format, layer):
+    """
+    Only write tile data if different from existing.
+
+    Try to read the tile data from the store first. If the existing
+    data matches, don't write. Returns whether the tile was written.
+    """
+
+    existing_data = store.read_tile(coord, format, layer)
+    if not existing_data or existing_data != tile_data:
+        store.write_tile(tile_data, coord, format, layer)
+        return True
+    else:
+        return False

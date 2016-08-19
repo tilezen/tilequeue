@@ -82,3 +82,45 @@ class TestStoreKey(unittest.TestCase):
         tile_key = s3_tile_key(date_str, path, layer, coord,
                                json_format.extension)
         self.assertEqual(tile_key, '/20160121/cfc61/all/8/72/105.json')
+
+
+class WriteTileIfChangedTest(unittest.TestCase):
+
+    def setUp(self):
+        self._in = None
+        self._out = None
+        self.store = type(
+            'test-store',
+            (),
+            dict(read_tile=self._read_tile, write_tile=self._write_tile)
+        )
+
+    def _read_tile(self, coord, format, layer):
+        return self._in
+
+    def _write_tile(self, tile_data, coord, format, layer):
+        self._out = tile_data
+
+    def _call_fut(self, tile_data):
+        from tilequeue.store import write_tile_if_changed
+        coord = format = layer = None
+        result = write_tile_if_changed(
+            self.store, tile_data, coord, format, layer)
+        return result
+
+    def test_no_data(self):
+        did_write = self._call_fut('data')
+        self.assertTrue(did_write)
+        self.assertEquals('data', self._out)
+
+    def test_diff_data(self):
+        self._in = 'different data'
+        did_write = self._call_fut('data')
+        self.assertTrue(did_write)
+        self.assertEquals('data', self._out)
+
+    def test_same_data(self):
+        self._in = 'data'
+        did_write = self._call_fut('data')
+        self.assertFalse(did_write)
+        self.assertIsNone(self._out)
