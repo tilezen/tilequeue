@@ -84,17 +84,20 @@ def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_lnglat):
     vtm_encode(fp, feature_layers, coord)
 
 
+supports_shapely_geom = True
 json_format = OutputFormat('JSON', 'json', 'application/json', format_json, 1,
-                           True)
+                           supports_shapely_geom)
 topojson_format = OutputFormat('TopoJSON', 'topojson', 'application/json',
-                               format_topojson, 2, True)
+                               format_topojson, 2, supports_shapely_geom)
 # TODO image/png mimetype? app doesn't work unless image/png?
 vtm_format = OutputFormat('OpenScienceMap', 'vtm', 'image/png', format_vtm, 3,
-                          False)
+                          not supports_shapely_geom)
 mvt_format = OutputFormat('MVT', 'mvt', 'application/x-protobuf',
-                          format_mvt, 4, True)
-# buffered mvt - same exact format as mvt, but has separate buffer config
-mvtb_format = mvt_format
+                          format_mvt, 4, supports_shapely_geom)
+# buffered mvt - same exact format as mvt, exception for extension and
+# also has separate buffer config
+mvtb_format = OutputFormat('MVT Buffered', 'mvtb', 'application/x-protobuf',
+                           format_mvt, 4, supports_shapely_geom)
 
 extension_to_format = dict(
     json=json_format,
@@ -109,6 +112,7 @@ name_to_format = {
     'OpenScienceMap': vtm_format,
     'TopoJSON': topojson_format,
     'MVT': mvt_format,
+    'MVT Buffered': mvtb_format,
 }
 
 
