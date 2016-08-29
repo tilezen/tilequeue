@@ -216,3 +216,81 @@ class TestEmptyDates(unittest.TestCase):
         result = self._call_fut(u'1985-10-26', u'1985-10-26')
         self.assertEqual(date(1985, 10, 26), result.inception)
         self.assertEqual(date(1985, 10, 26), result.cessation)
+
+
+class MinMaxZoomFloatTest(unittest.TestCase):
+
+    def _create_neighbourhood_and_meta(self, min_zoom, max_zoom):
+        from tilequeue.wof import NeighbourhoodMeta
+        import shapely.geometry
+        props = {
+            u'geom:area': 0.0,
+            u'geom:bbox': u'0.0,0.0,0.0,0.0',
+            u'geom:latitude': 0.0,
+            u'geom:longitude': 0.0,
+            u'iso:country': u'XN',
+            u'lbl:latitude': 0.0,
+            u'lbl:longitude': 0.0,
+            u'mz:hierarchy_label': 1,
+            u'mz:is_funky': 0,
+            u'mz:is_hard_boundary': 0,
+            u'mz:is_landuse_aoi': 0,
+            u'mz:is_official': 0,
+            u'mz:tier_locality': 1,
+            u'src:geom': u'mapzen',
+            u'src:geom_alt': [],
+            u'src:lbl:centroid': u'mapzen',
+            u'wof:belongsto': [1],
+            u'wof:breaches': [],
+            u'wof:concordances': {},
+            u'wof:country': u'XN',
+            u'wof:geomhash': u'fc4d4085e55d16b479f231dbf54d3cfb',
+            u'wof:hierarchy': [{u'country_id': 1,
+                                u'neighbourhood_id': 874397665}],
+            u'wof:id': 874397665,
+            u'wof:lastmodified': 1468006253,
+            u'wof:name': u'Null Island',
+            u'wof:parent_id': -2,
+            u'wof:placetype': u'neighbourhood',
+            u'wof:repo': u'whosonfirst-data',
+            u'wof:superseded_by': [],
+            u'wof:supersedes': [],
+            u'wof:tags': [],
+            u'edtf:inception': 'uuuu',
+            u'edtf:cessation': 'uuuu',
+            u'mz:min_zoom': min_zoom,
+            u'mz:max_zoom': max_zoom,
+        }
+        json_data = {
+            u'bbox': [0.0, 0.0, 0.0, 0.0],
+            u'geometry': {u'coordinates': [0.0, 0.0], u'type': u'Point'},
+            u'id': 874397665,
+            u'properties': props,
+            u'type': u'Fetaure'
+        }
+        label_position = shapely.geometry.Point(0, 0)
+        meta = NeighbourhoodMeta(
+            wof_id=874397665,
+            placetype='neighbourhood',
+            name='Null Island',
+            hash='722e68cdcba2cd514e8ad2492cab61fb',
+            label_position=label_position,
+        )
+        return json_data, meta
+
+    def _call_fut(self, min_zoom, max_zoom):
+        from tilequeue.wof import create_neighbourhood_from_json
+        json_data, meta = self._create_neighbourhood_and_meta(
+            min_zoom, max_zoom)
+        result = create_neighbourhood_from_json(json_data, meta)
+        return result
+
+    def test_integer_min_max_zoom(self):
+        neighbourhood = self._call_fut(14, 16)
+        self.assertEqual(neighbourhood.min_zoom, 14.0)
+        self.assertEqual(neighbourhood.max_zoom, 16.0)
+
+    def test_float_min_max_zoom(self):
+        neighbourhood = self._call_fut(14.2, 16.8)
+        self.assertEqual(neighbourhood.min_zoom, 14.2)
+        self.assertEqual(neighbourhood.max_zoom, 16.8)
