@@ -295,17 +295,17 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
         min_zoom = default_min_zoom
     else:
         try:
-            min_zoom = int(min_zoom)
+            min_zoom = float(min_zoom)
         except ValueError:
-            return failure('mz:min_zoom not int: %s' % min_zoom)
+            return failure('mz:min_zoom not float: %s' % min_zoom)
     max_zoom = props.get('mz:max_zoom')
     if max_zoom is None:
         max_zoom = default_max_zoom
     else:
         try:
-            max_zoom = int(max_zoom)
+            max_zoom = float(max_zoom)
         except ValueError:
-            return failure('mz:max_zoom not int: %s' % max_zoom)
+            return failure('mz:max_zoom not float: %s' % max_zoom)
 
     is_landuse_aoi = props.get('mz:is_landuse_aoi')
     if is_landuse_aoi is not None:
