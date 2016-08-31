@@ -85,6 +85,7 @@ process:
   # should be off in production.
   reload-templates: false
   # extensions of formats to generate
+  # buffered Mapbox Vector Tiles are also possible by specifying mvtb
   formats: [json, topojson, mvt]
   # in addition to the `all` layer, any additional layers to also
   # store during processing
