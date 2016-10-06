@@ -1,6 +1,19 @@
 CHANGELOG
 =========
 
+v1.0.0
+------
+* Update wof projection to 3857.
+* Update srid throughout from 900913 -> 3857.
+* Add basic size logging for the objects returned from queries.
+* Support multiple geometries in queries.
+* Add filter to intersect with padded bounds.
+* Conditionally store tile data. Print total storage counts for each tile.
+* Correct the buffered mvt format definition.
+* Convert wof min/max zooms to floats.
+* Update sample cfg to reflect latest choices.
+* Add pyclipper dependency to requirements.
+
 v0.10.0
 -------
 * Improve json encoding
