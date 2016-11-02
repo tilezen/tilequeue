@@ -72,6 +72,17 @@ def jinja_filter_bbox(bounds, srid=3857):
     return bbox
 
 
+def jinja_filter_bbox_overlaps(bounds, geometry_col_name, srid=3857):
+    min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
+    max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
+    bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
+    bbox = 'ST_SetSrid(%s, %d)' % (bbox_no_srid, srid)
+    bbox_filter = \
+        '((%(col)s && %(bbox)s) AND st_overlaps(%(col)s, %(bbox)s))' \
+        % dict(col=geometry_col_name, bbox=bbox)
+    return bbox_filter
+
+
 def build_feature_queries(unpadded_bounds, layer_data, zoom):
     meters_per_pixel_dim = calc_meters_per_pixel_dim(zoom)
     queries_to_execute = []

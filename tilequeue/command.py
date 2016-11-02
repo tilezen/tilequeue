@@ -15,6 +15,7 @@ from tilequeue.query import jinja_filter_bbox_intersection
 from tilequeue.query import jinja_filter_bbox_padded_intersection
 from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_geometry
+from tilequeue.query import jinja_filter_bbox_overlaps
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
@@ -372,6 +373,7 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
     environment.filters['bbox_padded_intersection'] = (
         jinja_filter_bbox_padded_intersection)
     environment.filters['bbox'] = jinja_filter_bbox
+    environment.filters['bbox_overlaps'] = jinja_filter_bbox_overlaps
 
     for layer_name, layer_config in layers_config.items():
         template_name = layer_config['template']
