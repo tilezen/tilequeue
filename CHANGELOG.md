@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v1.0.1
+------
+* Add bbox filter to test for partial overlapping, rather than intersecting, the bbox.
+
 v1.0.0
 ------
 * Update wof projection to 3857.
