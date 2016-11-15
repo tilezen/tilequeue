@@ -1060,8 +1060,9 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
     with open(toi_filename, "w") as f:
-        for coord in map(coord_unmarshall_int, coords):
-            f.write("{}/{}/{}\n".format(coord.zoom, coord.column, coord.row))
+        for coord in coords:
+            c = coord_unmarshall_int(coord)
+            f.write("{}/{}/{}\n".format(c.zoom, c.column, c.row))
     logger.info(
         'Writing %d tiles of interest to %s ... done',
         n_toi,
