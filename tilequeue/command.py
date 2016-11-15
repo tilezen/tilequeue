@@ -1056,8 +1056,6 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     n_toi = len(coords)
     logger.info('Fetching tiles of interest ... done')
 
-    from tilequeue.tile import serialize_coord
-
     toi_filename = "toi.txt"
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
