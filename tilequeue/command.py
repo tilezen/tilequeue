@@ -1047,6 +1047,31 @@ def tilequeue_initial_load_wof_neighbourhoods(cfg, peripherals):
     logger.info('Loading ... done')
 
 
+def tilequeue_dump_tiles_of_interest(cfg, peripherals):
+    logger = make_logger(cfg, 'dump_tiles_of_interest')
+    logger.info('Dumping tiles of interest')
+
+    logger.info('Fetching tiles of interest ...')
+    coords = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    n_toi = len(coords)
+    logger.info('Fetching tiles of interest ... done')
+
+    from tilequeue.tile import serialize_coord
+
+    logger.info('Unmarshalling integer tile coordinates')
+    coords = map(coord_unmarshall_int, coords)
+    logger.info('Sorting tile coordinates')
+    coords = sorted(coords, key=lambda c: (c.zoom, c.column, c.row))
+
+    toi_filename = "toi.txt"
+
+    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
+    with open(toi_filename, "w") as f:
+        for coord in coords:
+            f.write("{}/{}/{}\n".format(coord.zoom, coord.column, coord.row))
+    logger.info('Writing %d tiles of interest to %s ... done', n_toi, toi_filename)
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -1066,6 +1091,8 @@ def tilequeue_main(argv_args=None):
         ('seed', create_command_parser(tilequeue_seed)),
         ('drain', create_command_parser(tilequeue_drain)),
         ('intersect', create_command_parser(tilequeue_intersect)),
+        ('dump-tiles-of-interest',
+            create_command_parser(tilequeue_dump_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
          create_command_parser(tilequeue_enqueue_tiles_of_interest)),
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
