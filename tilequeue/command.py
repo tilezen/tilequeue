@@ -1062,7 +1062,11 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     with open(toi_filename, "w") as f:
         for coord in map(coord_unmarshall_int, coords):
             f.write("{}/{}/{}\n".format(coord.zoom, coord.column, coord.row))
-    logger.info('Writing %d tiles of interest to %s ... done', n_toi, toi_filename)
+    logger.info(
+        'Writing %d tiles of interest to %s ... done',
+        n_toi,
+        toi_filename
+    )
 
 
 class TileArgumentParser(argparse.ArgumentParser):

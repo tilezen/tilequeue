@@ -309,6 +309,7 @@ def bounds_buffer(bounds, buf_size):
         bounds[2] + buf_size, bounds[3] + buf_size,
     )
 
+
 # radius from http://wiki.openstreetmap.org/wiki/Zoom_levels
 earth_equatorial_radius_meters = 6372798.2
 earth_equatorial_circumference_meters = 40041472.01586051
