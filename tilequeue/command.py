@@ -1058,16 +1058,11 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
 
     from tilequeue.tile import serialize_coord
 
-    logger.info('Unmarshalling integer tile coordinates')
-    coords = map(coord_unmarshall_int, coords)
-    logger.info('Sorting tile coordinates')
-    coords = sorted(coords, key=lambda c: (c.zoom, c.column, c.row))
-
     toi_filename = "toi.txt"
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
     with open(toi_filename, "w") as f:
-        for coord in coords:
+        for coord in map(coord_unmarshall_int, coords):
             f.write("{}/{}/{}\n".format(coord.zoom, coord.column, coord.row))
     logger.info('Writing %d tiles of interest to %s ... done', n_toi, toi_filename)
 
