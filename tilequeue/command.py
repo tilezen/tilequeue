@@ -1070,6 +1070,50 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     )
 
 
+def tilequeue_load_tiles_of_interest(cfg, peripherals):
+    """
+    Given a newline-delimited file containing tile coordinates in
+    `zoom/column/row` format, load those tiles into a new Redis SET
+    alongside the existing one, then RENAME the new to the old.
+    """
+    logger = make_logger(cfg, 'load_tiles_of_interest')
+    logger.info('Loading tiles of interest')
+
+    toi_filename = "/Users/iandees/Downloads/toi.txt"
+    chunk_size = 1000
+    new_toi_key = cfg.redis_cache_set_key + "_new"
+
+    # Make a raw Redis client so we can do low-level set manipulation
+    redis_client = make_redis_client(cfg)
+
+    if redis_client.exists(new_toi_key):
+        raise Exception("The key {} already exists".format(new_toi_key))
+
+    def grouper(iterable, n, fillvalue=None):
+        """Collect data into fixed-length chunks or blocks"""
+        args = [iter(iterable)] * n
+        return zip_longest(*args, fillvalue=fillvalue)
+
+    logger.info(
+        'Adding tiles of interest from %s to key %s...',
+        toi_filename,
+        new_toi_key,
+    )
+
+    for chunk in grouper(coord_ints_from_paths([toi_filename]), chunk_size):
+        redis_client.sadd(new_toi_key, *chunk)
+        app.logger.info("Chunk of {} done".format(chunk_size))
+
+    logger.info(
+        'Adding tiles of interest from %s to key %s... done',
+        toi_filename,
+        new_toi_key,
+    )
+
+    # Rename the new TOI key to the old TOI key
+    # redis_client.rename(new_toi_key, cfg.redis_cache_set_key)
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -1091,6 +1135,8 @@ def tilequeue_main(argv_args=None):
         ('intersect', create_command_parser(tilequeue_intersect)),
         ('dump-tiles-of-interest',
             create_command_parser(tilequeue_dump_tiles_of_interest)),
+        ('load-tiles-of-interest',
+            create_command_parser(tilequeue_load_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
          create_command_parser(tilequeue_enqueue_tiles_of_interest)),
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
