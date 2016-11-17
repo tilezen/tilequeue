@@ -1,6 +1,6 @@
 from collections import namedtuple
 from contextlib import closing
-from itertools import chain
+from itertools import chain, izip_longest
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
@@ -20,7 +20,7 @@ from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
-from tilequeue.tile import parse_expired_coord_string
+from tilequeue.tile import parse_expired_coord_string, deserialize_coord
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
@@ -1079,8 +1079,8 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'load_tiles_of_interest')
     logger.info('Loading tiles of interest')
 
-    toi_filename = "/Users/iandees/Downloads/toi.txt"
-    chunk_size = 1000
+    toi_filename = "/Users/iandees/Downloads/tile_requests_unique.txt"
+    chunk_size = 10000
     new_toi_key = cfg.redis_cache_set_key + "_new"
 
     # Make a raw Redis client so we can do low-level set manipulation
@@ -1092,7 +1092,7 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     def grouper(iterable, n, fillvalue=None):
         """Collect data into fixed-length chunks or blocks"""
         args = [iter(iterable)] * n
-        return zip_longest(*args, fillvalue=fillvalue)
+        return izip_longest(fillvalue=fillvalue, *args)
 
     logger.info(
         'Adding tiles of interest from %s to key %s...',
@@ -1100,9 +1100,14 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
         new_toi_key,
     )
 
-    for chunk in grouper(coord_ints_from_paths([toi_filename]), chunk_size):
-        redis_client.sadd(new_toi_key, *chunk)
-        app.logger.info("Chunk of {} done".format(chunk_size))
+    with open(toi_filename, 'r') as f:
+        for lines in grouper(f, chunk_size):
+            coords = [
+                coord_marshall_int(deserialize_coord(l))
+                for l in lines if l is not None
+            ]
+            redis_client.sadd(new_toi_key, *coords)
+            logger.info("Chunk of {} done".format(chunk_size))
 
     logger.info(
         'Adding tiles of interest from %s to key %s... done',
