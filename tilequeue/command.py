@@ -1079,44 +1079,69 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'load_tiles_of_interest')
     logger.info('Loading tiles of interest')
 
-    toi_filename = "/Users/iandees/Downloads/tile_requests_unique.txt"
+    toi_filename = "/Users/iandees/Downloads/tile_requests_unique_noeurope.txt"
     chunk_size = 10000
     new_toi_key = cfg.redis_cache_set_key + "_new"
-
-    # Make a raw Redis client so we can do low-level set manipulation
-    redis_client = make_redis_client(cfg)
-
-    if redis_client.exists(new_toi_key):
-        raise Exception("The key {} already exists".format(new_toi_key))
+    old_toi_key = cfg.redis_cache_set_key + "_old"
 
     def grouper(iterable, n, fillvalue=None):
         """Collect data into fixed-length chunks or blocks"""
         args = [iter(iterable)] * n
         return izip_longest(fillvalue=fillvalue, *args)
 
+    # Make a raw Redis client so we can do low-level set manipulation
+    redis_client = make_redis_client(cfg)
+
+    logger.info('Copying existing tiles of interest to %s', old_toi_key)
+    if redis_client.exists(old_toi_key):
+        raise Exception("Can't make copy of TOI because key {} exists. "
+            "Delete it and try again".format(old_toi_key))
+
+    redis_client.sunionstore(old_toi_key, cfg.redis_cache_set_key)
+
+    logger.info('Copy of existing tiles of interest is at %s', old_toi_key)
+
     logger.info(
-        'Adding tiles of interest from %s to key %s...',
+        'Adding tiles of interest from %s to key %s',
         toi_filename,
         new_toi_key,
     )
 
+    if redis_client.exists(new_toi_key):
+        raise Exception("Can't load new TOI because key {} exists. "
+            "Delete it and try again".format(new_toi_key))
+
+    n_added = 0
     with open(toi_filename, 'r') as f:
         for lines in grouper(f, chunk_size):
             coords = [
                 coord_marshall_int(deserialize_coord(l))
                 for l in lines if l is not None
             ]
-            redis_client.sadd(new_toi_key, *coords)
-            logger.info("Chunk of {} done".format(chunk_size))
+            n_added += redis_client.sadd(new_toi_key, *coords)
+            logger.info("%s total tiles added", n_added)
 
     logger.info(
-        'Adding tiles of interest from %s to key %s... done',
+        'Finished adding %s tiles of interest from %s to key %s',
+        n_added,
         toi_filename,
         new_toi_key,
     )
 
     # Rename the new TOI key to the old TOI key
-    # redis_client.rename(new_toi_key, cfg.redis_cache_set_key)
+    logger.info('Swapping old tiles of interest to new tiles of interest ...')
+
+    if redis_client.rename(new_toi_key, cfg.redis_cache_set_key):
+        logger.info(
+            'Swapping old tiles of interest to new tiles of interest ... done'
+        )
+    else:
+        raise Exception("Replacing existing set with new set failed")
+
+    logger.info(
+        "Finished loading TOI. Check that expected tiles exist and don't"
+        " forget to delete keys {} and {}".format(old_toi_key, new_toi_key)
+    )
 
 
 class TileArgumentParser(argparse.ArgumentParser):
