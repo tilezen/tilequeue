@@ -1081,8 +1081,8 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
 
     toi_filename = "/Users/iandees/Downloads/tile_requests_unique_noeurope.txt"
     chunk_size = 10000
-    new_toi_key = cfg.redis_cache_set_key + "_new"
-    old_toi_key = cfg.redis_cache_set_key + "_old"
+    new_toi_key = cfg.redis_cache_set_key + "-new"
+    old_toi_key = cfg.redis_cache_set_key + "-old"
 
     def grouper(iterable, n, fillvalue=None):
         """Collect data into fixed-length chunks or blocks"""
@@ -1091,15 +1091,6 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
 
     # Make a raw Redis client so we can do low-level set manipulation
     redis_client = make_redis_client(cfg)
-
-    logger.info('Copying existing tiles of interest to %s', old_toi_key)
-    if redis_client.exists(old_toi_key):
-        raise Exception("Can't make copy of TOI because key {} exists. "
-            "Delete it and try again".format(old_toi_key))
-
-    redis_client.sunionstore(old_toi_key, cfg.redis_cache_set_key)
-
-    logger.info('Copy of existing tiles of interest is at %s', old_toi_key)
 
     logger.info(
         'Adding tiles of interest from %s to key %s',
@@ -1128,20 +1119,27 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
         new_toi_key,
     )
 
-    # Rename the new TOI key to the old TOI key
-    logger.info('Swapping old tiles of interest to new tiles of interest ...')
+    if redis_client.rename(cfg.redis_cache_set_key, old_toi_key):
+        logger.info(
+            'Successfully moved existing TOI at %s to %s',
+            cfg.redis_cache_set_key,
+            old_toi_key
+        )
+    else:
+        raise Exception("Moving existing TOI failed. WARNING: There's "
+            "probably no TOI key and this is bad!")
 
     if redis_client.rename(new_toi_key, cfg.redis_cache_set_key):
         logger.info(
-            'Swapping old tiles of interest to new tiles of interest ... done'
+            'Successfully moved new TOI at %s into use at %s',
+            new_toi_key
+            cfg.redis_cache_set_key,
         )
     else:
-        raise Exception("Replacing existing set with new set failed")
+        raise Exception("Moving new TOI failed. WARNING: There's "
+            "probably no TOI key and this is bad!")
 
-    logger.info(
-        "Finished loading TOI. Check that expected tiles exist and don't"
-        " forget to delete keys {} and {}".format(old_toi_key, new_toi_key)
-    )
+    logger.info("Finished loading TOI.")
 
 
 class TileArgumentParser(argparse.ArgumentParser):
