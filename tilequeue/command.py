@@ -1099,8 +1099,10 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     )
 
     if redis_client.exists(new_toi_key):
-        raise Exception("Can't load new TOI because key {} exists. "
-            "Delete it and try again".format(new_toi_key))
+        raise Exception(
+            "Can't load new TOI because key {} exists. "
+            "Delete it and try again".format(new_toi_key)
+        )
 
     n_added = 0
     with open(toi_filename, 'r') as f:
@@ -1123,21 +1125,25 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
         logger.info(
             'Successfully moved existing TOI at %s to %s',
             cfg.redis_cache_set_key,
-            old_toi_key
+            old_toi_key,
         )
     else:
-        raise Exception("Moving existing TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!")
+        raise Exception(
+            "Moving existing TOI failed. WARNING: There's "
+            "probably no TOI key and this is bad!"
+        )
 
     if redis_client.rename(new_toi_key, cfg.redis_cache_set_key):
         logger.info(
             'Successfully moved new TOI at %s into use at %s',
-            new_toi_key
+            new_toi_key,
             cfg.redis_cache_set_key,
         )
     else:
-        raise Exception("Moving new TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!")
+        raise Exception(
+            "Moving new TOI failed. WARNING: There's "
+            "probably no TOI key and this is bad!"
+        )
 
     logger.info("Finished loading TOI.")
 
