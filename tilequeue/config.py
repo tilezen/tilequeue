@@ -16,6 +16,7 @@ class Configuration(object):
 
         self.queue_name = self._cfg('queue name')
         self.queue_type = self._cfg('queue type')
+        self.queue_cfg = self.yml['queue']
 
         self.store_type = self._cfg('store type')
         self.s3_bucket = self._cfg('store name')
