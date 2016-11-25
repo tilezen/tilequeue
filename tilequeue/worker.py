@@ -7,6 +7,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
+from tilequeue.metatile import make_metatiles
 import logging
 import Queue
 import signal
