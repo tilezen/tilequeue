@@ -1,11 +1,13 @@
 import zipfile
 import StringIO
+from collections import defaultdict
 from tilequeue.format import zip_format
 
 
-def make_metatiles(size, tiles):
+def make_single_metatile(size, tiles):
     """
-    Make a list of metatiles from a list of tiles.
+    Make a single metatile from a list of tiles all having the same
+    coordinate and layer.
     """
 
     assert size == 1, \
@@ -29,3 +31,21 @@ def make_metatiles(size, tiles):
 
     return [dict(tile=buf.getvalue(), format=zip_format, coord=coord,
                  layer=layer)]
+
+
+def make_metatiles(size, tiles):
+    """
+    Group by coordinates and layers, and make metatiles out of all the tiles
+    which share those properties.
+    """
+
+    groups = defaultdict(list)
+    for tile in tiles:
+        key = (tile['layer'], tile['coord'])
+        groups[key].append(tile)
+
+    metatiles = []
+    for group in groups.itervalues():
+        metatiles.extend(make_single_metatile(size, group))
+
+    return metatiles
