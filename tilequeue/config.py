@@ -105,6 +105,8 @@ class Configuration(object):
 
         self.wof = self.yml.get('wof')
 
+        self.metatile_size = self._cfg('metatile size')
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml
@@ -191,6 +193,9 @@ def default_yml_config():
             'dbnames': ('osm',),
             'user': 'osm',
             'password': None,
+        },
+        'metatile': {
+            'size': None,
         },
     }
 

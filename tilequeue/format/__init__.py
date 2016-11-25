@@ -98,6 +98,9 @@ mvt_format = OutputFormat('MVT', 'mvt', 'application/x-protobuf',
 # also has separate buffer config
 mvtb_format = OutputFormat('MVT Buffered', 'mvtb', 'application/x-protobuf',
                            format_mvt, 4, supports_shapely_geom)
+# package of tiles as a metatile zip
+zip_format = OutputFormat('ZIP Metatile', 'zip', 'application/zip',
+                          None, None, None)
 
 extension_to_format = dict(
     json=json_format,

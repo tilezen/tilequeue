@@ -501,7 +501,7 @@ def tilequeue_process(cfg, peripherals):
         cfg.layers_to_format, cfg.buffer_cfg, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
-                           store, logger)
+                           store, logger, cfg.metatile_size)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
