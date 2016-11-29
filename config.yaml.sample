@@ -147,3 +147,13 @@ wof:
     dbname: osm
     user: osm
     password:
+
+# Set the metatile size to 1 to have tilequeue save metatiles to storage rather
+# than individual tiles. This can have major benefits for reducing the number of
+# writes to disk. Set the size to null, or omit the entry, to disable metatile
+# writing and store individual tiles.
+#
+# Only metatiles of size 1 are currently supported, although other sizes may be
+# available in the future.
+metatile:
+  size: null

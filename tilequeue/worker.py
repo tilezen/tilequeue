@@ -7,6 +7,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
+from tilequeue.metatile import make_metatiles
 import logging
 import Queue
 import signal
@@ -264,12 +265,14 @@ class ProcessAndFormatData(object):
 
 class S3Storage(object):
 
-    def __init__(self, input_queue, output_queue, io_pool, store, logger):
+    def __init__(self, input_queue, output_queue, io_pool, store, logger,
+                 metatile_size):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
+        self.metatile_size = metatile_size
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -286,21 +289,7 @@ class S3Storage(object):
             coord = data['coord']
 
             start = time.time()
-            async_jobs = []
-            for formatted_tile in data['formatted_tiles']:
-
-                async_result = self.io_pool.apply_async(
-                    write_tile_if_changed, (
-                        self.store,
-                        formatted_tile['tile'],
-                        # important to use the coord from the
-                        # formatted tile here, because we could have
-                        # cut children tiles that have separate zooms
-                        # too
-                        formatted_tile['coord'],
-                        formatted_tile['format'],
-                        formatted_tile['layer']))
-                async_jobs.append(async_result)
+            async_jobs = self.save_tiles(data['formatted_tiles'])
 
             async_exc_info = None
             n_stored = 0
@@ -346,6 +335,29 @@ class S3Storage(object):
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
         self.logger.debug('s3 storage stopped')
+
+    def save_tiles(self, tiles):
+        async_jobs = []
+
+        if self.metatile_size:
+            tiles = make_metatiles(self.metatile_size, tiles)
+
+        for tile in tiles:
+
+            async_result = self.io_pool.apply_async(
+                write_tile_if_changed, (
+                    self.store,
+                    tile['tile'],
+                    # important to use the coord from the
+                    # formatted tile here, because we could have
+                    # cut children tiles that have separate zooms
+                    # too
+                    tile['coord'],
+                    tile['format'],
+                    tile['layer']))
+            async_jobs.append(async_result)
+
+        return async_jobs
 
 
 class SqsQueueWriter(object):
