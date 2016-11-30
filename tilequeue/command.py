@@ -99,11 +99,7 @@ class GetSqsQueueNameForZoom(object):
         return result
 
 
-def make_get_queue_name_for_zoom(queue_cfg, queue_names):
-    dispatch_cfg = queue_cfg.get('dispatch')
-    assert dispatch_cfg, 'Missing dispatch config for multiqueue'
-    assert isinstance(dispatch_cfg, dict), 'Dispatch queue cfg must be a map'
-
+def make_get_queue_name_for_zoom(dispatch_cfg, queue_names):
     zoom_to_queue_name_table = {}
 
     for zoom_range, queue_name in dispatch_cfg.items():
@@ -125,6 +121,8 @@ def make_get_queue_name_for_zoom(queue_cfg, queue_names):
             'Invalid zoom range: %s' % zoom_range
 
         for i in range(zoom_start, zoom_until + 1):
+            assert i not in zoom_to_queue_name_table, \
+                'Overlapping zoom range: %s' % zoom_range
             zoom_to_queue_name_table[i] = queue_name
 
     result = GetSqsQueueNameForZoom(zoom_to_queue_name_table)
@@ -137,8 +135,14 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
         from tilequeue.queue import make_multi_sqs_queue
         assert isinstance(queue_name, list)
         queue_names = queue_name
+
+        dispatch_cfg = queue_cfg.get('dispatch')
+        assert dispatch_cfg, 'Missing dispatch config for multiqueue'
+        assert isinstance(dispatch_cfg, dict), \
+            'Dispatch queue cfg must be a map'
+
         get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
-            queue_cfg, queue_names)
+            dispatch_cfg, queue_names)
         result = make_multi_sqs_queue(
             queue_names, get_queue_idx_for_zoom, redis_client)
         return result
