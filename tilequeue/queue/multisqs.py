@@ -12,12 +12,13 @@ class MultiSqsQueue(object):
     inflight_key = 'tilequeue.in-flight'
     queue_buf_size = 10
 
-    def __init__(self, aws_sqs_queues, get_queue_idx_for_zoom, redis_client,
+    def __init__(self, sqs_queues, get_queue_name_for_zoom, redis_client,
                  is_seeding=False):
-        self.aws_sqs_queues = aws_sqs_queues
+        self.sqs_queues = sqs_queues
         self.redis_client = redis_client
-        self.get_queue_idx_for_zoom = get_queue_idx_for_zoom
+        self.get_queue_name_for_zoom = get_queue_name_for_zoom
         self.is_seeding = is_seeding
+        self.sqs_queue_for_name = dict([(x.name, x) for x in sqs_queues])
 
     def enqueue(self, coord):
         if not coord_is_valid(coord):
@@ -28,14 +29,13 @@ class MultiSqsQueue(object):
             payload = serialize_coord(coord)
             message = RawMessage()
             message.set_body(payload)
-            aws_sqs_queue_idx = self.get_queue_idx_for_zoom(coord.zoom)
-            if aws_sqs_queue_idx is None:
+            sqs_queue_name = self.get_queue_name_for_zoom(coord.zoom)
+            if sqs_queue_name is None:
                 # TODO log?
                 return
-            assert (aws_sqs_queue_idx >= 0 and
-                    aws_sqs_queue_idx < len(self.aws_sqs_queues))
-            aws_sqs_queue = self.aws_sqs_queues[aws_sqs_queue_idx]
-            aws_sqs_queue.write(message)
+            sqs_queue = self.sqs_queue_for_name.get(sqs_queue_name)
+            assert sqs_queue, 'No queue found for: %s' % sqs_queue_name
+            sqs_queue.write(message)
             self._add_to_flight(coord_int)
 
     def _inflight(self, coord_int):
@@ -45,7 +45,7 @@ class MultiSqsQueue(object):
     def _add_to_flight(self, coord_int):
         self.redis_client.sadd(self.inflight_key, coord_int)
 
-    def _write_batch(self, aws_sqs_queue, buf):
+    def _write_batch(self, sqs_queue, buf):
         assert len(buf) <= self.queue_buf_size
         msg_tuples = []
         coord_ints = []
@@ -57,11 +57,11 @@ class MultiSqsQueue(object):
             msg_tuples.append(msg_tuple)
             coord_ints.append(coord_int)
 
-        aws_sqs_queue.write_batch(msg_tuples)
+        sqs_queue.write_batch(msg_tuples)
         self.redis_client.sadd(self.inflight_key, *coord_ints)
 
     def enqueue_batch(self, coords):
-        buf_per_queue = [[] for x in range(len(self.aws_sqs_queues))]
+        buf_per_queue = {}
         n_queued = 0
         n_in_flight = 0
         for coord in coords:
@@ -73,23 +73,24 @@ class MultiSqsQueue(object):
                 n_in_flight += 1
             else:
                 n_queued += 1
-                aws_sqs_queue_idx = self.get_queue_idx_for_zoom(coord.zoom)
-                if aws_sqs_queue_idx is None:
+                sqs_queue_name = self.get_queue_name_for_zoom(coord.zoom)
+                if sqs_queue_name is None:
                     # TODO log?
                     continue
-                assert (aws_sqs_queue_idx >= 0 and
-                        aws_sqs_queue_idx < len(self.aws_sqs_queues))
-                queue_buf = buf_per_queue[aws_sqs_queue_idx]
+                queue_buf = buf_per_queue.setdefault(sqs_queue_name, [])
                 queue_buf.append((coord, coord_int))
                 if len(queue_buf) == self.queue_buf_size:
-                    aws_sqs_queue = self.aws_sqs_queues[aws_sqs_queue_idx]
-                    self._write_batch(aws_sqs_queue, queue_buf)
+                    sqs_queue = self.sqs_queue_for_name.get(sqs_queue_name)
+                    assert sqs_queue_name, \
+                        'Missing queue for: %s' % sqs_queue_name
+                    self._write_batch(sqs_queue, queue_buf)
                     del queue_buf[:]
 
-        for queue_idx, queue_buf in enumerate(buf_per_queue):
+        for queue_name, queue_buf in buf_per_queue.items():
             if queue_buf:
-                aws_sqs_queue = self.aws_sqs_queues[queue_idx]
-                self._write_batch(aws_sqs_queue, queue_buf)
+                sqs_queue = self.sqs_queue_for_name.get(queue_name)
+                assert sqs_queue, 'Missing queue for: %s' % queue_name
+                self._write_batch(sqs_queue, queue_buf)
 
         return n_queued, n_in_flight
 
@@ -100,9 +101,9 @@ class MultiSqsQueue(object):
         coord_messages = []
         left_to_read = max_to_read
 
-        for aws_sqs_queue in self.aws_sqs_queues:
+        for sqs_queue in self.sqs_queues:
 
-            queue_messages = aws_sqs_queue.get_messages(
+            queue_messages = sqs_queue.get_messages(
                 num_messages=left_to_read,
                 attributes=('SentTimestamp',))
 
@@ -130,29 +131,29 @@ class MultiSqsQueue(object):
         return coord_messages
 
     def job_done(self, coord_message):
-        idx = self.get_queue_idx_for_zoom(coord_message.coord.zoom)
-        if idx is None:
+        queue_name = self.get_queue_name_for_zoom(coord_message.coord.zoom)
+        if queue_name is None:
             # TODO log? should this assert instead?
             return
-        assert idx >= 0 and idx < len(self.aws_sqs_queues)
-        aws_sqs_queue = self.aws_sqs_queues[idx]
+        sqs_queue = self.sqs_queue_for_name.get(queue_name)
+        assert sqs_queue, 'Missing queue for: %s' % queue_name
 
         coord_int = coord_marshall_int(coord_message.coord)
 
         self.redis_client.srem(self.inflight_key, coord_int)
-        aws_sqs_queue.delete_message(coord_message.message_handle)
+        sqs_queue.delete_message(coord_message.message_handle)
 
     def clear(self):
         self.redis_client.delete(self.inflight_key)
         n = 0
-        for aws_sqs_queue in self.aws_sqs_queues:
+        for sqs_queue in self.sqs_queues:
             while True:
                 # TODO newer versions of boto have a purge method on
                 # queues
-                msgs = aws_sqs_queue.get_messages(10)
+                msgs = sqs_queue.get_messages(self.queue_buf_size)
                 if not msgs:
                     break
-                aws_sqs_queue.delete_message_batch(msgs)
+                sqs_queue.delete_message_batch(msgs)
                 n += len(msgs)
 
         return n
@@ -162,19 +163,19 @@ class MultiSqsQueue(object):
 
 
 def make_multi_sqs_queue(
-        queue_names, get_queue_idx_for_zoom, redis_client,
+        queue_names, get_queue_name_for_zoom, redis_client,
         is_seeding=False, aws_access_key_id=None, aws_secret_access_key=None):
 
     conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
 
-    aws_sqs_queues = []
+    sqs_queues = []
     for queue_name in queue_names:
         aws_queue = conn.get_queue(queue_name)
         assert aws_queue is not None, \
             'Could not get sqs queue with name: %s' % queue_name
         aws_queue.set_message_class(RawMessage)
-        aws_sqs_queues.append(aws_queue)
+        sqs_queues.append(aws_queue)
 
     result = MultiSqsQueue(
-        aws_sqs_queues, get_queue_idx_for_zoom, redis_client, is_seeding)
+        sqs_queues, get_queue_name_for_zoom, redis_client, is_seeding)
     return result
