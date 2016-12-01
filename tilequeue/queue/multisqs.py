@@ -132,9 +132,8 @@ class MultiSqsQueue(object):
 
     def job_done(self, coord_message):
         queue_name = self.get_queue_name_for_zoom(coord_message.coord.zoom)
-        if queue_name is None:
-            # TODO log? should this assert instead?
-            return
+        assert queue_name is not None, \
+            'job_done: no queue for zoom: %d' % coord_message.coord.zoom
         sqs_queue = self.sqs_queue_for_name.get(queue_name)
         assert sqs_queue, 'Missing queue for: %s' % queue_name
 
