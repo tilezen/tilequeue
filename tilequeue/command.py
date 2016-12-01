@@ -89,20 +89,20 @@ def uniquify_generator(generator):
 
 class GetSqsQueueNameForZoom(object):
 
-    def __init__(self, dispatch_table):
-        self.dispatch_table = dispatch_table
+    def __init__(self, zoom_queue_table):
+        self.zoom_queue_table = zoom_queue_table
 
     def __call__(self, zoom):
         assert isinstance(zoom, int)
         assert 0 <= zoom <= 20
-        result = self.dispatch_table.get(zoom)
+        result = self.zoom_queue_table.get(zoom)
         return result
 
 
-def make_get_queue_name_for_zoom(dispatch_cfg, queue_names):
+def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
     zoom_to_queue_name_table = {}
 
-    for zoom_range, queue_name in dispatch_cfg.items():
+    for zoom_range, queue_name in zoom_queue_map_cfg.items():
         assert queue_name in queue_names
 
         assert '-' in zoom_range, 'Invalid zoom range: %s' % zoom_range
@@ -136,13 +136,14 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
         assert isinstance(queue_name, list)
         queue_names = queue_name
 
-        dispatch_cfg = queue_cfg.get('dispatch')
-        assert dispatch_cfg, 'Missing dispatch config for multiqueue'
-        assert isinstance(dispatch_cfg, dict), \
-            'Dispatch queue cfg must be a map'
+        zoom_queue_map_cfg = queue_cfg.get('zoom-queue-map')
+        assert zoom_queue_map_cfg, \
+            'Missing zoom-queue-map config for multiqueue'
+        assert isinstance(zoom_queue_map_cfg, dict), \
+            'zoom-queue-map cfg must be a map'
 
         get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
-            dispatch_cfg, queue_names)
+            zoom_queue_map_cfg, queue_names)
         result = make_multi_sqs_queue(
             queue_names, get_queue_idx_for_zoom, redis_client)
         return result

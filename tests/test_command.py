@@ -146,25 +146,27 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
 
     def test_bad_map(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'badzoom-20': 'q1'}
+        zoom_queue_map_cfg = {'badzoom-20': 'q1'}
         queue_names = ['q1']
         with self.assertRaises(AssertionError):
-            make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+            make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names)
 
     def test_single_queue_name_for_zoom(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-20': 'q1'}
+        zoom_queue_map_cfg = {'0-20': 'q1'}
         queue_names = ['q1']
-        get_queue = make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+        get_queue = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
         zoom = 7
         queue_name = get_queue(zoom)
         self.assertEqual(queue_name, 'q1')
 
     def test_multiple_queues(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-5': 'q1', '6-20': 'q2'}
+        zoom_queue_map_cfg = {'0-5': 'q1', '6-20': 'q2'}
         queue_names = ['q1', 'q2']
-        get_queue = make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+        get_queue = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
 
         zoom = 5
         queue_name = get_queue(zoom)
@@ -176,32 +178,34 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
 
     def test_missing_queue_name(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-5': 'q1', '6-20': 'q3'}
+        zoom_queue_map_cfg = {'0-5': 'q1', '6-20': 'q3'}
         queue_names = ['q1', 'q2']
         with self.assertRaises(AssertionError):
-            make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+            make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names)
 
     def test_overlapping_queue_names(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-5': 'q1', '4-20': 'q2'}
+        zoom_queue_map_cfg = {'0-5': 'q1', '4-20': 'q2'}
         queue_names = ['q1', 'q2']
         with self.assertRaises(AssertionError):
-            make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+            make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names)
 
     def test_zoom_invalid_lookup(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-20': 'q1'}
+        zoom_queue_map_cfg = {'0-20': 'q1'}
         queue_names = ['q1']
-        get_queue = make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+        get_queue = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
         zoom = 21
         with self.assertRaises(AssertionError):
             get_queue(zoom)
 
     def test_zoom_out_of_range(self):
         from tilequeue.command import make_get_queue_name_for_zoom
-        dispatch_cfg = {'0-5': 'q1'}
+        zoom_queue_map_cfg = {'0-5': 'q1'}
         queue_names = ['q1']
-        get_queue = make_get_queue_name_for_zoom(dispatch_cfg, queue_names)
+        get_queue = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
         zoom = 7
         queue_name = get_queue(zoom)
         self.assertIsNone(queue_name)
