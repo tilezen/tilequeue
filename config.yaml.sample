@@ -1,7 +1,13 @@
 queue:
-  # type can be `sqs`, `file`, `mem`, or `redis`
+  # type can be `sqs`, `multisqs`, `file`, `mem`, or `redis`
   type: mem
-  name: <sqs queue/queue file name/redis key>
+  name: <sqs queue/list of queue names/queue file name/redis key/>
+  # for multisqs
+  zoom-queue-map:
+    # keys are <start-zoom>-<end-zoom> (inclusive) ranges
+    # values are the queue name to use for zooms in that range
+    0-10: queue-1
+    11-20: queue-2
 store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>

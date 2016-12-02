@@ -398,8 +398,11 @@ class SqsQueueWriter(object):
             timing['ack_seconds'] = now - start
 
             sqs_timestamp_millis = metadata['timestamp']
-            sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-            time_in_queue = now - sqs_timestamp_seconds
+            if sqs_timestamp_millis is not None:
+                sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
+                time_in_queue = now - sqs_timestamp_seconds
+            else:
+                time_in_queue = 0
 
             layers = metadata['layers']
             size = layers['size']

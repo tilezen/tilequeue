@@ -342,3 +342,14 @@ def normalize_geometry_type(geom_type):
     assert result, \
         'normalize_geometry_type: unknown geometry %s' % geom_type
     return result
+
+
+def coord_is_valid(coord):
+    if coord.zoom < 0 or coord.zoom > 20:
+        return False
+    if coord.column < 0 or coord.row < 0:
+        return False
+    max_colrow = int(math.pow(2, coord.zoom))
+    if coord.column >= max_colrow or coord.row >= max_colrow:
+        return False
+    return True

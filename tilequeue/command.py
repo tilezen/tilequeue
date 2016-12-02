@@ -87,9 +87,69 @@ def uniquify_generator(generator):
         yield tile
 
 
-def make_queue(queue_type, queue_name, redis_client,
+class GetSqsQueueNameForZoom(object):
+
+    def __init__(self, zoom_queue_table):
+        self.zoom_queue_table = zoom_queue_table
+
+    def __call__(self, zoom):
+        assert isinstance(zoom, int)
+        assert 0 <= zoom <= 20
+        result = self.zoom_queue_table.get(zoom)
+        assert result is not None, 'No queue name found for zoom: %d' % zoom
+        return result
+
+
+def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
+    zoom_to_queue_name_table = {}
+
+    for zoom_range, queue_name in zoom_queue_map_cfg.items():
+        assert queue_name in queue_names
+
+        assert '-' in zoom_range, 'Invalid zoom range: %s' % zoom_range
+        zoom_fields = zoom_range.split('-')
+        assert len(zoom_fields) == 2, 'Invalid zoom range: %s' % zoom_range
+        zoom_start_str, zoom_until_str = zoom_fields
+        try:
+            zoom_start = int(zoom_start_str)
+            zoom_until = int(zoom_until_str)
+        except (ValueError, KeyError):
+            assert not 'Invalid zoom range: %s' % zoom_range
+
+        assert (0 <= zoom_start <= 20 and
+                0 <= zoom_until <= 20 and
+                zoom_start <= zoom_until), \
+            'Invalid zoom range: %s' % zoom_range
+
+        for i in range(zoom_start, zoom_until + 1):
+            assert i not in zoom_to_queue_name_table, \
+                'Overlapping zoom range: %s' % zoom_range
+            zoom_to_queue_name_table[i] = queue_name
+
+    result = GetSqsQueueNameForZoom(zoom_to_queue_name_table)
+    return result
+
+
+def make_queue(queue_type, queue_name, queue_cfg, redis_client,
                aws_access_key_id=None, aws_secret_access_key=None):
-    if queue_type == 'sqs':
+    if queue_type == 'multisqs':
+        from tilequeue.queue import make_multi_sqs_queue
+        assert isinstance(queue_name, list)
+        queue_names = queue_name
+
+        zoom_queue_map_cfg = queue_cfg.get('zoom-queue-map')
+        assert zoom_queue_map_cfg, \
+            'Missing zoom-queue-map config for multiqueue'
+        assert isinstance(zoom_queue_map_cfg, dict), \
+            'zoom-queue-map cfg must be a map'
+
+        get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
+        result = make_multi_sqs_queue(
+            queue_names, get_queue_idx_for_zoom, redis_client)
+        return result
+
+    elif queue_type == 'sqs':
         return make_sqs_queue(queue_name, redis_client,
                               aws_access_key_id, aws_secret_access_key)
     elif queue_type == 'mem':
@@ -1110,7 +1170,7 @@ def tilequeue_main(argv_args=None):
     redis_client = make_redis_client(cfg)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
     queue = make_queue(
-        cfg.queue_type, cfg.queue_name, redis_client,
+        cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
         aws_secret_access_key=cfg.aws_secret_access_key)
     peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue)
