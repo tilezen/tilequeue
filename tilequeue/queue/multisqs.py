@@ -30,9 +30,6 @@ class MultiSqsQueue(object):
             message = RawMessage()
             message.set_body(payload)
             sqs_queue_name = self.get_queue_name_for_zoom(coord.zoom)
-            if sqs_queue_name is None:
-                # TODO log?
-                return
             sqs_queue = self.sqs_queue_for_name.get(sqs_queue_name)
             assert sqs_queue, 'No queue found for: %s' % sqs_queue_name
             sqs_queue.write(message)
@@ -74,9 +71,6 @@ class MultiSqsQueue(object):
             else:
                 n_queued += 1
                 sqs_queue_name = self.get_queue_name_for_zoom(coord.zoom)
-                if sqs_queue_name is None:
-                    # TODO log?
-                    continue
                 queue_buf = buf_per_queue.setdefault(sqs_queue_name, [])
                 queue_buf.append((coord, coord_int))
                 if len(queue_buf) == self.queue_buf_size:
@@ -132,8 +126,6 @@ class MultiSqsQueue(object):
 
     def job_done(self, coord_message):
         queue_name = self.get_queue_name_for_zoom(coord_message.coord.zoom)
-        assert queue_name is not None, \
-            'job_done: no queue for zoom: %d' % coord_message.coord.zoom
         sqs_queue = self.sqs_queue_for_name.get(queue_name)
         assert sqs_queue, 'Missing queue for: %s' % queue_name
 

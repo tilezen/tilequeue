@@ -207,5 +207,5 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         get_queue = make_get_queue_name_for_zoom(
             zoom_queue_map_cfg, queue_names)
         zoom = 7
-        queue_name = get_queue(zoom)
-        self.assertIsNone(queue_name)
+        with self.assertRaises(AssertionError):
+            get_queue(zoom)
