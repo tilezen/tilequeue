@@ -1,7 +1,7 @@
 queue:
   # type can be `sqs`, `multisqs`, `file`, `mem`, or `redis`
   type: mem
-  name: <sqs queue/queue file name/redis key/list of queue names>
+  name: <sqs queue/list of queue names/queue file name/redis key/>
   # for multisqs
   zoom-queue-map:
     # keys are <start-zoom>-<end-zoom> (inclusive) ranges
