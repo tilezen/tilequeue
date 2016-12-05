@@ -158,8 +158,12 @@ wof:
 # than individual tiles. This can have major benefits for reducing the number of
 # writes to disk. Set the size to null, or omit the entry, to disable metatile
 # writing and store individual tiles.
-#
-# Only metatiles of size 1 are currently supported, although other sizes may be
-# available in the future.
 metatile:
+  # Only metatiles of size 1 are currently supported, although other sizes may
+  # be available in the future.
   size: null
+
+  # if this is set to true, then tilequeue will write the individual formats in
+  # addition to the metatile. this can be useful when gracefully "cutting over"
+  # to a metatile-based system from an individual format based one.
+  store_metatile_and_originals: false

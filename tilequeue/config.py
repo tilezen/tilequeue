@@ -107,6 +107,7 @@ class Configuration(object):
         self.wof = self.yml.get('wof')
 
         self.metatile_size = self._cfg('metatile size')
+        self.store_orig = self._cfg('metatile store_metatile_and_originals')
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
@@ -197,6 +198,7 @@ def default_yml_config():
         },
         'metatile': {
             'size': None,
+            'store_metatile_and_originals': False,
         },
     }
 

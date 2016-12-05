@@ -266,13 +266,14 @@ class ProcessAndFormatData(object):
 class S3Storage(object):
 
     def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 metatile_size):
+                 metatile_size, store_metatile_and_originals=False):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
         self.metatile_size = metatile_size
+        self.store_metatile_and_originals = store_metatile_and_originals
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -340,7 +341,14 @@ class S3Storage(object):
         async_jobs = []
 
         if self.metatile_size:
-            tiles = make_metatiles(self.metatile_size, tiles)
+            metatiles = make_metatiles(self.metatile_size, tiles)
+
+            # allow the metatile to be stored, or both the metatile
+            # and originals, which allows for a smooth cutover.
+            if self.store_metatile_and_originals:
+                tiles.extend(metatiles)
+            else:
+                tiles = metatiles
 
         for tile in tiles:
 
