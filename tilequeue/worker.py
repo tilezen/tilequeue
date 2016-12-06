@@ -132,7 +132,7 @@ class DataFetch(object):
                 log_level = logging.ERROR
             self.logger.log(log_level, 'Error fetching: %s - %s' % (
                 serialize_coord(coord), stacktrace))
-            continue
+            return None
 
         metadata = data['metadata']
         metadata['timing']['fetch_seconds'] = time.time() - start
@@ -168,7 +168,7 @@ class DataFetch(object):
                     if is_coord_in_tiles_of_interest:
                         cut_coords.append(zoomed_coord)
             if async_exc_info:
-                continue
+                return None
 
         return dict(
             metadata=metadata,
@@ -190,6 +190,9 @@ class DataFetch(object):
                 break
 
             data = self.process_one(data)
+
+            if data is None:
+                continue
 
             while not _non_blocking_put(self.output_queue, data):
                 if stop.is_set():
