@@ -49,3 +49,17 @@ def make_metatiles(size, tiles):
         metatiles.extend(make_single_metatile(size, group))
 
     return metatiles
+
+
+def extract_metatile(size, io, tile):
+    """
+    Extract the tile from the metatile given in the file-like object io.
+    """
+
+    assert size == 1, \
+        "Tilequeue only supports metatiles of size one at the moment."
+
+    tile_name = '0/0/0.%s' % tile['format'].extension
+
+    with zipfile.ZipFile(io, mode='r') as zf:
+        return zf.open(tile_name).read()
