@@ -8,6 +8,7 @@ from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.metatile import make_metatiles
 import logging
+import newrelic
 import Queue
 import signal
 import sys
@@ -113,6 +114,70 @@ class DataFetch(object):
         self.redis_cache_index = redis_cache_index
         self.logger = logger
 
+    @newrelic.agent.background_task(name="DataFetch")
+    def process_one(self, data):
+        coord = data['coord']
+
+        start = time.time()
+
+        try:
+            fetch_data = self.fetcher(coord)
+        except:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            stacktrace = format_stacktrace_one_line(
+                (exc_type, exc_value, exc_traceback))
+            if isinstance(exc_value, TransactionRollbackError):
+                log_level = logging.WARNING
+            else:
+                log_level = logging.ERROR
+            self.logger.log(log_level, 'Error fetching: %s - %s' % (
+                serialize_coord(coord), stacktrace))
+            continue
+
+        metadata = data['metadata']
+        metadata['timing']['fetch_seconds'] = time.time() - start
+
+        # if we are at zoom level 16, it will serve as a metatile
+        # to derive the tiles underneath it
+        cut_coords = None
+        if coord.zoom == 16:
+            cut_coords = []
+            async_jobs = []
+            children_until = 20
+            # ask redis if there are any tiles underneath in the
+            # tiles of interest set
+            rci = self.redis_cache_index
+            async_fn = rci.is_coord_int_in_tiles_of_interest
+
+            for child in coord_children_range(coord, children_until):
+                zoomed_coord_int = coord_marshall_int(child)
+                async_result = self.io_pool.apply_async(
+                    async_fn, (zoomed_coord_int,))
+                async_jobs.append((child, async_result))
+
+            async_exc_info = None
+            for async_job in async_jobs:
+                zoomed_coord, async_result = async_job
+                try:
+                    is_coord_in_tiles_of_interest = async_result.get()
+                except:
+                    async_exc_info = sys.exc_info()
+                    stacktrace = format_stacktrace_one_line(async_exc_info)
+                    self.logger.error(stacktrace)
+                else:
+                    if is_coord_in_tiles_of_interest:
+                        cut_coords.append(zoomed_coord)
+            if async_exc_info:
+                continue
+
+        return dict(
+            metadata=metadata,
+            coord=coord,
+            feature_layers=fetch_data['feature_layers'],
+            unpadded_bounds=fetch_data['unpadded_bounds'],
+            cut_coords=cut_coords,
+        )
+
     def __call__(self, stop):
         saw_sentinel = False
         while not stop.is_set():
@@ -124,67 +189,7 @@ class DataFetch(object):
                 saw_sentinel = True
                 break
 
-            coord = data['coord']
-
-            start = time.time()
-
-            try:
-                fetch_data = self.fetcher(coord)
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                stacktrace = format_stacktrace_one_line(
-                    (exc_type, exc_value, exc_traceback))
-                if isinstance(exc_value, TransactionRollbackError):
-                    log_level = logging.WARNING
-                else:
-                    log_level = logging.ERROR
-                self.logger.log(log_level, 'Error fetching: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
-                continue
-
-            metadata = data['metadata']
-            metadata['timing']['fetch_seconds'] = time.time() - start
-
-            # if we are at zoom level 16, it will serve as a metatile
-            # to derive the tiles underneath it
-            cut_coords = None
-            if coord.zoom == 16:
-                cut_coords = []
-                async_jobs = []
-                children_until = 20
-                # ask redis if there are any tiles underneath in the
-                # tiles of interest set
-                rci = self.redis_cache_index
-                async_fn = rci.is_coord_int_in_tiles_of_interest
-
-                for child in coord_children_range(coord, children_until):
-                    zoomed_coord_int = coord_marshall_int(child)
-                    async_result = self.io_pool.apply_async(
-                        async_fn, (zoomed_coord_int,))
-                    async_jobs.append((child, async_result))
-
-                async_exc_info = None
-                for async_job in async_jobs:
-                    zoomed_coord, async_result = async_job
-                    try:
-                        is_coord_in_tiles_of_interest = async_result.get()
-                    except:
-                        async_exc_info = sys.exc_info()
-                        stacktrace = format_stacktrace_one_line(async_exc_info)
-                        self.logger.error(stacktrace)
-                    else:
-                        if is_coord_in_tiles_of_interest:
-                            cut_coords.append(zoomed_coord)
-                if async_exc_info:
-                    continue
-
-            data = dict(
-                metadata=metadata,
-                coord=coord,
-                feature_layers=fetch_data['feature_layers'],
-                unpadded_bounds=fetch_data['unpadded_bounds'],
-                cut_coords=cut_coords,
-            )
+            data = self.process_one(data)
 
             while not _non_blocking_put(self.output_queue, data):
                 if stop.is_set():
@@ -210,6 +215,36 @@ class ProcessAndFormatData(object):
         self.buffer_cfg = buffer_cfg
         self.logger = logger
 
+    @newrelic.agent.background_task(name="ProcessAndFormatData")
+    def process_one(self, data):
+        coord = data['coord']
+        feature_layers = data['feature_layers']
+        unpadded_bounds = data['unpadded_bounds']
+        cut_coords = data['cut_coords']
+
+        start = time.time()
+
+        try:
+            formatted_tiles, extra_data = process_coord(
+                coord, feature_layers, self.post_process_data,
+                self.formats, unpadded_bounds, cut_coords,
+                self.layers_to_format, self.buffer_cfg)
+        except:
+            stacktrace = format_stacktrace_one_line()
+            self.logger.error('Error processing: %s - %s' % (
+                serialize_coord(coord), stacktrace))
+            continue
+
+        metadata = data['metadata']
+        metadata['timing']['process_seconds'] = time.time() - start
+        metadata['layers'] = extra_data
+
+        return dict(
+            metadata=metadata,
+            coord=coord,
+            formatted_tiles=formatted_tiles,
+        )
+
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -224,33 +259,7 @@ class ProcessAndFormatData(object):
                 saw_sentinel = True
                 break
 
-            coord = data['coord']
-            feature_layers = data['feature_layers']
-            unpadded_bounds = data['unpadded_bounds']
-            cut_coords = data['cut_coords']
-
-            start = time.time()
-
-            try:
-                formatted_tiles, extra_data = process_coord(
-                    coord, feature_layers, self.post_process_data,
-                    self.formats, unpadded_bounds, cut_coords,
-                    self.layers_to_format, self.buffer_cfg)
-            except:
-                stacktrace = format_stacktrace_one_line()
-                self.logger.error('Error processing: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
-                continue
-
-            metadata = data['metadata']
-            metadata['timing']['process_seconds'] = time.time() - start
-            metadata['layers'] = extra_data
-
-            data = dict(
-                metadata=metadata,
-                coord=coord,
-                formatted_tiles=formatted_tiles,
-            )
+            data = self.process_one(data)
 
             while not _non_blocking_put(self.output_queue, data):
                 if stop.is_set():
