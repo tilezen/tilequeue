@@ -209,3 +209,16 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         zoom = 7
         with self.assertRaises(AssertionError):
             get_queue(zoom)
+
+    def test_zoom_is_long(self):
+        # the zoom (or row/col) in a Coordinate can be a long simply because
+        # the coordinate it was derived from in unmarshall_coord_int was a
+        # long.
+        from tilequeue.command import make_get_queue_name_for_zoom
+        zoom_queue_map_cfg = {'0-20': 'q1'}
+        queue_names = ['q1']
+        get_queue = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
+        zoom = long(7)
+        queue_name = get_queue(zoom)
+        self.assertEqual(queue_name, 'q1')
