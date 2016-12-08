@@ -1,4 +1,4 @@
-from tilequeue.metatile import make_metatiles
+from tilequeue.metatile import make_metatiles, extract_metatile
 from tilequeue.format import json_format, zip_format, topojson_format
 from ModestMaps.Core import Coordinate
 import zipfile
@@ -67,3 +67,13 @@ class TestMetatile(unittest.TestCase):
 
         # check all coords were consumed
         self.assertEqual(0, len(coords))
+
+    def test_extract_metatiles_single(self):
+        json = "{\"json\":true}"
+        tile = dict(tile=json, coord=Coordinate(0, 0, 0),
+                    format=json_format, layer='all')
+        metatiles = make_metatiles(1, [tile])
+        self.assertEqual(1, len(metatiles))
+        buf = StringIO.StringIO(metatiles[0]['tile'])
+        extracted = extract_metatile(1, buf, tile)
+        self.assertEqual(json, extracted)
