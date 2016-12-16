@@ -4,6 +4,7 @@ from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.transform import calculate_padded_bounds
 import sys
+import newrelic.agent
 
 
 def generate_query(start_zoom, template, bounds, zoom):
@@ -96,6 +97,7 @@ def build_feature_queries(unpadded_bounds, layer_data, zoom):
     return queries_to_execute
 
 
+@newrelic.agent.function_trace()
 def execute_query(conn, query, layer_datum, padded_bounds):
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
