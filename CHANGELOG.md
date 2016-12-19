@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v1.1.1
+------
+* Use queue name from message to acknowledge message. See [#134](https://github.com/tilezen/tilequeue/issues/134).
+
 v1.1.0
 ------
 * Add command to dump the tiles of interest list to a text file
