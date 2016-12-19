@@ -114,7 +114,11 @@ class MultiSqsQueue(object):
                 except (TypeError, ValueError):
                     timestamp = None
 
-                coord_message = CoordMessage(coord, qm, timestamp)
+                metadata = dict(
+                    queue_name=sqs_queue.name,
+                    timestamp=timestamp,
+                )
+                coord_message = CoordMessage(coord, qm, metadata)
                 coord_messages.append(coord_message)
                 left_to_read -= 1
 
@@ -125,7 +129,13 @@ class MultiSqsQueue(object):
         return coord_messages
 
     def job_done(self, coord_message):
-        queue_name = self.get_queue_name_for_zoom(coord_message.coord.zoom)
+        queue_name = None
+        if coord_message.metadata:
+            queue_name = coord_message.metadata.get('queue_name')
+        assert queue_name, \
+            'Missing queue name metadata for coord: %s' % serialize_coord(
+                coord_message.coord)
+
         sqs_queue = self.sqs_queue_for_name.get(queue_name)
         assert sqs_queue, 'Missing queue for: %s' % queue_name
 

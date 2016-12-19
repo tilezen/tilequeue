@@ -145,10 +145,10 @@ class MultiSqsTest(unittest.TestCase):
         from tilequeue.tile import deserialize_coord
 
         coord = deserialize_coord('1/1/1')
-        cm = CoordMessage(coord, 'msg_handle')
         sqs_queue = MagicMock()
         sqs_queue.name = 'q1'
         sqs_queue.delete_message = self._mock_delete_message
+        cm = CoordMessage(coord, 'msg_handle', dict(queue_name=sqs_queue.name))
         msq = self._make_one([sqs_queue])
         msq.job_done(cm)
         self.assertIsNotNone(self.mock_handle)
@@ -173,14 +173,30 @@ class MultiSqsTest(unittest.TestCase):
             _test_q1_q2_get_queue_name_for_zoom,
         )
 
-        cm1 = CoordMessage(coord1, 'msg_handle1')
+        cm1 = CoordMessage(coord1, 'msg_handle1',
+                           metadata=dict(queue_name=sqs_queue1.name))
         msq.job_done(cm1)
         self.assertIsNotNone(self.mock_handle)
         self.assertEqual(self.mock_handle, 'msg_handle1')
         self.mock_handle = None
 
-        cm2 = CoordMessage(coord2, 'msg_handle2')
+        cm2 = CoordMessage(coord2, 'msg_handle2',
+                           metadata=dict(queue_name=sqs_queue2.name))
         msq.job_done(cm2)
         self.assertIsNotNone(self.mock_handle)
         self.assertEqual(self.mock_handle, 'msg_handle2')
         self.mock_handle = None
+
+    def test_job_done_no_queue_name(self):
+        from mock import MagicMock
+        from tilequeue.tile import CoordMessage
+        from tilequeue.tile import deserialize_coord
+
+        coord = deserialize_coord('1/1/1')
+        sqs_queue = MagicMock()
+        sqs_queue.name = 'q1'
+        sqs_queue.delete_message = self._mock_delete_message
+        cm = CoordMessage(coord, 'msg_handle')
+        msq = self._make_one([sqs_queue])
+        with self.assertRaises(AssertionError):
+            msq.job_done(cm)

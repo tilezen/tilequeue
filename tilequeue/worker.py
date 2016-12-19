@@ -4,7 +4,6 @@ from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.metatile import make_metatiles
@@ -89,8 +88,7 @@ class SqsQueueReader(object):
                         s3_seconds=None,
                         ack_seconds=None,
                     ),
-                    sqs_handle=msg.message_handle,
-                    timestamp=msg.timestamp
+                    coord_message=msg,
                 )
                 data = dict(
                     metadata=metadata,
@@ -388,9 +386,8 @@ class SqsQueueWriter(object):
                 break
 
             metadata = data['metadata']
-            sqs_handle = metadata['sqs_handle']
+            coord_message = metadata['coord_message']
             coord = data['coord']
-            coord_message = CoordMessage(coord, sqs_handle)
 
             start = time.time()
             try:
@@ -405,12 +402,14 @@ class SqsQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            sqs_timestamp_millis = metadata['timestamp']
-            if sqs_timestamp_millis is not None:
-                sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-                time_in_queue = now - sqs_timestamp_seconds
-            else:
-                time_in_queue = 0
+            coord_message = metadata['coord_message']
+            msg_metadata = coord_message.metadata
+            time_in_queue = 0
+            if msg_metadata:
+                sqs_timestamp_millis = msg_metadata.get('timestamp')
+                if sqs_timestamp_millis is not None:
+                    sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
+                    time_in_queue = now - sqs_timestamp_seconds
 
             layers = metadata['layers']
             size = layers['size']

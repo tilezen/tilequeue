@@ -75,7 +75,12 @@ class SqsQueue(object):
                 timestamp = float(message.attributes.get('SentTimestamp'))
             except (TypeError, ValueError):
                 timestamp = None
-            coord_message = CoordMessage(coord, message, timestamp)
+
+            metadata = dict(
+                queue_name=self.sqs_queue.name,
+                timestamp=timestamp,
+            )
+            coord_message = CoordMessage(coord, message, metadata)
             coord_messages.append(coord_message)
         return coord_messages
 
