@@ -4,6 +4,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
+import newrelic.admin
 
 
 class SqsQueue(object):
@@ -15,6 +16,7 @@ class SqsQueue(object):
         self.redis_client = redis_client
         self.is_seeding = is_seeding
 
+    @newrelic.agent.function_trace()
     def enqueue(self, coord):
         if not self._inflight(coord):
             payload = serialize_coord(coord)
@@ -23,6 +25,7 @@ class SqsQueue(object):
             self.sqs_queue.write(message)
             self._add_to_flight(coord)
 
+    @newrelic.agent.function_trace()
     def _write_batch(self, coords):
         assert len(coords) <= 10
         values = []
@@ -43,6 +46,7 @@ class SqsQueue(object):
         self.redis_client.sadd(self.inflight_key,
                                coord_marshall_int(coord))
 
+    @newrelic.agent.function_trace()
     def enqueue_batch(self, coords):
         buffer = []
         n_queued = 0
@@ -61,6 +65,7 @@ class SqsQueue(object):
 
         return n_queued, n_in_flight
 
+    @newrelic.agent.function_trace()
     def read(self, max_to_read=1):
         coord_messages = []
         messages = self.sqs_queue.get_messages(num_messages=max_to_read,

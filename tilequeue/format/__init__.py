@@ -3,6 +3,7 @@ from tilequeue.format.geojson import encode_single_layer as json_encode_single_l
 from tilequeue.format.mvt import encode as mvt_encode
 from tilequeue.format.topojson import encode as topojson_encode
 from tilequeue.format.vtm import merge as vtm_encode
+import newrelic.agent
 
 
 class OutputFormat(object):
@@ -29,6 +30,7 @@ class OutputFormat(object):
     def __eq__(self, other):
         return self.extension == other.extension
 
+    @newrelic.agent.function_trace()
     def format_tile(self, tile_data_file, feature_layers, coord, bounds_merc,
                     bounds_lnglat):
         self.format_fn(tile_data_file, feature_layers, coord, bounds_merc,

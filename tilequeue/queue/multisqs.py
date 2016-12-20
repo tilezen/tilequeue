@@ -5,7 +5,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import CoordMessage
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
-
+import newrelic.admin
 
 class MultiSqsQueue(object):
 
@@ -20,6 +20,7 @@ class MultiSqsQueue(object):
         self.is_seeding = is_seeding
         self.sqs_queue_for_name = dict([(x.name, x) for x in sqs_queues])
 
+    @newrelic.agent.function_trace()
     def enqueue(self, coord):
         if not coord_is_valid(coord):
             # TODO log?
@@ -88,6 +89,7 @@ class MultiSqsQueue(object):
 
         return n_queued, n_in_flight
 
+    @newrelic.agent.function_trace()
     def read(self, max_to_read=None):
         if max_to_read is None:
             max_to_read = self.queue_buf_size

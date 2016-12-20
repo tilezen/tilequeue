@@ -418,6 +418,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
+@newrelic.agent.function_trace()
 def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
                      cfg_path):
     if reload_templates:
