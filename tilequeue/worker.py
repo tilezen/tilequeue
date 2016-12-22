@@ -117,6 +117,7 @@ class DataFetch(object):
     @newrelic.agent.background_task(name="DataFetch")
     def process_one(self, data):
         coord = data['coord']
+        newrelic.agent.add_custom_parameter("coord", coord)
 
         start = time.time()
 
@@ -220,6 +221,7 @@ class ProcessAndFormatData(object):
 
     @newrelic.agent.background_task(name="ProcessAndFormatData")
     def process_one(self, data):
+        newrelic.agent.add_custom_parameter("coord", coord)
         coord = data['coord']
         feature_layers = data['feature_layers']
         unpadded_bounds = data['unpadded_bounds']
