@@ -236,7 +236,7 @@ class ProcessAndFormatData(object):
             stacktrace = format_stacktrace_one_line()
             self.logger.error('Error processing: %s - %s' % (
                 serialize_coord(coord), stacktrace))
-            continue
+            return None
 
         metadata = data['metadata']
         metadata['timing']['process_seconds'] = time.time() - start
