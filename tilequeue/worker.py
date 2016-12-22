@@ -221,8 +221,8 @@ class ProcessAndFormatData(object):
 
     @newrelic.agent.background_task(name="ProcessAndFormatData")
     def process_one(self, data):
-        newrelic.agent.add_custom_parameter("coord", coord)
         coord = data['coord']
+        newrelic.agent.add_custom_parameter("coord", coord)
         feature_layers = data['feature_layers']
         unpadded_bounds = data['unpadded_bounds']
         cut_coords = data['cut_coords']
