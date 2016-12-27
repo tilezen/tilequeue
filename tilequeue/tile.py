@@ -159,23 +159,27 @@ def bounds_to_coords(bounds, zoom):
 
 
 def tile_generator_for_single_bounds(bounds, zoom_start, zoom_until):
-    coords = bounds_to_coords(bounds, zoom_start)
-    assert len(coords) in (1, 2)
-    if len(coords) == 1:
-        coord = coords[0]
-        start_col = coord.column
-        start_row = coord.row
-        end_col = start_col
-        end_row = start_row
-    else:
-        topleftcoord, bottomrightcoord = coords
-        start_col = topleftcoord.column
-        start_row = topleftcoord.row
-        end_col = bottomrightcoord.column
-        end_row = bottomrightcoord.row
+    for zoom in xrange(zoom_start, zoom_until + 1):
+        coords = bounds_to_coords(bounds, zoom)
+        assert len(coords) in (1, 2)
+        if len(coords) == 1:
+            coord = coords[0]
+            start_col = coord.column
+            start_row = coord.row
+            end_col = start_col
+            end_row = start_row
+        else:
+            topleftcoord, bottomrightcoord = coords
+            start_col = topleftcoord.column
+            start_row = topleftcoord.row
+            end_col = bottomrightcoord.column
+            end_row = bottomrightcoord.row
 
-    return tile_generator_for_range(
-        start_col, start_row, end_col, end_row, zoom_start, zoom_until)
+        for tile in tile_generator_for_range(
+                start_col, start_row,
+                end_col, end_row,
+                zoom, zoom):
+            yield tile
 
 
 def tile_generator_for_range(
