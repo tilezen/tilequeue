@@ -125,3 +125,10 @@ class TestTileGeneration(unittest.TestCase):
         exp.sort()
         for actual_child, exp_child in zip(actual, exp):
             self.assertEqual(exp_child, actual_child)
+
+    def test_tiles_low_zooms(self):
+        from tilequeue.tile import tile_generator_for_single_bounds
+        bounds = -1.115, 50.941, 0.895, 51.984
+        tile_generator = tile_generator_for_single_bounds(bounds, 0, 5)
+        tiles = list(tile_generator)
+        self.assertEqual(11, len(tiles))
