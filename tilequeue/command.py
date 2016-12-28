@@ -1,3 +1,4 @@
+from collections import Iterable
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
@@ -739,7 +740,7 @@ class ThreadedEnqueuer(object):
         if self.logger is not None:
             self.logger.log(level, msg)
 
-    def __call__(self, coords):
+    def __call__(self, coords_iter_or_queue):
         # 10 is the number of messages that sqs can send at once
         buf_size = 10
         thread_work_queue = Queue.Queue(self.n_threads * buf_size)
@@ -776,8 +777,18 @@ class ThreadedEnqueuer(object):
 
         # queue up the work
         self._log(logging.INFO, 'Starting to enqueue coordinates ...')
-        for coord in coords:
-            thread_work_queue.put(coord)
+
+        if isinstance(coords_iter_or_queue, Iterable):
+            for coord in coords_iter_or_queue:
+                thread_work_queue.put(coord)
+        else:
+            assert isinstance(coords_iter_or_queue, Queue.Queue), \
+                'Unknown coords_iter_or_queue: %s' % coords_iter_or_queue
+            while True:
+                coord = coords_iter_or_queue.get()
+                if coord is None:
+                    break
+                thread_work_queue.put(coord)
 
         # tell the threads to stop
         total_queued_across_threads = 0
@@ -804,31 +815,38 @@ class ThreadedEnqueuer(object):
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
-    queue = peripherals.queue
+    tile_queue = peripherals.queue
     # suppresses checking the in flight list while seeding
-    queue.is_seeding = True
+    tile_queue.is_seeding = True
     redis_cache_index = peripherals.redis_cache_index
-    enqueuer = ThreadedEnqueuer(queue, cfg.seed_n_threads, logger)
+    enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
 
     # based on cfg, create tile generator
     tile_generator = make_seed_tile_generator(cfg)
-    # realize all tiles to simplify (they get realized anyway to
-    # eliminate dupes)
-    logger.info('Generating seed list ...')
-    coords = list(tile_generator)
-    logger.info('Generating seed list ... done')
-    n_tiles = len(coords)
-    logger.info('Will seed %d tiles' % n_tiles)
+
+    queue_buf_size = 1024
+    tile_queue_queue = Queue.Queue(queue_buf_size)
+    redis_queue = Queue.Queue(queue_buf_size)
 
     # updating sqs and updating redis happen in background threads
     def redis_add():
-        redis_cache_index.index_coords(coords)
+        redis_coords_buf = []
+        done = False
+        while not done:
+            coord = redis_queue.get()
+            if coord is None:
+                done = True
+            else:
+                redis_coords_buf.append(coord)
+            if len(redis_coords_buf) >= 1024 or (done and redis_coords_buf):
+                redis_cache_index.index_coords(redis_coords_buf)
+                del redis_coords_buf[:]
 
-    def sqs_enqueue():
-        enqueuer(coords)
+    def tile_queue_enqueue():
+        enqueuer(tile_queue_queue)
 
     logger.info('Sqs ... ')
-    thread_enqueue = threading.Thread(target=sqs_enqueue)
+    thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
 
     if cfg.seed_should_add_to_tiles_of_interest:
@@ -836,13 +854,25 @@ def tilequeue_seed(cfg, peripherals):
         thread_redis = threading.Thread(target=redis_add)
         thread_redis.start()
 
+    n_coords = 0
+    for coord in tile_generator:
+        tile_queue_queue.put(coord)
+        if cfg.seed_should_add_to_tiles_of_interest:
+            redis_queue.put(coord)
+        n_coords += 1
+        if n_coords % 100000 == 0:
+            logger.info('%d enqueued' % n_coords)
+
+    tile_queue_queue.put(None)
     if cfg.seed_should_add_to_tiles_of_interest:
+        redis_queue.put(None)
         thread_redis.join()
         logger.info('Tiles of interest ... done')
 
     thread_enqueue.join()
     logger.info('Sqs ... done')
     logger.info('Seeding tiles ... done')
+    logger.info('%d coordinates enqueued' % n_coords)
 
 
 def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
