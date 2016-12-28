@@ -67,6 +67,11 @@ tiles:
     # how many threads to use when enqueueing
     n-threads: 20
 
+    # whether the tiles should be unique in memory
+    # when seeding many tiles that are known to be unique, this should
+    # be set to false to save memory
+    unique: true
+
   intersect:
     # directory path to where expired tile files are generated
     expired-location: <path/to/expired/tiles/list>
