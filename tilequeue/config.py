@@ -58,6 +58,8 @@ class Configuration(object):
                 assert min_y < max_y, \
                     'Invalid bbox. {} not less than {}'.format(min_y, max_y)
 
+        self.seed_unique = seed_cfg['unique']
+
         intersect_cfg = self.yml['tiles']['intersect']
         self.intersect_expired_tiles_location = (
             intersect_cfg['expired-location'])
@@ -161,6 +163,7 @@ def default_yml_config():
                 },
                 'should-add-to-tiles-of-interest': True,
                 'n-threads': 50,
+                'unique': True,
             },
             'intersect': {
                 'expired-location': None,

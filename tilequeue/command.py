@@ -252,7 +252,11 @@ def make_seed_tile_generator(cfg):
 
     combined_tiles = chain(
         all_tiles, metro_extract_tiles, top_tiles, custom_tiles)
-    tile_generator = uniquify_generator(combined_tiles)
+
+    if cfg.seed_unique:
+        tile_generator = uniquify_generator(combined_tiles)
+    else:
+        tile_generator = combined_tiles
 
     return tile_generator
 
