@@ -1,6 +1,6 @@
 from math import ceil
 from math import log
-import json
+import ujson as json
 import shapely.geometry
 import shapely.ops
 import shapely.wkb

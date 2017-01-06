@@ -1,4 +1,4 @@
-import json
+import ujson as json
 
 
 def update_arc_indexes(geometry, merged_arcs, old_arcs):
