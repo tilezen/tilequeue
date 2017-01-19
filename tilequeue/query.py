@@ -1,5 +1,5 @@
 from psycopg2.extras import RealDictCursor
-from tilequeue.postgresql import DBAffinityConnectionsNoLimit
+from tilequeue.postgresql import DatabaseCycleConnectionPool
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.transform import calculate_padded_bounds
@@ -157,8 +157,9 @@ class DataFetcher(object):
 
         self.dbnames = self.conn_info.pop('dbnames')
         self.dbnames_query_index = 0
-        self.sql_conn_pool = DBAffinityConnectionsNoLimit(
-            self.dbnames, n_conn, self.conn_info)
+        self.sql_conn_pool = DatabaseCycleConnectionPool(
+            n_conn, 100, self.dbnames, self.conn_info)
+        self.n_conn = n_conn
 
     def __call__(self, coord, layer_data=None):
         if layer_data is None:
@@ -166,7 +167,7 @@ class DataFetcher(object):
         zoom = coord.zoom
         unpadded_bounds = coord_to_mercator_bounds(coord)
 
-        sql_conns, conn_info = self.sql_conn_pool.get_conns()
+        sql_conns = self.sql_conn_pool.get_conns(self.n_conn)
         try:
             # the padded bounds are used here in order to only have to
             # issue a single set of queries to the database for all
