@@ -1,9 +1,8 @@
-from itertools import chain
 from itertools import cycle
 from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import register_hstore, register_json
-import psycopg2
 import threading
+import ujson as json
 
 
 class DatabaseCycleConnectionPool(object):
@@ -14,8 +13,7 @@ class DatabaseCycleConnectionPool(object):
     all of those connections will come from the same database.
     """
 
-    def __init__(self, min_conns_per_db, max_conns_per_db,
-            dbnames, conn_info):
+    def __init__(self, min_conns_per_db, max_conns_per_db, dbnames, conn_info):
         self._pools = []
         self._conns_to_pool = {}
 
@@ -24,7 +22,7 @@ class DatabaseCycleConnectionPool(object):
                 min_conns_per_db,
                 max_conns_per_db,
                 dbname=dbname,
-                **conn_info,
+                **conn_info
             )
             self._pools.append(pool)
 
@@ -39,13 +37,18 @@ class DatabaseCycleConnectionPool(object):
                 pool_to_use = next(self._pool_cycle)
                 for _ in range(n_conns):
                     conn = pool_to_use.getconn()
+
+                    register_json(conn, loads=json.loads, globally=True)
+                    register_hstore(conn, globally=True)
+
                     self._conns_to_pool[id(conn)] = pool_to_use
                     conns.append(conn)
-                assert len(conns) == n_conns,
+                assert len(conns) == n_conns, \
                     "Couldn't collect enough connections"
             except:
                 self.put_conns(conns)
                 conns = []
+                raise
 
         return conns
 
