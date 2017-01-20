@@ -150,7 +150,7 @@ def enqueue_queries(sql_conns, thread_pool, layer_data, zoom, unpadded_bounds):
 
 class DataFetcher(object):
 
-    def __init__(self, conn_info, layer_data, io_pool, n_conn):
+    def __init__(self, conn_info, layer_data, io_pool, n_conn, max_conn):
         self.conn_info = dict(conn_info)
         self.layer_data = layer_data
         self.io_pool = io_pool
@@ -158,7 +158,7 @@ class DataFetcher(object):
         self.dbnames = self.conn_info.pop('dbnames')
         self.dbnames_query_index = 0
         self.sql_conn_pool = DatabaseCycleConnectionPool(
-            n_conn, 100, self.dbnames, self.conn_info)
+            n_conn, max_conn, self.dbnames, self.conn_info)
         self.n_conn = n_conn
 
     def __call__(self, coord, layer_data=None):
