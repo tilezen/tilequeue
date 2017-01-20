@@ -56,8 +56,9 @@ class DatabaseCycleConnectionPool(object):
         with self._lock:
             for conn in conns:
                 pool = self._conns_to_pool.pop(id(conn), None)
-                if pool:
-                    pool.putconn(conn)
+                assert pool is not None, \
+                    "Couldn't find the pool for connection"
+                pool.putconn(conn)
 
     def closeall(self):
         with self._lock:
