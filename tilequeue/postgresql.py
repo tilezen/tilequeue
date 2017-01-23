@@ -46,8 +46,9 @@ class DatabaseCycleConnectionPool(object):
                 assert len(conns) == n_conns, \
                     "Couldn't collect enough connections"
         except:
-            self.put_conns(conns)
-            conns = []
+            if conns:
+                self.put_conns(conns)
+                conns = []
             raise
 
         return conns
