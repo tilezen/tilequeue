@@ -38,6 +38,7 @@ class DatabaseCycleConnectionPool(object):
                 for _ in range(n_conns):
                     conn = pool_to_use.getconn()
 
+                    conn.set_session(readonly=True, autocommit=True)
                     register_json(conn, loads=json.loads, globally=True)
                     register_hstore(conn, globally=True)
 
