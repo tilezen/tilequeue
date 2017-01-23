@@ -32,8 +32,8 @@ class DatabaseCycleConnectionPool(object):
     def get_conns(self, n_conns):
         conns = []
 
-        with self._lock:
-            try:
+        try:
+            with self._lock:
                 pool_to_use = next(self._pool_cycle)
                 for _ in range(n_conns):
                     conn = pool_to_use.getconn()
@@ -45,10 +45,10 @@ class DatabaseCycleConnectionPool(object):
                     conns.append(conn)
                 assert len(conns) == n_conns, \
                     "Couldn't collect enough connections"
-            except:
-                self.put_conns(conns)
-                conns = []
-                raise
+        except:
+            self.put_conns(conns)
+            conns = []
+            raise
 
         return conns
 
