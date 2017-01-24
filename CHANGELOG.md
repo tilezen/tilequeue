@@ -9,6 +9,7 @@ v1.2.0
 * Reduce database requests by registering hstore/json (See [#142](https://github.com/tilezen/tilequeue/issues/142))
 * Reduce memory usage during tile seeding (See [#126](https://github.com/tilezen/tilequeue/issues/126))
 * Expose unique option for seeding tile generator (See [#127](https://github.com/tilezen/tilequeue/issues/127))
+* Support long zooms (See [#130](https://github.com/tilezen/tilequeue/pull/130))
 
 v1.1.1
 ------
@@ -17,7 +18,7 @@ v1.1.1
 v1.1.0
 ------
 * Add command to dump the tiles of interest list to a text file
-* Add support for generating metatiles
+* Add support for generating metatiles (see also: tapalcatl)
 * Add priority queues implementation
 * Increase topojson scale from 1024 -> 4096
 
