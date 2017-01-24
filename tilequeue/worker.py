@@ -4,9 +4,9 @@ from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import CoordMessage
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
+from tilequeue.metatile import make_metatiles
 import logging
 import Queue
 import signal
@@ -88,8 +88,7 @@ class SqsQueueReader(object):
                         s3_seconds=None,
                         ack_seconds=None,
                     ),
-                    sqs_handle=msg.message_handle,
-                    timestamp=msg.timestamp
+                    coord_message=msg,
                 )
                 data = dict(
                     metadata=metadata,
@@ -264,12 +263,15 @@ class ProcessAndFormatData(object):
 
 class S3Storage(object):
 
-    def __init__(self, input_queue, output_queue, io_pool, store, logger):
+    def __init__(self, input_queue, output_queue, io_pool, store, logger,
+                 metatile_size, store_metatile_and_originals=False):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
+        self.metatile_size = metatile_size
+        self.store_metatile_and_originals = store_metatile_and_originals
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -286,21 +288,7 @@ class S3Storage(object):
             coord = data['coord']
 
             start = time.time()
-            async_jobs = []
-            for formatted_tile in data['formatted_tiles']:
-
-                async_result = self.io_pool.apply_async(
-                    write_tile_if_changed, (
-                        self.store,
-                        formatted_tile['tile'],
-                        # important to use the coord from the
-                        # formatted tile here, because we could have
-                        # cut children tiles that have separate zooms
-                        # too
-                        formatted_tile['coord'],
-                        formatted_tile['format'],
-                        formatted_tile['layer']))
-                async_jobs.append(async_result)
+            async_jobs = self.save_tiles(data['formatted_tiles'])
 
             async_exc_info = None
             n_stored = 0
@@ -347,6 +335,36 @@ class S3Storage(object):
             _force_empty_queue(self.input_queue)
         self.logger.debug('s3 storage stopped')
 
+    def save_tiles(self, tiles):
+        async_jobs = []
+
+        if self.metatile_size:
+            metatiles = make_metatiles(self.metatile_size, tiles)
+
+            # allow the metatile to be stored, or both the metatile
+            # and originals, which allows for a smooth cutover.
+            if self.store_metatile_and_originals:
+                tiles.extend(metatiles)
+            else:
+                tiles = metatiles
+
+        for tile in tiles:
+
+            async_result = self.io_pool.apply_async(
+                write_tile_if_changed, (
+                    self.store,
+                    tile['tile'],
+                    # important to use the coord from the
+                    # formatted tile here, because we could have
+                    # cut children tiles that have separate zooms
+                    # too
+                    tile['coord'],
+                    tile['format'],
+                    tile['layer']))
+            async_jobs.append(async_result)
+
+        return async_jobs
+
 
 class SqsQueueWriter(object):
 
@@ -368,9 +386,8 @@ class SqsQueueWriter(object):
                 break
 
             metadata = data['metadata']
-            sqs_handle = metadata['sqs_handle']
+            coord_message = metadata['coord_message']
             coord = data['coord']
-            coord_message = CoordMessage(coord, sqs_handle)
 
             start = time.time()
             try:
@@ -385,9 +402,14 @@ class SqsQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            sqs_timestamp_millis = metadata['timestamp']
-            sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-            time_in_queue = now - sqs_timestamp_seconds
+            coord_message = metadata['coord_message']
+            msg_metadata = coord_message.metadata
+            time_in_queue = 0
+            if msg_metadata:
+                sqs_timestamp_millis = msg_metadata.get('timestamp')
+                if sqs_timestamp_millis is not None:
+                    sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
+                    time_in_queue = now - sqs_timestamp_seconds
 
             layers = metadata['layers']
             size = layers['size']

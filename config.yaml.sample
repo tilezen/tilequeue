@@ -1,7 +1,13 @@
 queue:
-  # type can be `sqs`, `file`, `mem`, or `redis`
+  # type can be `sqs`, `multisqs`, `file`, `mem`, or `redis`
   type: mem
-  name: <sqs queue/queue file name/redis key>
+  name: <sqs queue/list of queue names/queue file name/redis key/>
+  # for multisqs
+  zoom-queue-map:
+    # keys are <start-zoom>-<end-zoom> (inclusive) ranges
+    # values are the queue name to use for zooms in that range
+    0-10: queue-1
+    11-20: queue-2
 store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>
@@ -60,6 +66,11 @@ tiles:
 
     # how many threads to use when enqueueing
     n-threads: 20
+
+    # whether the tiles should be unique in memory
+    # when seeding many tiles that are known to be unique, this should
+    # be set to false to save memory
+    unique: true
 
   intersect:
     # directory path to where expired tile files are generated
@@ -147,3 +158,17 @@ wof:
     dbname: osm
     user: osm
     password:
+
+# Set the metatile size to 1 to have tilequeue save metatiles to storage rather
+# than individual tiles. This can have major benefits for reducing the number of
+# writes to disk. Set the size to null, or omit the entry, to disable metatile
+# writing and store individual tiles.
+metatile:
+  # Only metatiles of size 1 are currently supported, although other sizes may
+  # be available in the future.
+  size: null
+
+  # if this is set to true, then tilequeue will write the individual formats in
+  # addition to the metatile. this can be useful when gracefully "cutting over"
+  # to a metatile-based system from an individual format based one.
+  store_metatile_and_originals: false

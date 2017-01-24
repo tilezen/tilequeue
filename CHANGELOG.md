@@ -1,6 +1,17 @@
 CHANGELOG
 =========
 
+v1.1.1
+------
+* Use queue name from message to acknowledge message. See [#134](https://github.com/tilezen/tilequeue/issues/134).
+
+v1.1.0
+------
+* Add command to dump the tiles of interest list to a text file
+* Add support for generating metatiles
+* Add priority queues implementation
+* Increase topojson scale from 1024 -> 4096
+
 v1.0.1
 ------
 * Add bbox filter to test for partial overlapping, rather than intersecting, the bbox.

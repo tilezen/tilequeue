@@ -2,24 +2,18 @@ from itertools import chain
 from ModestMaps.Core import Coordinate
 import math
 import pyproj
-import time
 
 
 merc_proj = pyproj.Proj(init='epsg:3857')
 latlng_proj = pyproj.Proj(proj='latlong')
 
 
-# TODO: use a namedtuple instead
 class CoordMessage(object):
 
-    def __init__(self, coord, message_handle, timestamp=None):
+    def __init__(self, coord, message_handle, metadata=None):
         self.coord = coord
         self.message_handle = message_handle
-        self.timestamp = time.time() if timestamp is None else timestamp
-
-    def __repr__(self):
-        return 'CoordMessage(%s, %s, %s)' % (self.coord, self.message_handle,
-                                             self.timestamp)
+        self.metadata = metadata
 
 
 def serialize_coord(coord):
@@ -165,23 +159,27 @@ def bounds_to_coords(bounds, zoom):
 
 
 def tile_generator_for_single_bounds(bounds, zoom_start, zoom_until):
-    coords = bounds_to_coords(bounds, zoom_start)
-    assert len(coords) in (1, 2)
-    if len(coords) == 1:
-        coord = coords[0]
-        start_col = coord.column
-        start_row = coord.row
-        end_col = start_col
-        end_row = start_row
-    else:
-        topleftcoord, bottomrightcoord = coords
-        start_col = topleftcoord.column
-        start_row = topleftcoord.row
-        end_col = bottomrightcoord.column
-        end_row = bottomrightcoord.row
+    for zoom in xrange(zoom_start, zoom_until + 1):
+        coords = bounds_to_coords(bounds, zoom)
+        assert len(coords) in (1, 2)
+        if len(coords) == 1:
+            coord = coords[0]
+            start_col = coord.column
+            start_row = coord.row
+            end_col = start_col
+            end_row = start_row
+        else:
+            topleftcoord, bottomrightcoord = coords
+            start_col = topleftcoord.column
+            start_row = topleftcoord.row
+            end_col = bottomrightcoord.column
+            end_row = bottomrightcoord.row
 
-    return tile_generator_for_range(
-        start_col, start_row, end_col, end_row, zoom_start, zoom_until)
+        for tile in tile_generator_for_range(
+                start_col, start_row,
+                end_col, end_row,
+                zoom, zoom):
+            yield tile
 
 
 def tile_generator_for_range(
@@ -342,3 +340,14 @@ def normalize_geometry_type(geom_type):
     assert result, \
         'normalize_geometry_type: unknown geometry %s' % geom_type
     return result
+
+
+def coord_is_valid(coord):
+    if coord.zoom < 0 or coord.zoom > 20:
+        return False
+    if coord.column < 0 or coord.row < 0:
+        return False
+    max_colrow = int(math.pow(2, coord.zoom))
+    if coord.column >= max_colrow or coord.row >= max_colrow:
+        return False
+    return True

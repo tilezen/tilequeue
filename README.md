@@ -4,7 +4,9 @@ A tile generator, used by itself for asyncronous tile generation or with [tilese
 
 ## Installation
 
-We recommend following the vector-datasource [installation instructions](https://github.com/tilezen/vector-datasource/wiki/Mapzen-Vector-Tile-Service).
+We recommend following the vector-datasource [installation instructions](https://github.com/tilezen/vector-datasource/wiki/Mapzen-Vector-Tile-Service). 
+
+_Note: Installation has been tested using Python 2.7 and results with other versions may vary._
 
 In addition to the dependencies in [requirements.txt](requirements.txt), tileserver requires
 

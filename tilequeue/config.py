@@ -16,6 +16,7 @@ class Configuration(object):
 
         self.queue_name = self._cfg('queue name')
         self.queue_type = self._cfg('queue type')
+        self.queue_cfg = self.yml['queue']
 
         self.store_type = self._cfg('store type')
         self.s3_bucket = self._cfg('store name')
@@ -56,6 +57,8 @@ class Configuration(object):
                     'Invalid bbox. {} not less than {}'.format(min_x, max_x)
                 assert min_y < max_y, \
                     'Invalid bbox. {} not less than {}'.format(min_y, max_y)
+
+        self.seed_unique = seed_cfg['unique']
 
         intersect_cfg = self.yml['tiles']['intersect']
         self.intersect_expired_tiles_location = (
@@ -104,6 +107,9 @@ class Configuration(object):
         assert len(dbnames) > 0, 'No postgresql dbnames configured'
 
         self.wof = self.yml.get('wof')
+
+        self.metatile_size = self._cfg('metatile size')
+        self.store_orig = self._cfg('metatile store_metatile_and_originals')
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
@@ -157,6 +163,7 @@ def default_yml_config():
                 },
                 'should-add-to-tiles-of-interest': True,
                 'n-threads': 50,
+                'unique': True,
             },
             'intersect': {
                 'expired-location': None,
@@ -191,6 +198,10 @@ def default_yml_config():
             'dbnames': ('osm',),
             'user': 'osm',
             'password': None,
+        },
+        'metatile': {
+            'size': None,
+            'store_metatile_and_originals': False,
         },
     }
 

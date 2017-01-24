@@ -1,3 +1,4 @@
+from collections import Iterable
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain, izip_longest
@@ -87,9 +88,69 @@ def uniquify_generator(generator):
         yield tile
 
 
-def make_queue(queue_type, queue_name, redis_client,
+class GetSqsQueueNameForZoom(object):
+
+    def __init__(self, zoom_queue_table):
+        self.zoom_queue_table = zoom_queue_table
+
+    def __call__(self, zoom):
+        assert isinstance(zoom, (int, long))
+        assert 0 <= zoom <= 20
+        result = self.zoom_queue_table.get(zoom)
+        assert result is not None, 'No queue name found for zoom: %d' % zoom
+        return result
+
+
+def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
+    zoom_to_queue_name_table = {}
+
+    for zoom_range, queue_name in zoom_queue_map_cfg.items():
+        assert queue_name in queue_names
+
+        assert '-' in zoom_range, 'Invalid zoom range: %s' % zoom_range
+        zoom_fields = zoom_range.split('-')
+        assert len(zoom_fields) == 2, 'Invalid zoom range: %s' % zoom_range
+        zoom_start_str, zoom_until_str = zoom_fields
+        try:
+            zoom_start = int(zoom_start_str)
+            zoom_until = int(zoom_until_str)
+        except (ValueError, KeyError):
+            assert not 'Invalid zoom range: %s' % zoom_range
+
+        assert (0 <= zoom_start <= 20 and
+                0 <= zoom_until <= 20 and
+                zoom_start <= zoom_until), \
+            'Invalid zoom range: %s' % zoom_range
+
+        for i in range(zoom_start, zoom_until + 1):
+            assert i not in zoom_to_queue_name_table, \
+                'Overlapping zoom range: %s' % zoom_range
+            zoom_to_queue_name_table[i] = queue_name
+
+    result = GetSqsQueueNameForZoom(zoom_to_queue_name_table)
+    return result
+
+
+def make_queue(queue_type, queue_name, queue_cfg, redis_client,
                aws_access_key_id=None, aws_secret_access_key=None):
-    if queue_type == 'sqs':
+    if queue_type == 'multisqs':
+        from tilequeue.queue import make_multi_sqs_queue
+        assert isinstance(queue_name, list)
+        queue_names = queue_name
+
+        zoom_queue_map_cfg = queue_cfg.get('zoom-queue-map')
+        assert zoom_queue_map_cfg, \
+            'Missing zoom-queue-map config for multiqueue'
+        assert isinstance(zoom_queue_map_cfg, dict), \
+            'zoom-queue-map cfg must be a map'
+
+        get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
+            zoom_queue_map_cfg, queue_names)
+        result = make_multi_sqs_queue(
+            queue_names, get_queue_idx_for_zoom, redis_client)
+        return result
+
+    elif queue_type == 'sqs':
         return make_sqs_queue(queue_name, redis_client,
                               aws_access_key_id, aws_secret_access_key)
     elif queue_type == 'mem':
@@ -192,7 +253,11 @@ def make_seed_tile_generator(cfg):
 
     combined_tiles = chain(
         all_tiles, metro_extract_tiles, top_tiles, custom_tiles)
-    tile_generator = uniquify_generator(combined_tiles)
+
+    if cfg.seed_unique:
+        tile_generator = uniquify_generator(combined_tiles)
+    else:
+        tile_generator = combined_tiles
 
     return tile_generator
 
@@ -468,7 +533,7 @@ def tilequeue_process(cfg, peripherals):
     io_pool = ThreadPool(n_io_workers)
 
     feature_fetcher = DataFetcher(cfg.postgresql_conn_info, all_layer_data,
-                                  io_pool, n_layers)
+                                  io_pool, n_layers, n_total_needed_query)
 
     # create all queues used to manage pipeline
 
@@ -501,7 +566,7 @@ def tilequeue_process(cfg, peripherals):
         cfg.layers_to_format, cfg.buffer_cfg, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
-                           store, logger)
+                           store, logger, cfg.metatile_size, cfg.store_orig)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
@@ -675,7 +740,7 @@ class ThreadedEnqueuer(object):
         if self.logger is not None:
             self.logger.log(level, msg)
 
-    def __call__(self, coords):
+    def __call__(self, coords_iter_or_queue):
         # 10 is the number of messages that sqs can send at once
         buf_size = 10
         thread_work_queue = Queue.Queue(self.n_threads * buf_size)
@@ -712,8 +777,18 @@ class ThreadedEnqueuer(object):
 
         # queue up the work
         self._log(logging.INFO, 'Starting to enqueue coordinates ...')
-        for coord in coords:
-            thread_work_queue.put(coord)
+
+        if isinstance(coords_iter_or_queue, Iterable):
+            for coord in coords_iter_or_queue:
+                thread_work_queue.put(coord)
+        else:
+            assert isinstance(coords_iter_or_queue, Queue.Queue), \
+                'Unknown coords_iter_or_queue: %s' % coords_iter_or_queue
+            while True:
+                coord = coords_iter_or_queue.get()
+                if coord is None:
+                    break
+                thread_work_queue.put(coord)
 
         # tell the threads to stop
         total_queued_across_threads = 0
@@ -740,31 +815,38 @@ class ThreadedEnqueuer(object):
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
-    queue = peripherals.queue
+    tile_queue = peripherals.queue
     # suppresses checking the in flight list while seeding
-    queue.is_seeding = True
+    tile_queue.is_seeding = True
     redis_cache_index = peripherals.redis_cache_index
-    enqueuer = ThreadedEnqueuer(queue, cfg.seed_n_threads, logger)
+    enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
 
     # based on cfg, create tile generator
     tile_generator = make_seed_tile_generator(cfg)
-    # realize all tiles to simplify (they get realized anyway to
-    # eliminate dupes)
-    logger.info('Generating seed list ...')
-    coords = list(tile_generator)
-    logger.info('Generating seed list ... done')
-    n_tiles = len(coords)
-    logger.info('Will seed %d tiles' % n_tiles)
+
+    queue_buf_size = 1024
+    tile_queue_queue = Queue.Queue(queue_buf_size)
+    redis_queue = Queue.Queue(queue_buf_size)
 
     # updating sqs and updating redis happen in background threads
     def redis_add():
-        redis_cache_index.index_coords(coords)
+        redis_coords_buf = []
+        done = False
+        while not done:
+            coord = redis_queue.get()
+            if coord is None:
+                done = True
+            else:
+                redis_coords_buf.append(coord)
+            if len(redis_coords_buf) >= 1024 or (done and redis_coords_buf):
+                redis_cache_index.index_coords(redis_coords_buf)
+                del redis_coords_buf[:]
 
-    def sqs_enqueue():
-        enqueuer(coords)
+    def tile_queue_enqueue():
+        enqueuer(tile_queue_queue)
 
     logger.info('Sqs ... ')
-    thread_enqueue = threading.Thread(target=sqs_enqueue)
+    thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
 
     if cfg.seed_should_add_to_tiles_of_interest:
@@ -772,13 +854,25 @@ def tilequeue_seed(cfg, peripherals):
         thread_redis = threading.Thread(target=redis_add)
         thread_redis.start()
 
+    n_coords = 0
+    for coord in tile_generator:
+        tile_queue_queue.put(coord)
+        if cfg.seed_should_add_to_tiles_of_interest:
+            redis_queue.put(coord)
+        n_coords += 1
+        if n_coords % 100000 == 0:
+            logger.info('%d enqueued' % n_coords)
+
+    tile_queue_queue.put(None)
     if cfg.seed_should_add_to_tiles_of_interest:
+        redis_queue.put(None)
         thread_redis.join()
         logger.info('Tiles of interest ... done')
 
     thread_enqueue.join()
     logger.info('Sqs ... done')
     logger.info('Seeding tiles ... done')
+    logger.info('%d coordinates enqueued' % n_coords)
 
 
 def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
@@ -1190,7 +1284,7 @@ def tilequeue_main(argv_args=None):
     redis_client = make_redis_client(cfg)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
     queue = make_queue(
-        cfg.queue_type, cfg.queue_name, redis_client,
+        cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
         aws_secret_access_key=cfg.aws_secret_access_key)
     peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue)

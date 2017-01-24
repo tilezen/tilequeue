@@ -8,10 +8,11 @@ from tilequeue.tile import serialize_coord
 
 class SqsQueue(object):
 
+    inflight_key = 'tilequeue.in-flight'
+
     def __init__(self, sqs_queue, redis_client, is_seeding=False):
         self.sqs_queue = sqs_queue
         self.redis_client = redis_client
-        self.inflight_key = "tilequeue.in-flight"
         self.is_seeding = is_seeding
 
     def enqueue(self, coord):
@@ -68,10 +69,18 @@ class SqsQueue(object):
             data = message.get_body()
             coord = deserialize_coord(data)
             if coord is None:
-                # log?
+                # TODO log?
                 continue
-            timestamp = float(message.attributes.get('SentTimestamp'))
-            coord_message = CoordMessage(coord, message, timestamp)
+            try:
+                timestamp = float(message.attributes.get('SentTimestamp'))
+            except (TypeError, ValueError):
+                timestamp = None
+
+            metadata = dict(
+                queue_name=self.sqs_queue.name,
+                timestamp=timestamp,
+            )
+            coord_message = CoordMessage(coord, message, metadata)
             coord_messages.append(coord_message)
         return coord_messages
 
