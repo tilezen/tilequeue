@@ -125,3 +125,18 @@ class TestTileGeneration(unittest.TestCase):
         exp.sort()
         for actual_child, exp_child in zip(actual, exp):
             self.assertEqual(exp_child, actual_child)
+
+
+class TestReproject(unittest.TestCase):
+
+    def test_reproject(self):
+        from tilequeue.tile import reproject_lnglat_to_mercator
+        coord = reproject_lnglat_to_mercator(0, 0)
+        self.assertAlmostEqual(0, coord[0])
+        self.assertAlmostEqual(0, coord[1])
+
+    def test_reproject_with_z(self):
+        from tilequeue.tile import reproject_lnglat_to_mercator
+        coord = reproject_lnglat_to_mercator(0, 0, 0)
+        self.assertAlmostEqual(0, coord[0])
+        self.assertAlmostEqual(0, coord[1])

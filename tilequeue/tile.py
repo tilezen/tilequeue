@@ -93,7 +93,7 @@ def coord_to_bounds(coord):
     return bounds
 
 
-def reproject_lnglat_to_mercator(x, y):
+def reproject_lnglat_to_mercator(x, y, *unused_coords):
     return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
