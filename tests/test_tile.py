@@ -132,3 +132,18 @@ class TestTileGeneration(unittest.TestCase):
         tile_generator = tile_generator_for_single_bounds(bounds, 0, 5)
         tiles = list(tile_generator)
         self.assertEqual(11, len(tiles))
+
+
+class TestReproject(unittest.TestCase):
+
+    def test_reproject(self):
+        from tilequeue.tile import reproject_lnglat_to_mercator
+        coord = reproject_lnglat_to_mercator(0, 0)
+        self.assertAlmostEqual(0, coord[0])
+        self.assertAlmostEqual(0, coord[1])
+
+    def test_reproject_with_z(self):
+        from tilequeue.tile import reproject_lnglat_to_mercator
+        coord = reproject_lnglat_to_mercator(0, 0, 0)
+        self.assertAlmostEqual(0, coord[0])
+        self.assertAlmostEqual(0, coord[1])
