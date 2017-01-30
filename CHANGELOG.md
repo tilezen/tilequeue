@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v1.1.2
+------
+
+* Ignore extra coordinates (e.g: z) in reprojection function. See [#148](https://github.com/tilezen/tilequeue/pull/148).
+
 v1.1.1
 ------
 * Use queue name from message to acknowledge message. See [#134](https://github.com/tilezen/tilequeue/issues/134).
