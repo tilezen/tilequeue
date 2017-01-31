@@ -12,11 +12,10 @@ class DBAffinityConnectionsNoLimit(object):
     # back with the connection objects so that we can close them.
 
     def __init__(self, dbnames, conn_info):
-        self.dbnames = dbnames
+        self.dbnames = cycle(dbnames)
         self.conn_info = conn_info
         self.conn_mapping = {}
         self.lock = threading.Lock()
-        self.dbname_index = 0
 
     def _make_conn(self, conn_info):
         conn = psycopg2.connect(**conn_info)
@@ -27,10 +26,7 @@ class DBAffinityConnectionsNoLimit(object):
 
     def get_conns(self, n_conn):
         with self.lock:
-            dbname = self.dbnames[self.dbname_index]
-            self.dbname_index += 1
-            if self.dbname_index >= len(self.dbnames):
-                self.dbname_index = 0
+            dbname = self.dbnames.next()
         conn_info_with_db = dict(self.conn_info, dbname=dbname)
         conns = [self._make_conn(conn_info_with_db)
                  for i in range(n_conn)]
