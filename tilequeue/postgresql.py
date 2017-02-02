@@ -37,13 +37,12 @@ class DatabaseCycleConnectionPool(object):
                 pool_to_use = next(self._pool_cycle)
                 for _ in range(n_conns):
                     conn = pool_to_use.getconn()
+                    self._conns_to_pool[id(conn)] = pool_to_use
+                    conns.append(conn)
 
                     conn.set_session(readonly=True, autocommit=True)
                     register_json(conn, loads=json.loads, globally=True)
                     register_hstore(conn, globally=True)
-
-                    self._conns_to_pool[id(conn)] = pool_to_use
-                    conns.append(conn)
                 assert len(conns) == n_conns, \
                     "Couldn't collect enough connections"
         except:
