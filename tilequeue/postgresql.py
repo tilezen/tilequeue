@@ -1,68 +1,44 @@
 from itertools import cycle
-from psycopg2.pool import ThreadedConnectionPool
 from psycopg2.extras import register_hstore, register_json
+import psycopg2
 import threading
-import ujson as json
+import ujson
 
 
-class DatabaseCycleConnectionPool(object):
+class DBAffinityConnectionsNoLimit(object):
 
-    """
-    Maintains a psycopg2 ThreadedConnectionPool for each of the
-    given dbnames. When a client requests a set of connections,
-    all of those connections will come from the same database.
-    """
+    # Similar to the db affinity pool, but without keeping track of
+    # the connections. It's the caller's responsibility to call us
+    # back with the connection objects so that we can close them.
 
-    def __init__(self, min_conns_per_db, max_conns_per_db, dbnames, conn_info):
-        self._pools = []
-        self._conns_to_pool = {}
+    def __init__(self, dbnames, conn_info):
+        self.dbnames = cycle(dbnames)
+        self.conn_info = conn_info
+        self.conn_mapping = {}
+        self.lock = threading.Lock()
 
-        for dbname in dbnames:
-            pool = ThreadedConnectionPool(
-                min_conns_per_db,
-                max_conns_per_db,
-                dbname=dbname,
-                **conn_info
-            )
-            self._pools.append(pool)
+    def _make_conn(self, conn_info):
+        conn = psycopg2.connect(**conn_info)
+        conn.set_session(readonly=True, autocommit=True)
+        register_hstore(conn)
+        register_json(conn, loads=ujson.loads)
+        return conn
 
-        self._pool_cycle = cycle(self._pools)
-        self._lock = threading.Lock()
-
-    def get_conns(self, n_conns):
-        conns = []
-
-        try:
-            with self._lock:
-                pool_to_use = next(self._pool_cycle)
-                for _ in range(n_conns):
-                    conn = pool_to_use.getconn()
-                    self._conns_to_pool[id(conn)] = pool_to_use
-                    conns.append(conn)
-
-                    conn.set_session(readonly=True, autocommit=True)
-                    register_json(conn, loads=json.loads, globally=True)
-                    register_hstore(conn, globally=True)
-                assert len(conns) == n_conns, \
-                    "Couldn't collect enough connections"
-        except:
-            if conns:
-                self.put_conns(conns)
-                conns = []
-            raise
-
+    def get_conns(self, n_conn):
+        with self.lock:
+            dbname = self.dbnames.next()
+        conn_info_with_db = dict(self.conn_info, dbname=dbname)
+        conns = [self._make_conn(conn_info_with_db)
+                 for i in range(n_conn)]
         return conns
 
     def put_conns(self, conns):
-        with self._lock:
-            for conn in conns:
-                pool = self._conns_to_pool.pop(id(conn), None)
-                assert pool is not None, \
-                    "Couldn't find the pool for connection"
-                pool.putconn(conn)
+        for conn in conns:
+            try:
+                conn.close()
+            except:
+                pass
 
     def closeall(self):
-        with self._lock:
-            for pool in self._pools:
-                pool.closeall()
-            self._conns_to_pool.clear()
+        raise Exception('DBAffinityConnectionsNoLimit pool does not track '
+                        'connections')
