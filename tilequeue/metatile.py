@@ -40,7 +40,7 @@ def make_single_metatile(size, tiles, date_time=None):
                  layer=layer)]
 
 
-def make_metatiles(size, tiles, date_time = None):
+def make_metatiles(size, tiles, date_time=None):
     """
     Group by coordinates and layers, and make metatiles out of all the tiles
     which share those properties. Provide a 6-tuple date_time to set the

@@ -79,7 +79,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(json, extracted)
 
     def test_metatile_file_timing(self):
-        from time import sleep, gmtime, time
+        from time import gmtime, time
         from tilequeue.metatile import metatiles_are_equal
 
         # tilequeue's "GET before PUT" optimisation relies on being able to
