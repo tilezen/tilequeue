@@ -1,7 +1,8 @@
 import zipfile
-import StringIO
+import cStringIO as StringIO
 from collections import defaultdict
 from tilequeue.format import zip_format
+from time import gmtime
 
 
 def make_single_metatile(size, tiles, date_time=None):
@@ -19,7 +20,6 @@ def make_single_metatile(size, tiles, date_time=None):
         return []
 
     if date_time is None:
-        from time import gmtime
         date_time = gmtime()[0:6]
 
     coord = tiles[0]['coord']

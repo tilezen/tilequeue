@@ -4,6 +4,8 @@ from boto import connect_s3
 from boto.s3.bucket import Bucket
 import md5
 import os
+from tilequeue.metatile import metatiles_are_equal
+from tilequeue.format import zip_format
 
 
 def calc_hash(s):
@@ -152,10 +154,7 @@ def tiles_are_equal(tile_data_1, tile_data_2, fmt):
     metadata such as timestamps and doesn't control file ordering.
     """
 
-    from tilequeue.format import zip_format
-
     if fmt and fmt == zip_format:
-        from tilequeue.metatile import metatiles_are_equal
         return metatiles_are_equal(tile_data_1, tile_data_2)
 
     else:

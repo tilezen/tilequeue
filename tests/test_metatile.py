@@ -2,7 +2,7 @@ from tilequeue.metatile import make_metatiles, extract_metatile
 from tilequeue.format import json_format, zip_format, topojson_format
 from ModestMaps.Core import Coordinate
 import zipfile
-import StringIO
+import cStringIO as StringIO
 import unittest
 
 
