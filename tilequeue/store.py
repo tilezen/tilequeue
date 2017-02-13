@@ -4,6 +4,8 @@ from boto import connect_s3
 from boto.s3.bucket import Bucket
 import md5
 import os
+from tilequeue.metatile import metatiles_are_equal
+from tilequeue.format import zip_format
 
 
 def calc_hash(s):
@@ -144,6 +146,21 @@ def make_s3_store(bucket_name,
     return s3_store
 
 
+def tiles_are_equal(tile_data_1, tile_data_2, fmt):
+    """
+    Returns True if the tile data is equal in tile_data_1 and tile_data_2. For
+    most formats, this is a simple byte-wise equality check. For zipped
+    metatiles, we need to check the contents, as the zip format includes
+    metadata such as timestamps and doesn't control file ordering.
+    """
+
+    if fmt and fmt == zip_format:
+        return metatiles_are_equal(tile_data_1, tile_data_2)
+
+    else:
+        return tile_data_1 == tile_data_2
+
+
 def write_tile_if_changed(store, tile_data, coord, format, layer):
     """
     Only write tile data if different from existing.
@@ -153,7 +170,8 @@ def write_tile_if_changed(store, tile_data, coord, format, layer):
     """
 
     existing_data = store.read_tile(coord, format, layer)
-    if not existing_data or existing_data != tile_data:
+    if not existing_data or \
+       not tiles_are_equal(existing_data, tile_data, format):
         store.write_tile(tile_data, coord, format, layer)
         return True
     else:

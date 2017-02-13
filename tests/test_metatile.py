@@ -2,7 +2,7 @@ from tilequeue.metatile import make_metatiles, extract_metatile
 from tilequeue.format import json_format, zip_format, topojson_format
 from ModestMaps.Core import Coordinate
 import zipfile
-import StringIO
+import cStringIO as StringIO
 import unittest
 
 
@@ -77,3 +77,27 @@ class TestMetatile(unittest.TestCase):
         buf = StringIO.StringIO(metatiles[0]['tile'])
         extracted = extract_metatile(1, buf, tile)
         self.assertEqual(json, extracted)
+
+    def test_metatile_file_timing(self):
+        from time import gmtime, time
+        from tilequeue.metatile import metatiles_are_equal
+
+        # tilequeue's "GET before PUT" optimisation relies on being able to
+        # fetch a tile from S3 and compare it to the one that was just
+        # generated. to do this, we should try to make the tiles as similar
+        # as possible across multiple runs.
+
+        json = "{\"json\":true}"
+        tiles = [dict(tile=json, coord=Coordinate(0, 0, 0),
+                      format=json_format, layer='all')]
+
+        when_will_then_be_now = 10
+        t = time()
+        now = gmtime(t)[0:6]
+        then = gmtime(t - when_will_then_be_now)[0:6]
+
+        metatile_1 = make_metatiles(1, tiles, then)
+        metatile_2 = make_metatiles(1, tiles, now)
+
+        self.assertTrue(metatiles_are_equal(
+            metatile_1[0]['tile'], metatile_2[0]['tile']))
