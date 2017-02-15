@@ -98,13 +98,6 @@ process:
   # extensions of formats to generate
   # buffered Mapbox Vector Tiles are also possible by specifying mvtb
   formats: [json, topojson, mvt]
-  # in addition to the `all` layer, any additional layers to also
-  # store during processing
-  layers-to-format:
-    - layer: buildings
-      formats: [json]
-      zoom-start: 13
-      zoom-until: 20
   # additionally, the data included for some formats expects to be
   # buffered. This is where buffers per layer or per geometry type can
   # be specified, with layers trumping geometry types

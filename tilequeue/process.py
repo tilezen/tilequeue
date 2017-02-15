@@ -268,7 +268,7 @@ def _create_formatted_tile(
 
 def _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        scale, layers_to_format, buffer_cfg):
+        scale, buffer_cfg):
 
     # the nominal zoom is the "display scale" zoom, which may not correspond
     # to actual tile coordinates in future versions of the code. it just
@@ -338,21 +338,6 @@ def _process_feature_layers(
             buffer_cfg)
         formatted_tiles.append(formatted_tile)
 
-    # this assumes that we only store single layers, and no combinations
-    for layer, formats, zoom_start, zoom_until in layers_to_format:
-        if not (zoom_start <= coord.zoom <= zoom_until):
-            continue
-        for feature_layer in processed_feature_layers:
-            if feature_layer['name'] == layer:
-                pruned_feature_layers = [feature_layer]
-                for format in formats:
-                    formatted_tile = _create_formatted_tile(
-                        pruned_feature_layers, format, scale, unpadded_bounds,
-                        unpadded_bounds_lnglat, coord, layer,
-                        meters_per_pixel_dim, buffer_cfg)
-                    formatted_tiles.append(formatted_tile)
-                    break
-
     return formatted_tiles
 
 
@@ -360,8 +345,7 @@ def _process_feature_layers(
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
-                  unpadded_bounds, cut_coords, layers_to_format,
-                  buffer_cfg, scale=4096):
+                  unpadded_bounds, cut_coords, buffer_cfg, scale=4096):
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
     children_formatted_tiles = []
@@ -375,11 +359,11 @@ def process_coord(coord, feature_layers, post_process_data, formats,
                 buffer_cfg)
             child_formatted_tiles = _process_feature_layers(
                 child_feature_layers, cut_coord, post_process_data, formats,
-                unpadded_cut_bounds, scale, layers_to_format, buffer_cfg)
+                unpadded_cut_bounds, scale, buffer_cfg)
             children_formatted_tiles.extend(child_formatted_tiles)
 
     coord_formatted_tiles = _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        scale, layers_to_format, buffer_cfg)
+        scale, buffer_cfg)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles, extra_data
