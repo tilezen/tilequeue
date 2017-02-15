@@ -270,6 +270,12 @@ def _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
         scale, layers_to_format, buffer_cfg):
 
+    # the nominal zoom is the "display scale" zoom, which may not correspond
+    # to actual tile coordinates in future versions of the code. it just
+    # becomes a measure of the scale between tile features and intended
+    # display size.
+    nominal_zoom = coord.zoom
+
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -292,14 +298,14 @@ def _process_feature_layers(
             for feature in features:
                 shape, props, feature_id = feature
                 shape, props, feature_id = layer_transform_fn(
-                    shape, props, feature_id, coord.zoom)
+                    shape, props, feature_id, nominal_zoom)
                 transformed_feature = shape, props, feature_id
                 processed_features.append(transformed_feature)
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
             sort_fn = resolve(sort_fn_name)
-            processed_features = sort_fn(processed_features, coord.zoom)
+            processed_features = sort_fn(processed_features, nominal_zoom)
 
         feature_layer = dict(
             name=layer_name,
@@ -311,10 +317,10 @@ def _process_feature_layers(
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord.zoom,
+        processed_feature_layers, post_process_data, nominal_zoom,
         unpadded_bounds)
 
-    meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
     # topojson formatter expects bounds to be in lnglat
     unpadded_bounds_lnglat = (
