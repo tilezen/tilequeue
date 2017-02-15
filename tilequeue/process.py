@@ -124,7 +124,7 @@ def _preprocess_data(feature_layers):
 # be passed around rather than needing all the parameters to be explicit.
 Context = namedtuple('Context', [
     'feature_layers',    # the feature layers list
-    'tile_coord',        # the original tile coordinate obj
+    'nominal_zoom',      # the zoom level to use for styling (display scale)
     'unpadded_bounds',   # the latlon bounds of the tile
     'params',            # user configuration parameters
     'resources',         # resources declared in config
@@ -137,14 +137,14 @@ Context = namedtuple('Context', [
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(
-        feature_layers, post_process_data, tile_coord, unpadded_bounds):
+        feature_layers, post_process_data, nominal_zoom, unpadded_bounds):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
 
         ctx = Context(
             feature_layers=feature_layers,
-            tile_coord=tile_coord,
+            nominal_zoom=nominal_zoom,
             unpadded_bounds=unpadded_bounds,
             params=step['params'],
             resources=step['resources'],
@@ -270,6 +270,12 @@ def _process_feature_layers(
         feature_layers, coord, post_process_data, formats, unpadded_bounds,
         scale, layers_to_format, buffer_cfg):
 
+    # the nominal zoom is the "display scale" zoom, which may not correspond
+    # to actual tile coordinates in future versions of the code. it just
+    # becomes a measure of the scale between tile features and intended
+    # display size.
+    nominal_zoom = coord.zoom
+
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
@@ -292,14 +298,14 @@ def _process_feature_layers(
             for feature in features:
                 shape, props, feature_id = feature
                 shape, props, feature_id = layer_transform_fn(
-                    shape, props, feature_id, coord.zoom)
+                    shape, props, feature_id, nominal_zoom)
                 transformed_feature = shape, props, feature_id
                 processed_features.append(transformed_feature)
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
             sort_fn = resolve(sort_fn_name)
-            processed_features = sort_fn(processed_features, coord.zoom)
+            processed_features = sort_fn(processed_features, nominal_zoom)
 
         feature_layer = dict(
             name=layer_name,
@@ -311,9 +317,10 @@ def _process_feature_layers(
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord, unpadded_bounds)
+        processed_feature_layers, post_process_data, nominal_zoom,
+        unpadded_bounds)
 
-    meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
     # topojson formatter expects bounds to be in lnglat
     unpadded_bounds_lnglat = (
