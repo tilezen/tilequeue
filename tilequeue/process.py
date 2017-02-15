@@ -124,7 +124,7 @@ def _preprocess_data(feature_layers):
 # be passed around rather than needing all the parameters to be explicit.
 Context = namedtuple('Context', [
     'feature_layers',    # the feature layers list
-    'tile_coord',        # the original tile coordinate obj
+    'nominal_zoom',      # the zoom level to use for styling (display scale)
     'unpadded_bounds',   # the latlon bounds of the tile
     'params',            # user configuration parameters
     'resources',         # resources declared in config
@@ -137,14 +137,14 @@ Context = namedtuple('Context', [
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(
-        feature_layers, post_process_data, tile_coord, unpadded_bounds):
+        feature_layers, post_process_data, nominal_zoom, unpadded_bounds):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
 
         ctx = Context(
             feature_layers=feature_layers,
-            tile_coord=tile_coord,
+            nominal_zoom=nominal_zoom,
             unpadded_bounds=unpadded_bounds,
             params=step['params'],
             resources=step['resources'],
@@ -311,7 +311,8 @@ def _process_feature_layers(
 
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
-        processed_feature_layers, post_process_data, coord, unpadded_bounds)
+        processed_feature_layers, post_process_data, coord.zoom,
+        unpadded_bounds)
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
 
