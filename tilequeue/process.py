@@ -267,8 +267,7 @@ def _create_formatted_tile(
 
 
 def _process_feature_layers(
-        feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        scale, buffer_cfg):
+        feature_layers, coord, post_process_data, unpadded_bounds):
 
     # the nominal zoom is the "display scale" zoom, which may not correspond
     # to actual tile coordinates in future versions of the code. it just
@@ -320,6 +319,19 @@ def _process_feature_layers(
         processed_feature_layers, post_process_data, nominal_zoom,
         unpadded_bounds)
 
+    return processed_feature_layers
+
+
+def _format_feature_layers(
+        processed_feature_layers, coord, formats, unpadded_bounds, scale,
+        buffer_cfg):
+
+    # the nominal zoom is the "display scale" zoom, which may not correspond
+    # to actual tile coordinates in future versions of the code. it just
+    # becomes a measure of the scale between tile features and intended
+    # display size.
+    nominal_zoom = coord.zoom
+
     meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
     # topojson formatter expects bounds to be in lnglat
@@ -341,6 +353,20 @@ def _process_feature_layers(
     return formatted_tiles
 
 
+def _cut_child_tiles(
+        feature_layers, cut_coord, formats, scale, buffer_cfg):
+
+    unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(cut_coord.zoom)
+
+    cut_feature_layers = _cut_coord(
+        feature_layers, unpadded_cut_bounds, meters_per_pixel_dim, buffer_cfg)
+
+    return _format_feature_layers(
+        cut_feature_layers, cut_coord, formats, unpadded_cut_bounds, scale,
+        buffer_cfg)
+
+
 # given a coord and the raw feature layers results from the database,
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
@@ -348,22 +374,20 @@ def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, cut_coords, buffer_cfg, scale=4096):
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
+    processed_feature_layers = _process_feature_layers(
+        feature_layers, coord, post_process_data, unpadded_bounds)
+
+    coord_formatted_tiles = _format_feature_layers(
+        processed_feature_layers, coord, formats, unpadded_bounds, scale,
+        buffer_cfg)
+
     children_formatted_tiles = []
     if cut_coords:
         for cut_coord in cut_coords:
-            unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
-
-            meters_per_pixel_dim = calc_meters_per_pixel_dim(cut_coord.zoom)
-            child_feature_layers = _cut_coord(
-                feature_layers, unpadded_cut_bounds, meters_per_pixel_dim,
+            child_tiles = _cut_child_tiles(
+                processed_feature_layers, cut_coord, formats, scale,
                 buffer_cfg)
-            child_formatted_tiles = _process_feature_layers(
-                child_feature_layers, cut_coord, post_process_data, formats,
-                unpadded_cut_bounds, scale, buffer_cfg)
-            children_formatted_tiles.extend(child_formatted_tiles)
+            children_formatted_tiles.extend(child_tiles)
 
-    coord_formatted_tiles = _process_feature_layers(
-        feature_layers, coord, post_process_data, formats, unpadded_bounds,
-        scale, buffer_cfg)
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles, extra_data

@@ -138,6 +138,7 @@ class TestProcess(unittest.TestCase):
         tiles_0 = [t for t in tiles if t['coord'] == coord]
         self.assertEqual(1, len(tiles_0))
         tile_0 = json.loads(tiles_0[0]['tile'])
+        self.assertEqual(1, len(tile_0['features']))
         self.assertEqual([90.0, 40.0],
                          tile_0['features'][0]['geometry']['coordinates'])
 
@@ -147,7 +148,9 @@ class TestProcess(unittest.TestCase):
         tiles_1 = [t for t in tiles if t['coord'] == cut_coord]
         self.assertEqual(1, len(tiles_1))
         tile_1 = json.loads(tiles_1[0]['tile'])
-        self.assertEqual(0, len(tile_1['features']))
+        self.assertEqual(1, len(tile_1['features']))
+        self.assertEqual([90.0, 40.0],
+                         tile_1['features'][0]['geometry']['coordinates'])
 
 
 def _only_zoom(ctx, zoom):
