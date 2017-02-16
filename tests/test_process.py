@@ -4,11 +4,12 @@ import unittest
 
 class TestProcess(unittest.TestCase):
 
-    def _make_json_tile(self, coord, post_process_data, db_features):
+    def _make_json_tiles(
+            self, coord, post_process_data={}, db_features=[], cut_coords=[],
+            buffer_cfg={}):
         from tilequeue.process import process_coord
         from tilequeue.tile import coord_to_mercator_bounds
         from tilequeue.format import json_format
-        import json
 
         unpadded_bounds = coord_to_mercator_bounds(coord)
         feature_layers = [dict(
@@ -23,12 +24,18 @@ class TestProcess(unittest.TestCase):
             features=db_features
         )]
         formats = [json_format]
-        cut_coords = []
-        buffer_cfg = {}
 
         tiles, extra = process_coord(
             coord, feature_layers, post_process_data, formats, unpadded_bounds,
             cut_coords, buffer_cfg)
+
+        return tiles
+
+    def _make_json_tile(self, coord, **kwargs):
+        from tilequeue.format import json_format
+        import json
+
+        tiles = self._make_json_tiles(coord, **kwargs)
 
         self.assertEqual(1, len(tiles))
         tile = tiles[0]
@@ -91,13 +98,56 @@ class TestProcess(unittest.TestCase):
                     'id': 1
                 }]
 
-            tile = self._make_json_tile(coord, post_process_data, features)
+            tile = self._make_json_tile(
+                coord, post_process_data=post_process_data,
+                db_features=features)
             self.assertEqual(json_data, tile)
 
         _check(Coordinate(0, 0, 0), '_only_zoom_zero', True)
         _check(Coordinate(0, 0, 0), '_only_zoom_one', False)
         _check(Coordinate(0, 1, 1), '_only_zoom_one', True)
         _check(Coordinate(0, 1, 1), '_only_zoom_zero', False)
+
+    def test_process_coord_cut_coords(self):
+        import json
+
+        self.maxDiff = 10000
+
+        coord = Coordinate(0, 0, 0)
+        cut_coord = Coordinate(0, 1, 1)
+
+        features = [dict(
+            __id__=1,
+            # this is a point at (90, 40) in mercator
+            __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
+            'cA\x1f\x85\xeb\x91\xe5\x8fRA',
+            foo="bar"
+        )]
+        post_process_data = [
+            dict(
+                fn_name='tests.test_process._only_zoom_zero',
+                params={},
+                resources={}
+            )
+        ]
+
+        tiles = self._make_json_tiles(
+            coord, post_process_data=post_process_data,
+            db_features=features, cut_coords=[cut_coord])
+
+        tiles_0 = [t for t in tiles if t['coord'] == coord]
+        self.assertEqual(1, len(tiles_0))
+        tile_0 = json.loads(tiles_0[0]['tile'])
+        self.assertEqual([90.0, 40.0],
+                         tile_0['features'][0]['geometry']['coordinates'])
+
+        # cut coord at zoom 1 is currently implemented as being re-processed
+        # from the original feature data, so will run the post-processor stuff
+        # at a different zoom level, and drop the point.
+        tiles_1 = [t for t in tiles if t['coord'] == cut_coord]
+        self.assertEqual(1, len(tiles_1))
+        tile_1 = json.loads(tiles_1[0]['tile'])
+        self.assertEqual(0, len(tile_1['features']))
 
 
 def _only_zoom(ctx, zoom):
