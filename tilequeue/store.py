@@ -2,10 +2,14 @@
 
 from boto import connect_s3
 from boto.s3.bucket import Bucket
+from builtins import range
+from future.utils import raise_from
 import md5
 import os
 from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
+import random
+import threading
 
 
 def calc_hash(s):
@@ -79,6 +83,66 @@ def make_file_path(base_path, coord, layer, extension):
     return full_path
 
 
+def os_replace(src, dst):
+    '''
+    Simple emulation of function `os.replace(..)` from modern version of Python.
+    Implementation is not fully atomic, but enough for us
+    '''
+
+    orig_os_replace_func = getattr(os, 'replace', None)
+
+    if orig_os_replace_func is not None:
+        # not need for emulation: we using modern version of Python.
+        # fully atomic for this case
+
+        orig_os_replace_func(src, dst)
+        return
+
+    if os.name == 'posix':
+        # POSIX requirement: `os.rename(..)` works as `os.replace(..)`
+        # fully atomic for this case
+
+        os.rename(src, dst)
+        return
+
+    # simple emulation for `os.name == 'nt'` and other marginal operation systems.
+    # not fully atomic implementation for this case
+
+    try:
+        # trying atomic `os.rename(..)` without `os.remove(..)` or other operations
+
+        os.rename(src, dst)
+        error = None
+    except OSError:
+        error = e
+
+    if error is None:
+        return
+
+    for i in range(5):
+        # some number of tries may be failed
+        # because we may be in concurrent environment with others processes/threads
+
+        try:
+            os.remove(dst)
+        except OSError:
+            # destination was not exist
+            # or concurrent process/thread is removing it in parallel with us
+            pass
+
+        try:
+            os.rename(src, dst)
+            error = None
+        except OSError as e:
+            error = e
+            continue
+
+        break
+
+    if error is not None:
+        raise_from(OSError('failed to replace'), error)
+
+
 class TileDirectory(object):
     '''
     Writes tiles to individual files in a local directory.
@@ -100,10 +164,21 @@ class TileDirectory(object):
             os.makedirs(dir_path)
         except OSError:
             pass
+
         file_path = make_file_path(self.base_path, coord, layer,
                                    format.extension)
-        with open(file_path, 'w') as tile_fp:
+        swap_file_path = '%s.swp-%s-%s-%s' % (
+            file_path,
+            os.getpid(),
+            threading.currentThread().ident,
+            random.randint(1,1000000)
+        )
+
+        with open(swap_file_path, 'w') as tile_fp:
             tile_fp.write(tile_data)
+
+        # write file as atomic operation
+        os_replace(swap_file_path, file_path)
 
     def read_tile(self, coord, format, layer):
         file_path = make_file_path(self.base_path, coord, layer,
