@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+v1.4.0
+------
+* When checking to see if a tile has changed, compare ZIP file contents only. (See https://github.com/tilezen/tilequeue/issues/152)
+* On WOF neighbourhood update, return a better error message for invalid dates. (See https://github.com/tilezen/tilequeue/pull/154)
+* Remove "layers to format" functionality. (See https://github.com/tilezen/tilequeue/pull/155)
+
 v1.3.0
 ------
 * Roll back the use of psycopg2 connection pools. (See [#149](https://github.com/tilezen/tilequeue/pull/149))
