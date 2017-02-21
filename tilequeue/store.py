@@ -174,11 +174,18 @@ class TileDirectory(object):
             random.randint(1,1000000)
         )
 
-        with open(swap_file_path, 'w') as tile_fp:
-            tile_fp.write(tile_data)
+        try:
+            with open(swap_file_path, 'w') as tile_fp:
+                tile_fp.write(tile_data)
 
-        # write file as atomic operation
-        os_replace(swap_file_path, file_path)
+            # write file as atomic operation
+            os_replace(swap_file_path, file_path)
+        except Exception as e:
+            try:
+                os.remove(swap_file_path)
+            except OSError:
+                pass
+            raise e
 
     def read_tile(self, coord, format, layer):
         file_path = make_file_path(self.base_path, coord, layer,
