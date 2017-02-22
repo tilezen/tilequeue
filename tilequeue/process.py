@@ -364,14 +364,14 @@ def _cut_child_tiles(
 # given a coord and the raw feature layers results from the database,
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
-def process_coord(coord, feature_layers, post_process_data, formats,
-                  unpadded_bounds, cut_coords, buffer_cfg, scale=4096):
-    # the nominal zoom is the "display scale" zoom, which may not correspond
-    # to actual tile coordinates in future versions of the code. it just
-    # becomes a measure of the scale between tile features and intended
-    # display size.
-    nominal_zoom = coord.zoom
-
+#
+# the nominal zoom is the "display scale" zoom, which may not correspond
+# to actual tile coordinates in future versions of the code. it just
+# becomes a measure of the scale between tile features and intended
+# display size.
+def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
+                  formats, unpadded_bounds, cut_coords, buffer_cfg,
+                  scale=4096):
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
     processed_feature_layers = _process_feature_layers(

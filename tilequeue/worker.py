@@ -232,9 +232,9 @@ class ProcessAndFormatData(object):
 
             try:
                 formatted_tiles, extra_data = process_coord(
-                    coord, feature_layers, self.post_process_data,
-                    self.formats, unpadded_bounds, cut_coords,
-                    self.buffer_cfg)
+                    coord, nominal_zoom, feature_layers,
+                    self.post_process_data, self.formats, unpadded_bounds,
+                    cut_coords, self.buffer_cfg)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
