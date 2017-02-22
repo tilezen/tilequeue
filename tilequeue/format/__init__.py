@@ -77,7 +77,7 @@ def format_mvt(fp, feature_layers, coord, bounds_merc, bounds_lnglat):
             features=mvt_features,
         )
         mvt_layers.append(mvt_layer)
-    mvt_encode(fp, mvt_layers, coord, bounds_merc)
+    mvt_encode(fp, mvt_layers, bounds_merc)
 
 
 def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_lnglat):
