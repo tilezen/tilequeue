@@ -10,7 +10,7 @@ import logging
 # aeroway=>aerobridge
 # leisure=>natural_reserve
 
-def fixTag(tag, zoomlevel):
+def fixTag(tag):
     drop = False
      
     if tag[1] is None:

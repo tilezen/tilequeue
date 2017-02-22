@@ -22,12 +22,12 @@ extents = 4096
 padding = 5
 
 
-def encode(file, features, zoom, layer_name=''):
+def encode(file, features, layer_name=''):
         layer_name = layer_name or ''
         tile = VectorTile(extents)
 
         for feature in features:
-            tile.addFeature(feature, zoom, layer_name)
+            tile.addFeature(feature, layer_name)
 
         tile.complete()
 
@@ -36,7 +36,7 @@ def encode(file, features, zoom, layer_name=''):
         file.write(data)
 
 
-def merge(file, feature_layers, zoom):
+def merge(file, feature_layers):
     ''' Retrieve a list of OSciMap4 tile responses and merge them into one.
 
         get_tiles() retrieves data and performs basic integrity checks.
@@ -44,7 +44,7 @@ def merge(file, feature_layers, zoom):
     tile = VectorTile(extents)
 
     for layer in feature_layers:
-        tile.addFeatures(layer['features'], zoom, layer['name'])
+        tile.addFeatures(layer['features'], layer['name'])
 
     tile.complete()
 
@@ -84,11 +84,11 @@ class VectorTile:
         if self.cur_val - attrib_offset > 0:
             self.out.num_vals = self.cur_val - attrib_offset
 
-    def addFeatures(self, features, zoom, this_layer):
+    def addFeatures(self, features, this_layer):
         for feature in features:
-            self.addFeature(feature, zoom, this_layer)
+            self.addFeature(feature, this_layer)
 
-    def addFeature(self, row, zoom, this_layer):
+    def addFeature(self, row, this_layer):
         geom = self.geomencoder
         tags = []
 
@@ -115,7 +115,7 @@ class VectorTile:
                 layer = self.getLayer(tag[1])
                 continue
 
-            tag = fixTag(tag, zoom)
+            tag = fixTag(tag)
 
             if tag is None:
                 continue

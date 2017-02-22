@@ -81,7 +81,7 @@ def format_mvt(fp, feature_layers, coord, bounds_merc, bounds_lnglat):
 
 
 def format_vtm(fp, feature_layers, coord, bounds_merc, bounds_lnglat):
-    vtm_encode(fp, feature_layers, coord.zoom)
+    vtm_encode(fp, feature_layers)
 
 
 supports_shapely_geom = True
