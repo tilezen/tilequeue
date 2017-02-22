@@ -267,13 +267,7 @@ def _create_formatted_tile(
 
 
 def _process_feature_layers(
-        feature_layers, coord, post_process_data, unpadded_bounds):
-
-    # the nominal zoom is the "display scale" zoom, which may not correspond
-    # to actual tile coordinates in future versions of the code. it just
-    # becomes a measure of the scale between tile features and intended
-    # display size.
-    nominal_zoom = coord.zoom
+        feature_layers, nominal_zoom, post_process_data, unpadded_bounds):
 
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
@@ -372,10 +366,16 @@ def _cut_child_tiles(
 # each formatter. this is the entry point from the worker process
 def process_coord(coord, feature_layers, post_process_data, formats,
                   unpadded_bounds, cut_coords, buffer_cfg, scale=4096):
+    # the nominal zoom is the "display scale" zoom, which may not correspond
+    # to actual tile coordinates in future versions of the code. it just
+    # becomes a measure of the scale between tile features and intended
+    # display size.
+    nominal_zoom = coord.zoom
+
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
     processed_feature_layers = _process_feature_layers(
-        feature_layers, coord, post_process_data, unpadded_bounds)
+        feature_layers, nominal_zoom, post_process_data, unpadded_bounds)
 
     coord_formatted_tiles = _format_feature_layers(
         processed_feature_layers, coord, formats, unpadded_bounds, scale,
