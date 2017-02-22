@@ -125,6 +125,7 @@ class DataFetch(object):
                 break
 
             coord = data['coord']
+            nominal_zoom = coord.zoom
 
             start = time.time()
 
@@ -184,6 +185,7 @@ class DataFetch(object):
                 feature_layers=fetch_data['feature_layers'],
                 unpadded_bounds=fetch_data['unpadded_bounds'],
                 cut_coords=cut_coords,
+                nominal_zoom=nominal_zoom,
             )
 
             while not _non_blocking_put(self.output_queue, data):
@@ -227,6 +229,7 @@ class ProcessAndFormatData(object):
             feature_layers = data['feature_layers']
             unpadded_bounds = data['unpadded_bounds']
             cut_coords = data['cut_coords']
+            nominal_zoom = data['nominal_zoom']
 
             start = time.time()
 

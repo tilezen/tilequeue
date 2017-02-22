@@ -53,7 +53,7 @@ def format_json(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
         return
     else:
         features_by_layer = convert_feature_layers_to_dict(feature_layers)
-        json_encode_multiple_layers(fp, features_by_layer, coord.zoom)
+        json_encode_multiple_layers(fp, features_by_layer, zoom)
 
 
 def format_topojson(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
