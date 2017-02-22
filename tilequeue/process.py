@@ -253,12 +253,12 @@ def _create_formatted_tile(
 
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
-        feature_layers, format, scale, unpadded_bounds, coord,
+        feature_layers, format, scale, unpadded_bounds,
         meters_per_pixel_dim, buffer_cfg)
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
-    format.format_tile(tile_data_file, transformed_feature_layers, coord,
+    format.format_tile(tile_data_file, transformed_feature_layers, coord.zoom,
                        unpadded_bounds, unpadded_bounds_lnglat)
     tile = tile_data_file.getvalue()
 
@@ -267,13 +267,7 @@ def _create_formatted_tile(
 
 
 def _process_feature_layers(
-        feature_layers, coord, post_process_data, unpadded_bounds):
-
-    # the nominal zoom is the "display scale" zoom, which may not correspond
-    # to actual tile coordinates in future versions of the code. it just
-    # becomes a measure of the scale between tile features and intended
-    # display size.
-    nominal_zoom = coord.zoom
+        feature_layers, nominal_zoom, post_process_data, unpadded_bounds):
 
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
@@ -370,12 +364,18 @@ def _cut_child_tiles(
 # given a coord and the raw feature layers results from the database,
 # filter, transform, sort, post-process and then format according to
 # each formatter. this is the entry point from the worker process
-def process_coord(coord, feature_layers, post_process_data, formats,
-                  unpadded_bounds, cut_coords, buffer_cfg, scale=4096):
+#
+# the nominal zoom is the "display scale" zoom, which may not correspond
+# to actual tile coordinates in future versions of the code. it just
+# becomes a measure of the scale between tile features and intended
+# display size.
+def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
+                  formats, unpadded_bounds, cut_coords, buffer_cfg,
+                  scale=4096):
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
     processed_feature_layers = _process_feature_layers(
-        feature_layers, coord, post_process_data, unpadded_bounds)
+        feature_layers, nominal_zoom, post_process_data, unpadded_bounds)
 
     coord_formatted_tiles = _format_feature_layers(
         processed_feature_layers, coord, formats, unpadded_bounds, scale,

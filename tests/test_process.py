@@ -26,8 +26,8 @@ class TestProcess(unittest.TestCase):
         formats = [json_format]
 
         tiles, extra = process_coord(
-            coord, feature_layers, post_process_data, formats, unpadded_bounds,
-            cut_coords, buffer_cfg)
+            coord, coord.zoom, feature_layers, post_process_data, formats,
+            unpadded_bounds, cut_coords, buffer_cfg)
 
         return tiles
 
@@ -57,8 +57,8 @@ class TestProcess(unittest.TestCase):
         buffer_cfg = {}
 
         tiles, extra = process_coord(
-            coord, feature_layers, post_process_data, formats, unpadded_bounds,
-            cut_coords, buffer_cfg)
+            coord, coord.zoom, feature_layers, post_process_data, formats,
+            unpadded_bounds, cut_coords, buffer_cfg)
 
         self.assertEqual([], tiles)
         self.assertEqual({'size': {}}, extra)
