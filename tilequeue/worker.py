@@ -106,13 +106,16 @@ class SqsQueueReader(object):
 class DataFetch(object):
 
     def __init__(self, fetcher, input_queue, output_queue, io_pool,
-                 redis_cache_index, logger):
+                 redis_cache_index, logger, metatile_size):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.redis_cache_index = redis_cache_index
         self.logger = logger
+        self.metatile_zoom = int(math.log(metatile_size, 2))
+        assert (1 << self.metatile_zoom) == metatile_size, \
+            "Metatile size must be a power of two."
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -148,11 +151,18 @@ class DataFetch(object):
             metadata = data['metadata']
             metadata['timing']['fetch_seconds'] = time.time() - start
 
-            # if we are at zoom level 16, it will serve as a metatile
-            # to derive the tiles underneath it
-            cut_coords = None
-            if coord.zoom == 16:
-                cut_coords = []
+            # every tile job that we get from the queue is a "parent" tile
+            # and its four children to cut from it. at zoom 15, this may
+            # also include a whole bunch of other children below the max
+            # zoom.
+            cut_coords = list(coord_children_range(
+                coord, coord.zoom + self.metatile_zoom))
+            max_zoom = 16 - self.metatile_zoom
+
+            assert coord.zoom <= max_zoom, \
+                "Job coordinates above max zoom are not supported"
+
+            if coord.zoom == max_zoom:
                 async_jobs = []
                 children_until = 20
                 # ask redis if there are any tiles underneath in the
@@ -161,6 +171,8 @@ class DataFetch(object):
                 async_fn = rci.is_coord_int_in_tiles_of_interest
 
                 for child in coord_children_range(coord, children_until):
+                    if child.zoom <= max_zoom:
+                        continue
                     zoomed_coord_int = coord_marshall_int(child)
                     async_result = self.io_pool.apply_async(
                         async_fn, (zoomed_coord_int,))
@@ -181,6 +193,7 @@ class DataFetch(object):
                 if async_exc_info:
                     continue
 
+            nominal_zoom = coord.zoom + self.metatile_zoom
             data = dict(
                 metadata=metadata,
                 coord=coord,
