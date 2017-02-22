@@ -85,8 +85,8 @@ def make_file_path(base_path, coord, layer, extension):
 
 def os_replace(src, dst):
     '''
-    Simple emulation of function `os.replace(..)` from modern version of Python.
-    Implementation is not fully atomic, but enough for us
+    Simple emulation of function `os.replace(..)` from modern version
+    of Python. Implementation is not fully atomic, but enough for us.
     '''
 
     orig_os_replace_func = getattr(os, 'replace', None)
@@ -105,15 +105,17 @@ def os_replace(src, dst):
         os.rename(src, dst)
         return
 
-    # simple emulation for `os.name == 'nt'` and other marginal operation systems.
-    # not fully atomic implementation for this case
+    # simple emulation for `os.name == 'nt'` and other marginal
+    # operation systems.  not fully atomic implementation for this
+    # case
 
     try:
-        # trying atomic `os.rename(..)` without `os.remove(..)` or other operations
+        # trying atomic `os.rename(..)` without `os.remove(..)` or
+        # other operations
 
         os.rename(src, dst)
         error = None
-    except OSError:
+    except OSError as e:
         error = e
 
     if error is None:
@@ -121,7 +123,8 @@ def os_replace(src, dst):
 
     for i in range(5):
         # some number of tries may be failed
-        # because we may be in concurrent environment with others processes/threads
+        # because we may be in concurrent environment with other
+        # processes/threads
 
         try:
             os.remove(dst)
@@ -171,7 +174,7 @@ class TileDirectory(object):
             file_path,
             os.getpid(),
             threading.currentThread().ident,
-            random.randint(1,1000000)
+            random.randint(1, 1000000)
         )
 
         try:
