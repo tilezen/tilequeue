@@ -258,7 +258,7 @@ def _create_formatted_tile(
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
-    format.format_tile(tile_data_file, transformed_feature_layers, coord,
+    format.format_tile(tile_data_file, transformed_feature_layers, coord.zoom,
                        unpadded_bounds, unpadded_bounds_lnglat)
     tile = tile_data_file.getvalue()
 

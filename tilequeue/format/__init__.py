@@ -29,9 +29,9 @@ class OutputFormat(object):
     def __eq__(self, other):
         return self.extension == other.extension
 
-    def format_tile(self, tile_data_file, feature_layers, coord, bounds_merc,
+    def format_tile(self, tile_data_file, feature_layers, zoom, bounds_merc,
                     bounds_lnglat):
-        self.format_fn(tile_data_file, feature_layers, coord.zoom, bounds_merc,
+        self.format_fn(tile_data_file, feature_layers, zoom, bounds_merc,
                        bounds_lnglat)
 
 
