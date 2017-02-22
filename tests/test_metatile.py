@@ -41,32 +41,31 @@ class TestMetatile(unittest.TestCase):
             self.assertEqual(json, z.open('0/0/0.topojson').read())
 
     def test_make_metatiles_multiple_coordinates(self):
-        # we need to be able to handle this so that we can do "cut out"
-        # overzoomed tiles at z>16.
+        # checks that we can make a single metatile which contains multiple
+        # coordinates. this is used for "512px" tiles as well as cutting out
+        # z17+ tiles and storing them in the z16 (z15 if "512px") metatile.
 
         json = "{\"json\":true}"
         tiles = [
-            dict(tile=json, coord=Coordinate(17, 123, 456),
+            dict(tile=json, coord=Coordinate(123, 456, 17),
                  format=json_format, layer='all'),
-            dict(tile=json, coord=Coordinate(17, 123, 457),
+            dict(tile=json, coord=Coordinate(123, 457, 17),
                  format=json_format, layer='all'),
         ]
 
         metatiles = make_metatiles(1, tiles)
-        self.assertEqual(2, len(metatiles))
-        coords = set([Coordinate(17, 123, 456), Coordinate(17, 123, 457)])
-        for meta in metatiles:
-            self.assertTrue(meta['coord'] in coords)
-            coords.remove(meta['coord'])
+        self.assertEqual(1, len(metatiles))
+        meta = metatiles[0]
 
-            self.assertEqual('all', meta['layer'])
-            self.assertEqual(zip_format, meta['format'])
-            buf = StringIO.StringIO(meta['tile'])
-            with zipfile.ZipFile(buf, mode='r') as z:
-                self.assertEqual(json, z.open('0/0/0.json').read())
+        coord = Coordinate(61, 228, 16)
+        self.assertEqual(meta['coord'], coord)
 
-        # check all coords were consumed
-        self.assertEqual(0, len(coords))
+        self.assertEqual('all', meta['layer'])
+        self.assertEqual(zip_format, meta['format'])
+        buf = StringIO.StringIO(meta['tile'])
+        with zipfile.ZipFile(buf, mode='r') as z:
+            self.assertEqual(json, z.open('1/1/0.json').read())
+            self.assertEqual(json, z.open('1/1/1.json').read())
 
     def test_extract_metatiles_single(self):
         json = "{\"json\":true}"
