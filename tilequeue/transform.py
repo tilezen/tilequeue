@@ -97,7 +97,7 @@ def calc_buffered_bounds(
 
 
 def transform_feature_layers_shape(
-        feature_layers, format, scale, unpadded_bounds, coord,
+        feature_layers, format, scale, unpadded_bounds,
         meters_per_pixel_dim, buffer_cfg):
     if format in (json_format, topojson_format):
         transform_fn = apply_to_all_coords(mercator_point_to_lnglat)

@@ -253,7 +253,7 @@ def _create_formatted_tile(
 
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
-        feature_layers, format, scale, unpadded_bounds, coord,
+        feature_layers, format, scale, unpadded_bounds,
         meters_per_pixel_dim, buffer_cfg)
 
     # use the formatter to generate the tile
