@@ -129,7 +129,7 @@ class DataFetch(object):
                 break
 
             coord = data['coord']
-            nominal_zoom = coord.zoom
+            nominal_zoom = coord.zoom + self.metatile_zoom
             unpadded_bounds = coord_to_mercator_bounds(coord)
 
             start = time.time()
@@ -193,7 +193,6 @@ class DataFetch(object):
                 if async_exc_info:
                     continue
 
-            nominal_zoom = coord.zoom + self.metatile_zoom
             data = dict(
                 metadata=metadata,
                 coord=coord,
