@@ -4,6 +4,7 @@ from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.metatile import make_metatiles
@@ -126,11 +127,12 @@ class DataFetch(object):
 
             coord = data['coord']
             nominal_zoom = coord.zoom
+            unpadded_bounds = coord_to_mercator_bounds(coord)
 
             start = time.time()
 
             try:
-                fetch_data = self.fetcher(coord)
+                fetch_data = self.fetcher(nominal_zoom, unpadded_bounds)
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 stacktrace = format_stacktrace_one_line(
