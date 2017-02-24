@@ -13,6 +13,7 @@ import Queue
 import signal
 import sys
 import time
+import math
 
 
 # long enough to not fight with other threads, but not long enough
@@ -155,8 +156,9 @@ class DataFetch(object):
             # and its four children to cut from it. at zoom 15, this may
             # also include a whole bunch of other children below the max
             # zoom.
-            cut_coords = list(coord_children_range(
-                coord, coord.zoom + self.metatile_zoom))
+            cut_coords = list()
+            if nominal_zoom > coord.zoom:
+                cut_coords.extend(coord_children_range(coord, nominal_zoom))
             max_zoom = 16 - self.metatile_zoom
 
             assert coord.zoom <= max_zoom, \
