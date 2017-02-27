@@ -1,6 +1,25 @@
 CHANGELOG
 =========
 
+v1.3.0
+------
+* Roll back the use of psycopg2 connection pools. (See [#149](https://github.com/tilezen/tilequeue/pull/149))
+
+v1.2.1
+------
+* Fix connection leak: Track connections before trying to use them. (See [#150](https://github.com/tilezen/tilequeue/pull/150))
+* Fix issue processing WOF data with z coordinates: Ignore extra coordinates, e.g: z, in reprojection. (See [#148](https://github.com/tilezen/tilequeue/pull/148))
+
+v1.2.0
+------
+* Improve performance of GeoJSON and TopoJSON format generation by using ujson (See [#139](https://github.com/tilezen/tilequeue/issues/139))
+* Improve performance of MVT format generation by using builtin round function (See [#144](https://github.com/tilezen/tilequeue/pull/144))
+* Reduce database pressure by use psycopg2 connection pools (See [#141](https://github.com/tilezen/tilequeue/issues/141))
+* Reduce database requests by registering hstore/json (See [#142](https://github.com/tilezen/tilequeue/issues/142))
+* Reduce memory usage during tile seeding (See [#126](https://github.com/tilezen/tilequeue/issues/126))
+* Expose unique option for seeding tile generator (See [#127](https://github.com/tilezen/tilequeue/issues/127))
+* Support long zooms (See [#130](https://github.com/tilezen/tilequeue/pull/130))
+
 v1.1.1
 ------
 * Use queue name from message to acknowledge message. See [#134](https://github.com/tilezen/tilequeue/issues/134).
@@ -8,7 +27,7 @@ v1.1.1
 v1.1.0
 ------
 * Add command to dump the tiles of interest list to a text file
-* Add support for generating metatiles
+* Add support for generating metatiles (see also: tapalcatl)
 * Add priority queues implementation
 * Increase topojson scale from 1024 -> 4096
 
