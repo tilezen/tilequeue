@@ -272,31 +272,64 @@ def tilequeue_drain(cfg, peripherals):
 
 
 def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
+
     next_coord_ints = coord_ints
     coord_ints_at_parent_zoom = set()
+
+    total_coord_ints = []
+
+    # to capture metrics
+    total = 0
+    hits = 0
+    misses = 0
+
     while True:
+
         for coord_int in next_coord_ints:
+
+            total += 1
             if coord_int in tiles_of_interest:
-                yield coord_int
+                hits += 1
+                total_coord_ints.append(coord_int)
+            else:
+                misses += 1
+
             zoom = zoom_mask & coord_int
             if zoom > until:
                 parent_coord_int = coord_int_zoom_up(coord_int)
                 coord_ints_at_parent_zoom.add(parent_coord_int)
+
         if not coord_ints_at_parent_zoom:
-            return
+            break
+
         next_coord_ints = coord_ints_at_parent_zoom
         coord_ints_at_parent_zoom = set()
+
+    metrics = dict(
+        total=total,
+        hits=hits,
+        misses=misses,
+    )
+    return total_coord_ints, metrics
 
 
 def coord_ints_from_paths(paths):
     coord_set = set()
+    path_counts = []
     for path in paths:
+        path_count = 0
         with open(path) as fp:
             coords = create_coords_generator_from_tiles_file(fp)
             for coord in coords:
                 coord_int = coord_marshall_int(coord)
                 coord_set.add(coord_int)
-    return coord_set
+                path_count += 1
+            path_counts.append((path, path_count))
+    result = dict(
+        coord_set=coord_set,
+        path_counts=path_counts,
+    )
+    return result
 
 
 def tilequeue_intersect(cfg, peripherals):
@@ -329,23 +362,17 @@ def tilequeue_intersect(cfg, peripherals):
     logger.info('Will process %d expired tile files.'
                 % len(expired_tile_paths))
 
-    for expired_tile_path in expired_tile_paths:
-        stat_result = os.stat(expired_tile_path)
-        file_size = stat_result.st_size
-        file_size_in_kilobytes = file_size / 1024
-        logger.info('Processing %s. Size: %dK' %
-                    (expired_tile_path, file_size_in_kilobytes))
-
     # This will store all coords from all paths as integers in a
     # set. A set is used because if the same tile has been expired in
     # more than one file, we only process it once
-    all_coord_ints_set = coord_ints_from_paths(expired_tile_paths)
+    coord_ints_path_result = coord_ints_from_paths(expired_tile_paths)
+    all_coord_ints_set = coord_ints_path_result['coord_set']
     logger.info('Unique expired tiles read to process: %d' %
                 len(all_coord_ints_set))
 
     # determine the list of coordinates we would want to enqueue
-    coord_ints = explode_and_intersect(all_coord_ints_set, tiles_of_interest,
-                                       until=cfg.intersect_zoom_until)
+    coord_ints, intersect_metrics = explode_and_intersect(
+        all_coord_ints_set, tiles_of_interest, until=cfg.intersect_zoom_until)
     coords = map(coord_unmarshall_int, coord_ints)
 
     # clamp number of threads between 5 and 20
@@ -353,14 +380,28 @@ def tilequeue_intersect(cfg, peripherals):
     enqueuer = ThreadedEnqueuer(sqs_queue, n_threads, logger)
     n_queued, n_in_flight = enqueuer(coords)
 
-    # print results
+    # print counts per file
+    for path, count in coord_ints_path_result['path_counts']:
+        logger.info('Path count: %s %d' % (path, count))
+
+    # print metrics across intersection
+    logger.info(
+        'Intersect metrics: toi(%d) - candidates(%d) - hits(%d) - misses(%d)'
+        ' - enqueued(%d) - in-flight(%d) - expiry-tiles(%d)' %
+        (len(tiles_of_interest),
+         intersect_metrics['total'],
+         intersect_metrics['hits'],
+         intersect_metrics['misses'],
+         n_queued,
+         n_in_flight,
+         len(all_coord_ints_set),
+         ))
+
+    # print and remove expiry files
     for expired_tile_path in expired_tile_paths:
         logger.info('Processing complete: %s' % expired_tile_path)
         os.remove(expired_tile_path)
         logger.info('Removed: %s' % expired_tile_path)
-
-    logger.info('%d tiles enqueued. %d tiles in flight.' %
-                (n_queued, n_in_flight))
 
     logger.info('Intersection complete.')
 
