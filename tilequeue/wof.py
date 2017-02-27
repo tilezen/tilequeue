@@ -1171,7 +1171,7 @@ class WofProcessor(object):
             self.logger.info('Intersecting %d tiles of interest with %d '
                              'expired tiles' % (
                                  len(toi), len(expired_coord_ints)))
-            toi_expired_coord_ints = self.intersector(
+            toi_expired_coord_ints, _ = self.intersector(
                 expired_coord_ints, toi, self.zoom_until)
             coords = map(coord_unmarshall_int, toi_expired_coord_ints)
             self.logger.info('Intersection complete, will expire %d tiles' %
