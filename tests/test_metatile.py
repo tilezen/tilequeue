@@ -47,6 +47,8 @@ class TestMetatile(unittest.TestCase):
 
         json = "{\"json\":true}"
         tiles = [
+            # NOTE: coordinates are (y, x, z), possibly the most confusing
+            # possible permutation.
             dict(tile=json, coord=Coordinate(123, 456, 17),
                  format=json_format, layer='all'),
             dict(tile=json, coord=Coordinate(123, 457, 17),
@@ -57,6 +59,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(1, len(metatiles))
         meta = metatiles[0]
 
+        # NOTE: Coordinate(y, x, z)
         coord = Coordinate(61, 228, 16)
         self.assertEqual(meta['coord'], coord)
 
@@ -64,7 +67,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(zip_format, meta['format'])
         buf = StringIO.StringIO(meta['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
-            self.assertEqual(json, z.open('1/1/0.json').read())
+            self.assertEqual(json, z.open('1/0/1.json').read())
             self.assertEqual(json, z.open('1/1/1.json').read())
 
     def test_extract_metatiles_single(self):

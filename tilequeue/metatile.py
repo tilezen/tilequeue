@@ -49,7 +49,7 @@ def make_multi_metatile(parent, tiles, date_time=None):
                 "column is not."
 
             tile_name = '%d/%d/%d.%s' % \
-                (delta_z, delta_row, delta_column, tile['format'].extension)
+                (delta_z, delta_column, delta_row, tile['format'].extension)
             tile_data = tile['tile']
             info = zipfile.ZipInfo(tile_name, date_time)
             z.writestr(info, tile_data)
