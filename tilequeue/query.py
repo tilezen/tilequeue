@@ -1,7 +1,6 @@
 from psycopg2.extras import RealDictCursor
 from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from tilequeue.tile import calc_meters_per_pixel_dim
-from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.transform import calculate_padded_bounds
 import sys
 
@@ -161,11 +160,9 @@ class DataFetcher(object):
             self.dbnames, self.conn_info)
         self.n_conn = n_conn
 
-    def __call__(self, coord, layer_data=None):
+    def __call__(self, zoom, unpadded_bounds, layer_data=None):
         if layer_data is None:
             layer_data = self.layer_data
-        zoom = coord.zoom
-        unpadded_bounds = coord_to_mercator_bounds(coord)
 
         sql_conns = self.sql_conn_pool.get_conns(self.n_conn)
         try:
