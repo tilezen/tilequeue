@@ -5,16 +5,16 @@ from tilequeue.format import zip_format
 from time import gmtime
 
 
-def make_single_metatile(size, tiles, date_time=None):
+def make_multi_metatile(parent, tiles, date_time=None):
     """
-    Make a single metatile from a list of tiles all having the same
-    coordinate and layer. Set date_time to a 6-tuple of (year, month,
-    day, hour, minute, second) to set the timestamp for members.
-    Otherwise the current wall clock time is used.
+    Make a metatile containing a list of tiles all having the same layer,
+    with coordinates relative to the given parent. Set date_time to a 6-tuple
+    of (year, month, day, hour, minute, second) to set the timestamp for
+    members. Otherwise the current wall clock time is used.
     """
 
-    assert size == 1, \
-        "Tilequeue only supports metatiles of size one at the moment."
+    assert parent is not None, \
+        "Parent tile must be provided and not None to make a metatile."
 
     if len(tiles) == 0:
         return []
@@ -22,40 +22,95 @@ def make_single_metatile(size, tiles, date_time=None):
     if date_time is None:
         date_time = gmtime()[0:6]
 
-    coord = tiles[0]['coord']
     layer = tiles[0]['layer']
 
     buf = StringIO.StringIO()
     with zipfile.ZipFile(buf, mode='w') as z:
         for tile in tiles:
-            assert tile['coord'] == coord
             assert tile['layer'] == layer
 
-            tile_name = '0/0/0.%s' % tile['format'].extension
+            coord = tile['coord']
+
+            # change in zoom level from parent to coord. since parent should
+            # be a parent, its zoom should always be equal or smaller to that
+            # of coord.
+            delta_z = coord.zoom - parent.zoom
+            assert delta_z >= 0, "Coordinates must be descendents of parent"
+
+            # change in row/col coordinates are relative to the upper left
+            # coordinate at that zoom. both should be positive.
+            delta_row = coord.row - (int(parent.row) << delta_z)
+            delta_column = coord.column - (int(parent.column) << delta_z)
+            assert delta_row >= 0, \
+                "Coordinates must be contained by their parent, but " + \
+                "row is not."
+            assert delta_column >= 0, \
+                "Coordinates must be contained by their parent, but " + \
+                "column is not."
+
+            tile_name = '%d/%d/%d.%s' % \
+                (delta_z, delta_column, delta_row, tile['format'].extension)
             tile_data = tile['tile']
             info = zipfile.ZipInfo(tile_name, date_time)
             z.writestr(info, tile_data)
 
-    return [dict(tile=buf.getvalue(), format=zip_format, coord=coord,
+    return [dict(tile=buf.getvalue(), format=zip_format, coord=parent,
                  layer=layer)]
+
+
+def _common_parent(a, b):
+    """
+    Find the common parent tile of both a and b. The common parent is the tile
+    at the highest zoom which both a and b can be transformed into by lowering
+    their zoom levels.
+    """
+
+    if a.zoom < b.zoom:
+        a = a.zoomTo(b.zoom).container()
+
+    elif a.zoom > b.zoom:
+        b = b.zoomTo(a.zoom).container()
+
+    while a.row != b.row or a.column != b.column:
+        a = a.zoomBy(-1).container()
+        b = b.zoomBy(-1).container()
+
+    # by this point a == b.
+    return a
+
+
+def _parent_tile(tiles):
+    """
+    Find the common parent tile for a sequence of tiles.
+    """
+    parent = None
+    for t in tiles:
+        if parent is None:
+            parent = t
+
+        else:
+            parent = _common_parent(parent, t)
+
+    return parent
 
 
 def make_metatiles(size, tiles, date_time=None):
     """
-    Group by coordinates and layers, and make metatiles out of all the tiles
-    which share those properties. Provide a 6-tuple date_time to set the
-    timestamp on each tile within the metatile, or leave it as None to use
-    the current time.
+    Group by layers, and make metatiles out of all the tiles which share those
+    properties relative to the "top level" tile which is parent of them all.
+    Provide a 6-tuple date_time to set the timestamp on each tile within the
+    metatile, or leave it as None to use the current time.
     """
 
     groups = defaultdict(list)
     for tile in tiles:
-        key = (tile['layer'], tile['coord'])
+        key = tile['layer']
         groups[key].append(tile)
 
     metatiles = []
     for group in groups.itervalues():
-        metatiles.extend(make_single_metatile(size, group, date_time))
+        parent = _parent_tile(t['coord'] for t in group)
+        metatiles.extend(make_multi_metatile(parent, group, date_time))
 
     return metatiles
 
