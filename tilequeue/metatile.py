@@ -109,7 +109,7 @@ def make_metatiles(size, tiles, date_time=None):
 
     metatiles = []
     for group in groups.itervalues():
-        parent = _parent_tile([t['coord'] for t in group])
+        parent = _parent_tile(t['coord'] for t in group)
         metatiles.extend(make_multi_metatile(parent, group, date_time))
 
     return metatiles
