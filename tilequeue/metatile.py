@@ -115,18 +115,24 @@ def make_metatiles(size, tiles, date_time=None):
     return metatiles
 
 
-def extract_metatile(size, io, tile):
+def extract_metatile(io, fmt, offset=None):
     """
-    Extract the tile from the metatile given in the file-like object io.
+    Extract the tile at the given offset (defaults to 0/0/0) and format from
+    the metatile in the file-like object io.
     """
 
-    assert size == 1, \
-        "Tilequeue only supports metatiles of size one at the moment."
-
-    tile_name = '0/0/0.%s' % tile['format'].extension
+    ext = fmt.extension
+    if offset is None:
+        tile_name = '0/0/0.%s' % ext
+    else:
+        tile_name = '%d/%d/%d.%s' % (offset.zoom, offset.column, offset.row,
+                                     ext)
 
     with zipfile.ZipFile(io, mode='r') as zf:
-        return zf.open(tile_name).read()
+        if tile_name in zf.namelist():
+            return zf.read(tile_name)
+        else:
+            return None
 
 
 def _metatile_contents_equal(zip_1, zip_2):
