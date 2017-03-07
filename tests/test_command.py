@@ -132,14 +132,18 @@ class TestUniquifyGenerator(unittest.TestCase):
             coord = sample_coord.zoomTo(i)
             coord_int = coord_marshall_int(coord)
             tiles_of_interest.append(coord_int)
-        exploded = explode_and_intersect([sample_coord_int], tiles_of_interest,
-                                         until=11)
+        exploded, metrics = explode_and_intersect(
+            [sample_coord_int], tiles_of_interest, until=11)
         coord_ints = list(exploded)
         for coord_int in coord_ints:
             coord = coord_unmarshall_int(coord_int)
             self.failUnless(coord.zoom > 10)
 
         self.assertEqual(4, len(coord_ints))
+
+        self.assertEqual(4, metrics['hits'])
+        self.assertEqual(0, metrics['misses'])
+        self.assertEqual(4, metrics['total'])
 
 
 class ZoomToQueueNameMapTest(unittest.TestCase):

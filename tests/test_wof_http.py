@@ -159,7 +159,7 @@ class TestWofHttp(unittest.TestCase):
             redis = _NullRedisTOI()
 
             def intersector(dummy1, dummy2, dummy3):
-                return []
+                return [], None
 
             def enqueuer(dummy):
                 pass
