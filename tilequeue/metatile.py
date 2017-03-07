@@ -52,7 +52,7 @@ def make_multi_metatile(parent, tiles, date_time=None):
                 (delta_z, delta_column, delta_row, tile['format'].extension)
             tile_data = tile['tile']
             info = zipfile.ZipInfo(tile_name, date_time)
-            z.writestr(info, tile_data)
+            z.writestr(info, tile_data, zipfile.ZIP_DEFLATED)
 
     return [dict(tile=buf.getvalue(), format=zip_format, coord=parent,
                  layer=layer)]
