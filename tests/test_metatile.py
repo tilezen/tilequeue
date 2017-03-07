@@ -70,6 +70,12 @@ class TestMetatile(unittest.TestCase):
             self.assertEqual(json, z.open('1/0/1.json').read())
             self.assertEqual(json, z.open('1/1/1.json').read())
 
+        # test extracting as well
+        self.assertEqual(json, extract_metatile(
+            buf, json_format, offset=Coordinate(zoom=1, column=0, row=1)))
+        self.assertEqual(json, extract_metatile(
+            buf, json_format, offset=Coordinate(zoom=1, column=1, row=1)))
+
     def test_extract_metatiles_single(self):
         json = "{\"json\":true}"
         tile = dict(tile=json, coord=Coordinate(0, 0, 0),
@@ -77,7 +83,7 @@ class TestMetatile(unittest.TestCase):
         metatiles = make_metatiles(1, [tile])
         self.assertEqual(1, len(metatiles))
         buf = StringIO.StringIO(metatiles[0]['tile'])
-        extracted = extract_metatile(1, buf, tile)
+        extracted = extract_metatile(buf, json_format)
         self.assertEqual(json, extracted)
 
     def test_metatile_file_timing(self):
