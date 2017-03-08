@@ -306,7 +306,16 @@ class S3Storage(object):
             coord = data['coord']
 
             start = time.time()
-            async_jobs = self.save_tiles(data['formatted_tiles'])
+            try:
+                async_jobs = self.save_tiles(data['formatted_tiles'])
+
+            except:
+                # cannot propagate this error - it crashes the thread and
+                # blocks up the whole queue!
+                stacktrace = format_stacktrace_one_line(sys.exc_info())
+                self.logger.error('Error saving tiles: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
+                continue
 
             async_exc_info = None
             n_stored = 0
@@ -320,10 +329,8 @@ class S3Storage(object):
                         n_not_stored += 1
                 except:
                     # it's important to wait for all async jobs to
-                    # complete
-                    # but we just keep a reference to the last
-                    # exception
-                    # it's unlikely that we would receive multiple
+                    # complete but we just keep a reference to the last
+                    # exception it's unlikely that we would receive multiple
                     # different exceptions when uploading to s3
                     async_exc_info = sys.exc_info()
 
