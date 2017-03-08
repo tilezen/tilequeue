@@ -66,10 +66,10 @@ def _common_parent(a, b):
     """
 
     if a.zoom < b.zoom:
-        a = a.zoomTo(b.zoom).container()
+        b = b.zoomTo(a.zoom).container()
 
     elif a.zoom > b.zoom:
-        b = b.zoomTo(a.zoom).container()
+        a = a.zoomTo(b.zoom).container()
 
     while a.row != b.row or a.column != b.column:
         a = a.zoomBy(-1).container()
