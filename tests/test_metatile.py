@@ -109,3 +109,50 @@ class TestMetatile(unittest.TestCase):
 
         self.assertTrue(metatiles_are_equal(
             metatile_1[0]['tile'], metatile_2[0]['tile']))
+
+    def test_metatile_common_parent(self):
+        from tilequeue.metatile import _common_parent
+
+        def tile(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(1, 1, 1), tile(1, 0, 0)))
+
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(0, 0, 0), tile(1, 0, 0)))
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(1, 0, 0), tile(0, 0, 0)))
+
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(2, 0, 0), tile(2, 3, 3)))
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(3, 0, 0), tile(3, 7, 7)))
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(4, 0, 0), tile(4, 15, 15)))
+
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(3, 3, 3), tile(2, 3, 3)))
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(4, 7, 7), tile(3, 7, 7)))
+        self.assertEqual(
+            tile(0, 0, 0),
+            _common_parent(tile(5, 15, 15), tile(4, 15, 15)))
+
+        self.assertEqual(
+            tile(1, 1, 1),
+            _common_parent(tile(3, 4, 4), tile(2, 3, 3)))
+        self.assertEqual(
+            tile(1, 1, 1),
+            _common_parent(tile(4, 8, 8), tile(3, 7, 7)))
+        self.assertEqual(
+            tile(1, 1, 1),
+            _common_parent(tile(5, 16, 16), tile(4, 15, 15)))
