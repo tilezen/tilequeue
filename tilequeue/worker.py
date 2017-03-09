@@ -161,8 +161,12 @@ class DataFetch(object):
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
             max_zoom = 16 - self.metatile_zoom
 
-            assert coord.zoom <= max_zoom, \
-                "Job coordinates above max zoom are not supported"
+            if coord.zoom > max_zoom:
+                self.logger.log(
+                    logging.WARNING,
+                    'Job coordinates above max zoom are not supported, '
+                    'skipping %r > %d' % (coord, max_zoom))
+                continue
 
             if coord.zoom == max_zoom:
                 async_jobs = []
