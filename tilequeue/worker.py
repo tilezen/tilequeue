@@ -161,8 +161,12 @@ class DataFetch(object):
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
             max_zoom = 16 - self.metatile_zoom
 
-            assert coord.zoom <= max_zoom, \
-                "Job coordinates above max zoom are not supported"
+            if coord.zoom > max_zoom:
+                self.logger.log(
+                    logging.WARNING,
+                    'Job coordinates above max zoom are not supported, '
+                    'skipping %r > %d' % (coord, max_zoom))
+                continue
 
             if coord.zoom == max_zoom:
                 async_jobs = []
@@ -173,7 +177,9 @@ class DataFetch(object):
                 async_fn = rci.is_coord_int_in_tiles_of_interest
 
                 for child in coord_children_range(coord, children_until):
-                    if child.zoom <= max_zoom:
+                    # tiles descended from coord up to nominal zoom are
+                    # already included - no need to include them again.
+                    if child.zoom <= nominal_zoom:
                         continue
                     zoomed_coord_int = coord_marshall_int(child)
                     async_result = self.io_pool.apply_async(
