@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v1.5.0
+------
+* Emit additional metrics during intersection
+
 v1.4.0
 ------
 * When checking to see if a tile has changed, compare ZIP file contents only. (See https://github.com/tilezen/tilequeue/issues/152)
