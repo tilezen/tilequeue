@@ -96,6 +96,57 @@ def calc_buffered_bounds(
     return bounds
 
 
+def _intersect_multipolygon(shape, tile_bounds, clip_bounds):
+    """
+    Return the parts of the MultiPolygon shape which overlap the tile_bounds,
+    each clipped to the clip_bounds. This can be used to extract only the
+    parts of a multipolygon which are actually visible in the tile, while
+    keeping those parts which extend beyond the tile clipped to avoid huge
+    polygons.
+    """
+
+    polys = []
+    for poly in shape.geoms:
+        if tile_bounds.intersects(poly):
+            if clip_bounds.contains(poly):
+                polys.append(poly)
+            else:
+                polys.append(clip_bounds.intersection(poly))
+    return geometry.MultiPolygon(polys)
+
+
+def _clip_shape(shape, buffer_padded_bounds, is_clipped, clip_factor):
+    """
+    Return the shape clipped to a clip_factor expansion of buffer_padded_bounds
+    if is_clipped is True. Otherwise return the original shape, or None if the
+    shape does not intersect buffer_padded_bounds at all.
+
+    This is used to reduce the size of the geometries which are encoded in the
+    tiles by removing things which aren't in the tile, and clipping those which
+    are to the clip_factor expanded bounding box.
+    """
+
+    shape_buf_bounds = geometry.box(*buffer_padded_bounds)
+
+    if not shape_buf_bounds.intersects(shape):
+        return None
+
+    if is_clipped:
+        # now we know that we should include the geometry, but
+        # if the geometry should be clipped, we'll clip to the
+        # layer-specific padded bounds
+        layer_padded_bounds = calculate_padded_bounds(
+            clip_factor, buffer_padded_bounds)
+
+        if shape.type == 'MultiPolygon':
+            shape = _intersect_multipolygon(
+                shape, shape_buf_bounds, layer_padded_bounds)
+        else:
+            shape = shape.intersection(layer_padded_bounds)
+
+    return shape
+
+
 def transform_feature_layers_shape(
         feature_layers, format, scale, unpadded_bounds,
         meters_per_pixel_dim, buffer_cfg):
@@ -126,19 +177,11 @@ def transform_feature_layers_shape(
             buffer_padded_bounds = calc_buffered_bounds(
                 format, unpadded_bounds, meters_per_pixel_dim, layer_name,
                 shape.type, buffer_cfg)
-            shape_buf_bounds = geometry.box(*buffer_padded_bounds)
 
-            if not shape_buf_bounds.intersects(shape):
+            shape = _clip_shape(
+                shape, buffer_padded_bounds, is_clipped, clip_factor)
+            if shape is None or shape.is_empty:
                 continue
-
-            if is_clipped:
-                # now we know that we should include the geometry, but
-                # if the geometry should be clipped, we'll clip to the
-                # layer-specific padded bounds
-                layer_padded_bounds = calculate_padded_bounds(
-                    clip_factor, buffer_padded_bounds)
-
-                shape = shape.intersection(layer_padded_bounds)
 
             # perform the format specific geometry transformations
             shape = transform_fn(shape)
