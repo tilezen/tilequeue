@@ -561,11 +561,11 @@ def tilequeue_process(cfg, peripherals):
     # geometry waiting to be processed from taking up all the RAM!
     default_queue_buffer_size = max(1, 128 >> (2 * cfg.metatile_size))
     sql_queue_buffer_size = cfg.sql_queue_buffer_size or \
-                            default_queue_buffer_size
+        default_queue_buffer_size
     proc_queue_buffer_size = cfg.proc_queue_buffer_size or \
-                             default_queue_buffer_size
+        default_queue_buffer_size
     s3_queue_buffer_size = cfg.s3_queue_buffer_size or \
-                           default_queue_buffer_size
+        default_queue_buffer_size
     n_layers = len(all_layer_data)
     n_formats = len(formats)
     n_simultaneous_s3_storage = cfg.n_simultaneous_s3_storage
