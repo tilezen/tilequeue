@@ -98,6 +98,10 @@ class Configuration(object):
         self.metatile_size = self._cfg('metatile size')
         self.store_orig = self._cfg('metatile store_metatile_and_originals')
 
+        self.sql_queue_buffer_size = self._cfg('queue_buffer_size sql')
+        self.proc_queue_buffer_size = self._cfg('queue_buffer_size proc')
+        self.s3_queue_buffer_size = self._cfg('queue_buffer_size s3')
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml
@@ -188,6 +192,11 @@ def default_yml_config():
         'metatile': {
             'size': None,
             'store_metatile_and_originals': False,
+        },
+        'queue_buffer_size': {
+            'sql': None,
+            'proc': None,
+            's3': None,
         },
     }
 

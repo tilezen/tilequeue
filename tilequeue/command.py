@@ -557,7 +557,15 @@ def tilequeue_process(cfg, peripherals):
         # default to number of databases configured
         n_simultaneous_query_sets = len(cfg.postgresql_conn_info['dbnames'])
     assert n_simultaneous_query_sets > 0
-    default_queue_buffer_size = 128
+    # reduce queue size when we're rendering metatiles to try and avoid the
+    # geometry waiting to be processed from taking up all the RAM!
+    default_queue_buffer_size = max(1, 128 >> (2 * cfg.metatile_size))
+    sql_queue_buffer_size = cfg.sql_queue_buffer_size or \
+                            default_queue_buffer_size
+    proc_queue_buffer_size = cfg.proc_queue_buffer_size or \
+                             default_queue_buffer_size
+    s3_queue_buffer_size = cfg.s3_queue_buffer_size or \
+                           default_queue_buffer_size
     n_layers = len(all_layer_data)
     n_formats = len(formats)
     n_simultaneous_s3_storage = cfg.n_simultaneous_s3_storage
@@ -583,15 +591,15 @@ def tilequeue_process(cfg, peripherals):
     sqs_input_queue = Queue.Queue(sqs_input_queue_buffer_size)
 
     # holds raw sql results - no filtering or processing done on them
-    sql_data_fetch_queue = multiprocessing.Queue(default_queue_buffer_size)
+    sql_data_fetch_queue = multiprocessing.Queue(sql_queue_buffer_size)
 
     # holds data after it has been filtered and processed
     # this is where the cpu intensive part of the operation will happen
     # the results will be data that is formatted for each necessary format
-    processor_queue = multiprocessing.Queue(default_queue_buffer_size)
+    processor_queue = multiprocessing.Queue(proc_queue_buffer_size)
 
     # holds data after it has been sent to s3
-    s3_store_queue = Queue.Queue(default_queue_buffer_size)
+    s3_store_queue = Queue.Queue(s3_queue_buffer_size)
 
     # create worker threads/processes
     thread_sqs_queue_reader_stop = threading.Event()
