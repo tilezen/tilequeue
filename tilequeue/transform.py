@@ -108,10 +108,17 @@ def _intersect_multipolygon(shape, tile_bounds, clip_bounds):
     polys = []
     for poly in shape.geoms:
         if tile_bounds.intersects(poly):
-            if clip_bounds.contains(poly):
+            if not clip_bounds.contains(poly):
+                poly = clip_bounds.intersection(poly)
+
+            if not poly.is_valid:
+                continue
+
+            if poly.type == 'Polygon':
                 polys.append(poly)
-            else:
-                polys.append(clip_bounds.intersection(poly))
+            elif poly.type == 'MultiPolygon':
+                polys.extend(poly.geoms)
+
     return geometry.MultiPolygon(polys)
 
 
