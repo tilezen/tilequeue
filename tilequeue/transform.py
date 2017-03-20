@@ -111,6 +111,10 @@ def _intersect_multipolygon(shape, tile_bounds, clip_bounds):
             if not clip_bounds.contains(poly):
                 poly = clip_bounds.intersection(poly)
 
+            # the intersection operation can make the resulting polygon
+            # invalid. including it in a MultiPolygon would make that
+            # invalid too. instead, we skip it, and hope it wasn't too
+            # important.
             if not poly.is_valid:
                 continue
 
