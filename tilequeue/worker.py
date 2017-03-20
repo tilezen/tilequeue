@@ -65,7 +65,7 @@ class OutputQueue(object):
             stacktrace = format_stacktrace_one_line()
             self.logger.error(
                 "MemoryError while sending %s to the queue. Stacktrace: %s" %
-                (serialize_coord(msg.coord), stacktrace))
+                (serialize_coord(coord), stacktrace))
             # memory error might not leave the malloc subsystem in a usable
             # state, so better to exit the whole worker here than crash this
             # thread, which would lock up the whole worker.
