@@ -550,7 +550,7 @@ def tilequeue_process(cfg, peripherals):
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
-    n_cpu = 1 #multiprocessing.cpu_count()
+    n_cpu = multiprocessing.cpu_count()
     sqs_messages_per_batch = 10
     n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
     if not n_simultaneous_query_sets:
