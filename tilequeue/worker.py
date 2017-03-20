@@ -61,14 +61,19 @@ def _force_empty_queue(q):
 class SqsQueueReader(object):
 
     def __init__(self, sqs_queue, output_queue, logger, stop,
-                 sqs_msgs_to_read_size=10):
+                 metatile_size, sqs_msgs_to_read_size=10):
         self.sqs_queue = sqs_queue
         self.output_queue = output_queue
         self.sqs_msgs_to_read_size = sqs_msgs_to_read_size
         self.logger = logger
         self.stop = stop
+        self.metatile_zoom = int(math.log(metatile_size, 2))
+        assert (1 << self.metatile_zoom) == metatile_size, \
+            "Metatile size must be a power of two."
 
     def __call__(self):
+        max_zoom = 16 - self.metatile_zoom
+
         while not self.stop.is_set():
             try:
                 msgs = self.sqs_queue.read(
@@ -82,6 +87,24 @@ class SqsQueueReader(object):
                 # if asked to stop, break as soon as possible
                 if self.stop.is_set():
                     break
+
+                if msg.coord.zoom > max_zoom:
+                    self.logger.log(
+                        logging.WARNING,
+                        'Job coordinates above max zoom are not supported, '
+                        'skipping %r > %d' % (msg.coord, max_zoom))
+
+                    # delete jobs that we can't handle from the queue,
+                    # otherwise we'll get stuck in a cycle of timed-out jobs
+                    # being re-added to the queue until they overflow
+                    # max-retries.
+                    try:
+                        self.sqs_queue.job_done(msg)
+                    except:
+                        stacktrace = format_stacktrace_one_line()
+                        self.logger.error('Error acknowledging: %s - %s' % (
+                            serialize_coord(msg.coord), stacktrace))
+                    continue
 
                 metadata = dict(
                     timing=dict(
@@ -151,6 +174,7 @@ class DataFetch(object):
 
             metadata = data['metadata']
             metadata['timing']['fetch_seconds'] = time.time() - start
+            max_zoom = 16 - self.metatile_zoom
 
             # every tile job that we get from the queue is a "parent" tile
             # and its four children to cut from it. at zoom 15, this may
@@ -159,14 +183,6 @@ class DataFetch(object):
             cut_coords = list()
             if nominal_zoom > coord.zoom:
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
-            max_zoom = 16 - self.metatile_zoom
-
-            if coord.zoom > max_zoom:
-                self.logger.log(
-                    logging.WARNING,
-                    'Job coordinates above max zoom are not supported, '
-                    'skipping %r > %d' % (coord, max_zoom))
-                continue
 
             if coord.zoom == max_zoom:
                 async_jobs = []
