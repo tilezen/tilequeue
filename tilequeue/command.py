@@ -21,6 +21,7 @@ from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import create_coord
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
@@ -948,6 +949,65 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('%d tiles of interest processed' % n_toi)
 
 
+def tilequeue_prune_tiles_of_interest(cfg, peripherals):
+    logger = make_logger(cfg, 'prune_tiles_of_interest')
+    logger.info('Pruning tiles of interest')
+
+    logger.info('Fetching tiles of interest ...')
+    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    n_toi = len(tiles_of_interest)
+    logger.info('Fetching tiles of interest ... done. %s found', n_toi)
+
+    logger.info('Fetching tiles recently requested ...')
+    import psycopg2
+
+    redshift_uri = cfg.yml.get('redshift_uri')
+    assert redshift_uri, ("A redshift connection URI must "
+                          "be present in the config yaml")
+
+    tiles_recently_requested = set()
+    with psycopg2.connect(redshift_uri) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                select x, y, z
+                from tile_traffic_v4
+                where (date >= dateadd(day, -30, current_date))
+                  and (z between 0 and 16)
+                  and (x between 0 and pow(2,z)-1)
+                  and (y between 0 and pow(2,z)-1)
+                group by z, x, y
+                order by z, x, y
+            );""")
+            n_trr = cur.rowcount
+            for (x, y, z) in cur:
+                coord = create_coord(x, y, z)
+                coord_int = coord_marshall_int(coord)
+                tiles_recently_requested.add(coord_int)
+
+    logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
+
+    logger.info('Computing tiles of interest to remove ...')
+    toi_to_remove = tiles_of_interest - tiles_recently_requested
+    logger.info('Computing tiles of interest to remove ... done. %s found',
+                len(toi_to_remove))
+
+    logger.info('Removing tiles from TOI and S3 ...')
+
+    def delete_tile_of_interest(coord_int):
+        # Remove from the redis toi set
+        peripherals.redis_cache_index.remove_tile_of_interest(coord_int)
+
+        # Remove the tile from S3
+
+        pass
+
+    for coord_int in toi_to_remove:
+        # FIXME: Think about doing this in a thread/process pool
+        delete_tile_of_interest(coord_int)
+
+    logger.info('Removing tiles from TOI and S3 ... done')
+
+
 def tilequeue_tile_sizes(cfg, peripherals):
     # find averages, counts, and medians for metro extract tiles
     assert cfg.metro_extract_url
@@ -1237,6 +1297,8 @@ def tilequeue_main(argv_args=None):
             create_command_parser(tilequeue_dump_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
          create_command_parser(tilequeue_enqueue_tiles_of_interest)),
+        ('prune-tiles-of-interest',
+         create_command_parser(tilequeue_prune_tiles_of_interest)),
         ('tile-size', create_command_parser(tilequeue_tile_sizes)),
         ('wof-process-neighbourhoods', create_command_parser(
             tilequeue_process_wof_neighbourhoods)),
