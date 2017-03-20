@@ -604,8 +604,8 @@ def tilequeue_process(cfg, peripherals):
     # create worker threads/processes
     thread_sqs_queue_reader_stop = threading.Event()
     sqs_queue_reader = SqsQueueReader(
-        sqs_queue, sqs_input_queue, logger, cfg.metatile_size,
-        thread_sqs_queue_reader_stop)
+        sqs_queue, sqs_input_queue, logger, thread_sqs_queue_reader_stop,
+        cfg.metatile_size)
 
     data_fetch = DataFetch(
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,

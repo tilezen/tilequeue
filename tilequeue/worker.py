@@ -41,6 +41,39 @@ def _force_empty_queue(q):
         continue
 
 
+# OutputQueue wraps the process of sending data to a multiprocessing queue
+# so that we can simultaneously check for the "stop" signal when it's time
+# to shut down.
+class OutputQueue(object):
+    def __init__(self, output_queue, stop):
+        self.output_queue = output_queue
+        self.stop = stop
+
+    def __call__(self, coord, data):
+        """
+        Send data, associated with coordinate coord, to the queue. While also
+        watching for a signal to stop. If the data is too large to send, then
+        trap the MemoryError and exit the program.
+        """
+
+        try:
+            while not _non_blocking_put(self.output_queue, data):
+                if self.stop.is_set():
+                    return True
+
+        except MemoryError:
+            stacktrace = format_stacktrace_one_line()
+            self.logger.error(
+                "MemoryError while sending %s to the queue. Stacktrace: %s" %
+                (serialize_coord(msg.coord), stacktrace))
+            # memory error might not leave the malloc subsystem in a usable
+            # state, so better to exit the whole worker here than crash this
+            # thread, which would lock up the whole worker.
+            sys.exit(1)
+
+        return False
+
+
 # The strategy with each worker is to loop on a thread event. When the
 # main thread/process receives a kill signal, it will issue stops to
 # each worker to signal that work should end.
@@ -63,7 +96,7 @@ class SqsQueueReader(object):
     def __init__(self, sqs_queue, output_queue, logger, stop,
                  metatile_size, sqs_msgs_to_read_size=10):
         self.sqs_queue = sqs_queue
-        self.output_queue = output_queue
+        self.output = OutputQueue(output_queue, stop)
         self.sqs_msgs_to_read_size = sqs_msgs_to_read_size
         self.logger = logger
         self.stop = stop
@@ -119,9 +152,8 @@ class SqsQueueReader(object):
                     metadata=metadata,
                     coord=msg.coord,
                 )
-                while not _non_blocking_put(self.output_queue, data):
-                    if self.stop.is_set():
-                        break
+                if self.output(msg.coord, data):
+                    break
 
         self.sqs_queue.close()
         self.logger.debug('sqs queue reader stopped')
@@ -143,6 +175,8 @@ class DataFetch(object):
 
     def __call__(self, stop):
         saw_sentinel = False
+        output = OutputQueue(self.output_queue, stop)
+
         while not stop.is_set():
             try:
                 data = self.input_queue.get(timeout=timeout_seconds)
@@ -226,9 +260,8 @@ class DataFetch(object):
                 nominal_zoom=nominal_zoom,
             )
 
-            while not _non_blocking_put(self.output_queue, data):
-                if stop.is_set():
-                    break
+            if output(coord, data):
+                break
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
@@ -252,6 +285,8 @@ class ProcessAndFormatData(object):
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        output = OutputQueue(self.output_queue, stop)
 
         saw_sentinel = False
         while not stop.is_set():
@@ -292,9 +327,8 @@ class ProcessAndFormatData(object):
                 formatted_tiles=formatted_tiles,
             )
 
-            while not _non_blocking_put(self.output_queue, data):
-                if stop.is_set():
-                    break
+            if output(coord, data):
+                break
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
@@ -315,6 +349,8 @@ class S3Storage(object):
 
     def __call__(self, stop):
         saw_sentinel = False
+
+        queue_output = OutputQueue(self.output_queue, stop)
 
         while not stop.is_set():
             try:
@@ -374,9 +410,8 @@ class S3Storage(object):
                 metadata=metadata,
             )
 
-            while not _non_blocking_put(self.output_queue, data):
-                if stop.is_set():
-                    break
+            if queue_output(coord, data):
+                break
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
