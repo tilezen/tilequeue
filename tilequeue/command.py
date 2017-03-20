@@ -550,7 +550,7 @@ def tilequeue_process(cfg, peripherals):
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
-    n_cpu = multiprocessing.cpu_count()
+    n_cpu = 1 #multiprocessing.cpu_count()
     sqs_messages_per_batch = 10
     n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
     if not n_simultaneous_query_sets:
@@ -603,8 +603,9 @@ def tilequeue_process(cfg, peripherals):
 
     # create worker threads/processes
     thread_sqs_queue_reader_stop = threading.Event()
-    sqs_queue_reader = SqsQueueReader(sqs_queue, sqs_input_queue, logger,
-                                      thread_sqs_queue_reader_stop)
+    sqs_queue_reader = SqsQueueReader(
+        sqs_queue, sqs_input_queue, logger, cfg.metatile_size,
+        thread_sqs_queue_reader_stop)
 
     data_fetch = DataFetch(
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
