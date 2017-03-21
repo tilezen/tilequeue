@@ -953,19 +953,16 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'prune_tiles_of_interest')
     logger.info('Pruning tiles of interest')
 
-    logger.info('Fetching tiles of interest ...')
-    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
-    n_toi = len(tiles_of_interest)
-    logger.info('Fetching tiles of interest ... done. %s found', n_toi)
-
     logger.info('Fetching tiles recently requested ...')
     import psycopg2
 
-    redshift_uri = cfg.yml.get('redshift_uri')
+    redshift = cfg.yml.get('redshift', {})
+
+    redshift_uri = redshift.get('uri')
     assert redshift_uri, ("A redshift connection URI must "
                           "be present in the config yaml")
 
-    redshift_days_to_query = cfg.yml.get('redshift_days')
+    redshift_days_to_query = redshift.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
@@ -976,12 +973,11 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 select x, y, z
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
-                  and (z between 0 and 16)
+                  and (z between 10 and 16)
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y
-                order by z, x, y
-            );""".format(days=redshift_days_to_query))
+                order by z, x, y;""".format(days=redshift_days_to_query))
             n_trr = cur.rowcount
             for (x, y, z) in cur:
                 coord = create_coord(x, y, z)
@@ -989,6 +985,11 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 tiles_recently_requested.add(coord_int)
 
     logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
+
+    logger.info('Fetching tiles of interest ...')
+    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    n_toi = len(tiles_of_interest)
+    logger.info('Fetching tiles of interest ... done. %s found', n_toi)
 
     logger.info('Computing tiles of interest to remove ...')
     toi_to_remove = tiles_of_interest - tiles_recently_requested
