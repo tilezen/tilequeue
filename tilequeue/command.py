@@ -965,19 +965,23 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     assert redshift_uri, ("A redshift connection URI must "
                           "be present in the config yaml")
 
+    redshift_days_to_query = cfg.yml.get('redshift_days')
+    assert redshift_days_to_query, ("Number of days to query "
+                                    "redshift is not specified")
+
     tiles_recently_requested = set()
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 select x, y, z
                 from tile_traffic_v4
-                where (date >= dateadd(day, -30, current_date))
+                where (date >= dateadd(day, -{days}, current_date))
                   and (z between 0 and 16)
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y
                 order by z, x, y
-            );""")
+            );""".format(days=redshift_days_to_query))
             n_trr = cur.rowcount
             for (x, y, z) in cur:
                 coord = create_coord(x, y, z)
