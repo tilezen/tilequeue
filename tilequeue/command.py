@@ -956,17 +956,17 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Fetching tiles recently requested ...')
     import psycopg2
 
-    redshift = cfg.yml.get('redshift', {})
+    prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_uri = redshift.get('uri')
+    redshift_uri = prune_cfg.get('redshift-uri')
     assert redshift_uri, ("A redshift connection URI must "
                           "be present in the config yaml")
 
-    redshift_days_to_query = redshift.get('days')
+    redshift_days_to_query = prune_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
-    tiles_recently_requested = set()
+    new_toi = set()
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -982,21 +982,42 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             for (x, y, z) in cur:
                 coord = create_coord(x, y, z)
                 coord_int = coord_marshall_int(coord)
-                tiles_recently_requested.add(coord_int)
+                new_toi.add(coord_int)
 
     logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
 
-    logger.info('Fetching tiles of interest ...')
+    for name, info in prune_cfg.get('always-include-bboxes', {}).items():
+        logger.info('Adding in tiles from %s ...', name)
+
+        bounds = map(float, info['bbox'].split(','))
+        bounds_tileset = set()
+        for coord in tile_generator_for_single_bounds(
+                        bounds, info['min_zoom'], info['max_zoom']):
+            coord_int = coord_marshall_int(coord)
+            bounds_tileset.add(coord_int)
+        n_inc = len(bounds_tileset)
+        new_toi = new_toi.union(bounds_tileset)
+
+        logger.info('Adding in tiles from %s ... done. %s found', name, n_inc)
+
+    logger.info('New tiles of interest set includes %s tiles', len(new_toi))
+
+    logger.info('Fetching existing tiles of interest ...')
     tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
     n_toi = len(tiles_of_interest)
-    logger.info('Fetching tiles of interest ... done. %s found', n_toi)
+    logger.info('Fetching existing tiles of interest ... done. %s found',
+                n_toi)
 
-    logger.info('Computing tiles of interest to remove ...')
-    toi_to_remove = tiles_of_interest - tiles_recently_requested
-    logger.info('Computing tiles of interest to remove ... done. %s found',
+    logger.info('Computing tiles to remove ...')
+    toi_to_remove = tiles_of_interest - new_toi
+    logger.info('Computing tiles to remove ... done. %s found',
                 len(toi_to_remove))
 
-    logger.info('Removing tiles from TOI and S3 ...')
+    # Null out the reference to old TOI to save some memory
+    tiles_of_interest = None
+
+    logger.info('Removing %s tiles from TOI and S3 ...',
+                len(toi_to_remove))
 
     def delete_tile_of_interest(coord_int):
         # Remove from the redis toi set
@@ -1011,7 +1032,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         # FIXME: Think about doing this in a thread/process pool
         delete_tile_of_interest(coord_int)
 
-    logger.info('Removing tiles from TOI and S3 ... done')
+    logger.info('Removing %s tiles from TOI and S3 ... done',
+                len(toi_to_remove))
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
