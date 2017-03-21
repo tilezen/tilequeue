@@ -34,7 +34,7 @@ def deserialize_coord(coord_string):
 
 
 def create_coord(x, y, z):
-    return Coordinate(row=x, column=y, zoom=z)
+    return Coordinate(row=y, column=x, zoom=z)
 
 
 def parse_expired_coord_string(coord_string):
