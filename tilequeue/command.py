@@ -995,9 +995,10 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     def delete_tile_of_interest(coord_int):
         # Remove from the redis toi set
+        # FIXME: This doesn't exist yet
         peripherals.redis_cache_index.remove_tile_of_interest(coord_int)
 
-        # Remove the tile from S3
+        # FIXME: Remove the tile from S3
 
         pass
 
