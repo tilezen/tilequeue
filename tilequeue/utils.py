@@ -15,4 +15,5 @@ def format_stacktrace_one_line(exc_info=None):
 
 
 def grouper(seq, size):
+    """Collect data into fixed-length chunks or blocks"""
     return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
