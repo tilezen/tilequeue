@@ -1053,7 +1053,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Removed %s tiles from S3', removed)
 
     for coord_ints in grouper(toi_to_remove, 1000):
-        # FIXME: Think about doing this in a thread/process pool
         delete_tile_of_interest(s3_parts, coord_ints)
 
     logger.info('Removing %s tiles from TOI and S3 ... done',
