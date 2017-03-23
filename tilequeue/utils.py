@@ -1,6 +1,5 @@
 import sys
 import traceback
-from itertools import izip_longest
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -15,7 +14,6 @@ def format_stacktrace_one_line(exc_info=None):
     return stacktrace
 
 
-def grouper(iterable, n, fillvalue=None):
+def grouper(seq, size):
     """Collect data into fixed-length chunks or blocks"""
-    args = [iter(iterable)] * n
-    return izip_longest(fillvalue=fillvalue, *args)
+    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
