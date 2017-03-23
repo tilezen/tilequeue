@@ -1,6 +1,19 @@
 CHANGELOG
 =========
 
+v1.6.0
+------
+* Drop parts of multipolygon inputs which lie outside the clip boundary of the tile.
+* Make queue sizes configurable.
+* Delete rejected jobs from SQS queue.
+* Fix LinearRing error.
+* Trap MemoryError, print a log message, and halt.
+* Make the toi loader more robust.
+* Move existing TOI instead of copying it to avoid AWS Redis failover.
+* Load new TOI from file 'toi.txt', just as the TOI dump process saves to 'toi.txt'.
+* Move grouper to utils.
+* Be consistent about the implementation of grouper.
+
 v1.5.0
 ------
 * Emit additional metrics during intersection
