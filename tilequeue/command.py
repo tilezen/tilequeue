@@ -970,9 +970,9 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
-    s3_bucket_name = prune_cfg.get('s3-bucket')
-    assert s3_bucket_name, ("The name of an S3 bucket containing "
-                            "tiles to delete must be specified")
+    s3_parts = prune_cfg.get('s3')
+    assert s3_parts, ("The name of an S3 bucket containing tiles "
+                      "to delete must be specified")
 
     new_toi = set()
     with psycopg2.connect(redshift_uri) as conn:
@@ -1027,29 +1027,34 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Removing %s tiles from TOI and S3 ...',
                 len(toi_to_remove))
 
-    def delete_tile_of_interest(path_parts, coord_ints):
+    def delete_tile_of_interest(s3_parts, coord_ints):
         # Remove from the redis toi set
-        peripherals.redis_cache_index.remove_tiles_of_interest(coord_ints)
+        removed = peripherals.redis_cache_index.remove_tiles_of_interest(
+            coord_ints)
+
+        logger.info('Removed %s tiles from redis', removed)
 
         # Remove from S3
         s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-        buk = s3.get_bucket(s3_bucket_name, validate=False)
+        buk = s3.get_bucket(s3_parts['bucket'], validate=False)
         keys = [
             s3_tile_key(
-                path_parts['date-prefix'],
-                path_parts['path'],
-                path_parts['layer'],
+                s3_parts['date-prefix'],
+                s3_parts['path'],
+                s3_parts['layer'],
                 coord_unmarshall_int(coord_int),
-                path_parts['format']
+                s3_parts['format']
             )
             for coord_int in coord_ints
         ]
-        buk.delete_keys(keys)
+        del_result = buk.delete_keys(keys)
+        removed = len(del_result.deleted)
 
-    path_parts = prune_cfg.get('s3')
+        logger.info('Removed %s tiles from S3', removed)
+
     for coord_ints in grouper(toi_to_remove, 1000):
         # FIXME: Think about doing this in a thread/process pool
-        delete_tile_of_interest(path_parts, coord_ints)
+        delete_tile_of_interest(s3_parts, coord_ints)
 
     logger.info('Removing %s tiles from TOI and S3 ... done',
                 len(toi_to_remove))
