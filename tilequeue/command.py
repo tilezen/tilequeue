@@ -29,7 +29,7 @@ from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
 from tilequeue.top_tiles import parse_top_tiles
-from tilequeue.util import chunker
+from tilequeue.utils import chunker
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
