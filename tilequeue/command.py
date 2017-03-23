@@ -1,7 +1,7 @@
 from collections import Iterable
 from collections import namedtuple
 from contextlib import closing
-from itertools import chain, izip_longest
+from itertools import chain
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
@@ -1177,11 +1177,6 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     chunk_size = 10000
     new_toi_key = cfg.redis_cache_set_key + "-new"
     old_toi_key = cfg.redis_cache_set_key + "-old"
-
-    def grouper(iterable, n, fillvalue=None):
-        """Collect data into fixed-length chunks or blocks"""
-        args = [iter(iterable)] * n
-        return izip_longest(fillvalue=fillvalue, *args)
 
     # Make a raw Redis client so we can do low-level set manipulation
     redis_client = make_redis_client(cfg)
