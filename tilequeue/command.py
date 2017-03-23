@@ -1173,7 +1173,7 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'load_tiles_of_interest')
     logger.info('Loading tiles of interest')
 
-    toi_filename = "/Users/iandees/Downloads/tile_requests_unique_noeurope.txt"
+    toi_filename = "toi.txt"
     chunk_size = 10000
     new_toi_key = cfg.redis_cache_set_key + "-new"
     old_toi_key = cfg.redis_cache_set_key + "-old"
