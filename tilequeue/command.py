@@ -29,7 +29,7 @@ from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
 from tilequeue.top_tiles import parse_top_tiles
-from tilequeue.utils import chunker
+from tilequeue.utils import grouper
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
@@ -1046,7 +1046,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         buk.delete_keys(keys)
 
     path_parts = prune_cfg.get('s3')
-    for coord_ints in chunker(toi_to_remove, 1000):
+    for coord_ints in grouper(toi_to_remove, 1000):
         # FIXME: Think about doing this in a thread/process pool
         delete_tile_of_interest(path_parts, coord_ints)
 
