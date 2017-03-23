@@ -3,16 +3,19 @@ CHANGELOG
 
 v1.6.0
 ------
-* Drop parts of multipolygon inputs which lie outside the clip boundary of the tile.
-* Make queue sizes configurable.
-* Delete rejected jobs from SQS queue.
-* Fix LinearRing error.
-* Trap MemoryError, print a log message, and halt.
-* Make the toi loader more robust.
-* Move existing TOI instead of copying it to avoid AWS Redis failover.
-* Load new TOI from file 'toi.txt', just as the TOI dump process saves to 'toi.txt'.
-* Move grouper to utils.
-* Be consistent about the implementation of grouper.
+* **New features:**
+    * Add support for 2x2 metatiles (and 512px tiles). See [#163](https://github.com/tilezen/tilequeue/pull/163), [#166](https://github.com/tilezen/tilequeue/pull/166), and [#169](https://github.com/tilezen/tilequeue/pull/169).
+    * Cut child 256px tiles from parent 512px 2x2 metatiles. See [#158](https://github.com/tilezen/tilequeue/pull/158).
+    * Pass nominal zoom instead of coordinates. See [#161](https://github.com/tilezen/tilequeue/pull/161).
+* **Enhancements:**
+    * Drop parts of MultiPolygons which lie outside the clip boundary of the tile (primarily affects buildings and water layers). See [#171](https://github.com/tilezen/tilequeue/pull/171).
+    * Make queue sizes configurable, and default to smaller queue size to accomodate larger 2x2 metatiles. See [#172](https://github.com/tilezen/tilequeue/pull/172).
+    * Move existing tiles of interest (TOI) instead of copying it to avoid AWS Redis failover. See [#122](https://github.com/tilezen/tilequeue/pull/122).
+    * Load new TOI from file 'toi.txt', just as the TOI dump process saves to 'toi.txt'. See [#122](https://github.com/tilezen/tilequeue/pull/122).
+* **Bug fixes:**
+    * Delete rejected jobs from SQS queue. See [#173](https://github.com/tilezen/tilequeue/pull/173).
+    * Trap MemoryError and let ops recover process. See [#174](https://github.com/tilezen/tilequeue/pull/174).
+    * Fix LinearRing error. See [#175](https://github.com/tilezen/tilequeue/pull/175).
 
 v1.5.0
 ------
@@ -20,9 +23,9 @@ v1.5.0
 
 v1.4.0
 ------
-* When checking to see if a tile has changed, compare ZIP file contents only. (See https://github.com/tilezen/tilequeue/issues/152)
-* On WOF neighbourhood update, return a better error message for invalid dates. (See https://github.com/tilezen/tilequeue/pull/154)
-* Remove "layers to format" functionality. (See https://github.com/tilezen/tilequeue/pull/155)
+* When checking to see if a tile has changed, compare ZIP file contents only. (See [#152](https://github.com/tilezen/tilequeue/issues/152))
+* On WOF neighbourhood update, return a better error message for invalid dates. (See [#154](https://github.com/tilezen/tilequeue/pull/154))
+* Remove "layers to format" functionality. (See [#155](https://github.com/tilezen/tilequeue/pull/155))
 
 v1.3.0
 ------
