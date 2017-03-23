@@ -12,3 +12,8 @@ def format_stacktrace_one_line(exc_info=None):
     stacktrace = ' | '.join([x.replace('\n', '')
                              for x in exception_lines])
     return stacktrace
+
+
+def grouper(seq, size):
+    """Collect data into fixed-length chunks or blocks"""
+    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
