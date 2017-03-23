@@ -12,3 +12,7 @@ def format_stacktrace_one_line(exc_info=None):
     stacktrace = ' | '.join([x.replace('\n', '')
                              for x in exception_lines])
     return stacktrace
+
+
+def chunker(seq, size):
+    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
