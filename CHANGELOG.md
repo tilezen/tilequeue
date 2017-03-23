@@ -5,7 +5,7 @@ v1.6.0
 ------
 * **New features:**
     * Add support for 2x2 metatiles (and 512px tiles). See [#163](https://github.com/tilezen/tilequeue/pull/163), [#166](https://github.com/tilezen/tilequeue/pull/166), and [#169](https://github.com/tilezen/tilequeue/pull/169).
-    * Cut child 256px tiles from parent 512px 2x2 metatiles. See [#158](https://github.com/tilezen/tilequeue/pull/158).
+    * Cut child 256px tiles from 512px parent in the 2x2 metatile, rather than re-requesting that 256px bbox from database. See [#158](https://github.com/tilezen/tilequeue/pull/158).
     * Pass nominal zoom instead of coordinates. See [#161](https://github.com/tilezen/tilequeue/pull/161).
 * **Enhancements:**
     * Drop parts of MultiPolygons which lie outside the clip boundary of the tile (primarily affects buildings and water layers). See [#171](https://github.com/tilezen/tilequeue/pull/171).
