@@ -33,6 +33,10 @@ def deserialize_coord(coord_string):
     return coord
 
 
+def create_coord(x, y, z):
+    return Coordinate(row=y, column=x, zoom=z)
+
+
 def parse_expired_coord_string(coord_string):
     # we use the same format in the queue as the expired tile list from
     # osm2pgsql

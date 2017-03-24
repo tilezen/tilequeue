@@ -17,6 +17,9 @@ class RedisCacheIndex(object):
             if serialized_coord in tiles_of_interest:
                 yield coord
 
+    def remove_tiles_of_interest(self, coord_ints):
+        return self.redis_client.srem(self.cache_set_key, coord_ints)
+
     def fetch_tiles_of_interest(self):
         raw_tiles_of_interest = self.redis_client.smembers(self.cache_set_key)
         tiles_of_interest = set()
