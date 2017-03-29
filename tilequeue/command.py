@@ -981,7 +981,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 select x, y, z, tilesize
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
-                  and (z between 10 and 16)
+                  and (z between 0 and 15)
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y
