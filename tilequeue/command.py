@@ -1008,6 +1008,12 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             tiles = map(deserialize_coord, info['tiles'])
             tiles = map(coord_marshall_int, tiles)
             immortal_tiles.update(tiles)
+        elif 'file' in info:
+            with open(info['file'], 'r') as f:
+                immortal_tiles.update(
+                    coord_marshall_int(deserialize_coord(l.strip()))
+                    for l in f
+                )
 
         n_inc = len(immortal_tiles)
         new_toi = new_toi.union(immortal_tiles)
