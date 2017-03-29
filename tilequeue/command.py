@@ -994,17 +994,29 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
 
-    for name, info in prune_cfg.get('always-include-bboxes', {}).items():
+    for name, info in prune_cfg.get('always-include', {}).items():
         logger.info('Adding in tiles from %s ...', name)
 
-        bounds = map(float, info['bbox'].split(','))
-        bounds_tileset = set()
-        for coord in tile_generator_for_single_bounds(
-                        bounds, info['min_zoom'], info['max_zoom']):
-            coord_int = coord_marshall_int(coord)
-            bounds_tileset.add(coord_int)
-        n_inc = len(bounds_tileset)
-        new_toi = new_toi.union(bounds_tileset)
+        immortal_tiles = set()
+        if 'bbox' in info:
+            bounds = map(float, info['bbox'].split(','))
+            for coord in tile_generator_for_single_bounds(
+                            bounds, info['min_zoom'], info['max_zoom']):
+                coord_int = coord_marshall_int(coord)
+                immortal_tiles.add(coord_int)
+        elif 'tiles' in info:
+            tiles = map(deserialize_coord, info['tiles'])
+            tiles = map(coord_marshall_int, tiles)
+            immortal_tiles.update(tiles)
+        elif 'file' in info:
+            with open(info['file'], 'r') as f:
+                immortal_tiles.update(
+                    coord_marshall_int(deserialize_coord(l.strip()))
+                    for l in f
+                )
+
+        n_inc = len(immortal_tiles)
+        new_toi = new_toi.union(immortal_tiles)
 
         logger.info('Adding in tiles from %s ... done. %s found', name, n_inc)
 
