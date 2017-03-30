@@ -978,18 +978,23 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                select x, y, z
+                select x, y, z, tilesize
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
-                  and (z between 10 and 16)
+                  and (z between 0 and 15)
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y
                 order by z, x, y;""".format(days=redshift_days_to_query))
             n_trr = cur.rowcount
-            for (x, y, z) in cur:
+            for (x, y, z, tile_size) in cur:
                 coord = create_coord(x, y, z)
                 coord_int = coord_marshall_int(coord)
+
+                if not tile_size or tile_size == '256':
+                    # "uplift" a tile that is not explicitly a '512' size tile
+                    coord_int = coord_int_zoom_up(coord_int)
+
                 new_toi.add(coord_int)
 
     logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
