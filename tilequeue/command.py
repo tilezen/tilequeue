@@ -1038,9 +1038,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Computing tiles to remove ... done. %s found',
                 len(toi_to_remove))
 
-    # Null out the reference to old TOI to save some memory
-    tiles_of_interest = None
-
     logger.info('Removing %s tiles from TOI and S3 ...',
                 len(toi_to_remove))
 
@@ -1074,6 +1071,26 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     logger.info('Removing %s tiles from TOI and S3 ... done',
                 len(toi_to_remove))
+
+    logger.info('Computing tiles to add ...')
+    toi_to_add = new_toi - tiles_of_interest
+    logger.info('Computing tiles to add ... done. %s found',
+                len(toi_to_add))
+
+    logger.info('Adding %s tiles to TOI and SQS ...',
+                len(toi_to_add))
+
+    def add_tile_of_interest(coord_int):
+        # Add to Redis
+
+        # Enqueue a render request for the tile
+        pass
+
+    for coord_int in toi_to_add:
+        add_tile_of_interest(coord_int)
+
+    logger.info('Adding %s tiles to TOI and SQS ... done',
+                len(toi_to_add))
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
