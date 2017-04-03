@@ -1077,20 +1077,19 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
 
-    logger.info('Adding %s tiles to TOI and SQS ...',
+    logger.info('Enqueueing %s tiles to SQS ...',
                 len(toi_to_add))
 
-    def add_tile_of_interest(coord_int):
-        # Add to Redis
+    sqs_queue = peripherals.queue
+    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+    n_queued, n_in_flight = enqueuer(
+        coord_unmarshall_int(coord_int) for coord_int in toi_to_add
+    )
 
-        # Enqueue a render request for the tile
-        pass
-
-    for coord_int in toi_to_add:
-        add_tile_of_interest(coord_int)
-
-    logger.info('Adding %s tiles to TOI and SQS ... done',
+    logger.info('Enqueueing %s tiles to SQS ... done',
                 len(toi_to_add))
+
+    logger.info('Pruning tiles of interest ... done')
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
