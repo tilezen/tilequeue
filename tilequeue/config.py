@@ -24,6 +24,8 @@ class Configuration(object):
         self.s3_path = self._cfg('store path')
         self.s3_date_prefix = self._cfg('store date-prefix')
 
+        self.enqueue_max_zoom = self.yml['tiles']['enqueue_max_zoom']
+
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
         self.seed_all_zoom_until = seed_cfg['all']['zoom-until']
@@ -166,6 +168,7 @@ def default_yml_config():
                 'expired-location': None,
                 'parent-zoom-until': None,
             },
+            'enqueue_max_zoom': 15,
         },
         'process': {
             'n-simultaneous-query-sets': 0,
