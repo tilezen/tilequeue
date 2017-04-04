@@ -1038,9 +1038,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Computing tiles to remove ... done. %s found',
                 len(toi_to_remove))
 
-    # Null out the reference to old TOI to save some memory
-    tiles_of_interest = None
-
     logger.info('Removing %s tiles from TOI and S3 ...',
                 len(toi_to_remove))
 
@@ -1074,6 +1071,34 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     logger.info('Removing %s tiles from TOI and S3 ... done',
                 len(toi_to_remove))
+
+    logger.info('Computing tiles to add ...')
+    toi_to_add = new_toi - tiles_of_interest
+    logger.info('Computing tiles to add ... done. %s found',
+                len(toi_to_add))
+
+    logger.info('Adding %s tiles to Redis TOI set ...',
+                len(toi_to_add))
+
+    for coord_ints in grouper(toi_to_add, 1000):
+        peripherals.redis_cache_index.remove_tiles_of_interest(coord_ints)
+
+    logger.info('Adding %s tiles to Redis TOI set ... done',
+                len(toi_to_add))
+
+    logger.info('Enqueueing %s tiles to SQS ...',
+                len(toi_to_add))
+
+    sqs_queue = peripherals.queue
+    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+    n_queued, n_in_flight = enqueuer(
+        coord_unmarshall_int(coord_int) for coord_int in toi_to_add
+    )
+
+    logger.info('Enqueueing %s tiles to SQS ... done',
+                len(toi_to_add))
+
+    logger.info('Pruning tiles of interest ... done')
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
