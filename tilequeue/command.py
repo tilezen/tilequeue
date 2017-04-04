@@ -1077,6 +1077,15 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
 
+    logger.info('Adding %s tiles to Redis TOI set ...',
+                len(toi_to_add))
+
+    for coord_ints in grouper(toi_to_add, 1000):
+        peripherals.redis_cache_index.remove_tiles_of_interest(coord_ints)
+
+    logger.info('Adding %s tiles to Redis TOI set ... done',
+                len(toi_to_add))
+
     logger.info('Enqueueing %s tiles to SQS ...',
                 len(toi_to_add))
 
