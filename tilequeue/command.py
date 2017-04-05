@@ -611,11 +611,11 @@ def tilequeue_process(cfg, peripherals):
     thread_sqs_queue_reader_stop = threading.Event()
     sqs_queue_reader = SqsQueueReader(
         sqs_queue, sqs_input_queue, logger, thread_sqs_queue_reader_stop,
-        cfg.metatile_size)
+        cfg.max_zoom)
 
     data_fetch = DataFetch(
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
-        peripherals.redis_cache_index, logger, cfg.metatile_size)
+        peripherals.redis_cache_index, logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
@@ -1551,7 +1551,8 @@ def tilequeue_main(argv_args=None):
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
-    cfg = make_config_from_argparse(args.config)
+    with open(args.config) as fh:
+        cfg = make_config_from_argparse(fh)
     redis_client = make_redis_client(cfg)
     Peripherals = namedtuple('Peripherals', 'redis_cache_index queue stats')
     queue = make_queue(

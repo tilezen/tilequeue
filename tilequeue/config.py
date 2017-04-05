@@ -1,5 +1,6 @@
 from tilequeue.tile import bounds_buffer
 from yaml import load
+import math
 
 
 class Configuration(object):
@@ -23,8 +24,6 @@ class Configuration(object):
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
         self.s3_date_prefix = self._cfg('store date-prefix')
-
-        self.enqueue_max_zoom = self.yml['tiles']['enqueue_max_zoom']
 
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
@@ -104,6 +103,17 @@ class Configuration(object):
         self.wof = self.yml.get('wof')
 
         self.metatile_size = self._cfg('metatile size')
+        if self.metatile_size is None:
+            self.metatile_zoom = 0
+        else:
+            self.metatile_zoom = int(math.log(self.metatile_size, 2))
+            assert (1 << self.metatile_zoom) == self.metatile_size, \
+                "Metatile size must be a power of two."
+
+        self.max_zoom_with_changes = self._cfg('tiles max-zoom-with-changes')
+        assert self.max_zoom_with_changes > self.metatile_zoom
+        self.max_zoom = self.max_zoom_with_changes - self.metatile_zoom
+
         self.store_orig = self._cfg('metatile store_metatile_and_originals')
 
         self.sql_queue_buffer_size = self._cfg('queue_buffer_size sql')
@@ -168,7 +178,7 @@ def default_yml_config():
                 'expired-location': None,
                 'parent-zoom-until': None,
             },
-            'enqueue_max_zoom': 15,
+            'max-zoom-with-changes': 16,
         },
         'process': {
             'n-simultaneous-query-sets': 0,
@@ -220,12 +230,11 @@ def merge_cfg(dest, source):
     return dest
 
 
-def make_config_from_argparse(config_path, opencfg=open):
-    # opencfg for testing
-    cfg = default_yml_config()
-    with opencfg(config_path) as config_fp:
-        yml_data = load(config_fp.read())
-        cfg = merge_cfg(cfg, yml_data)
+def make_config_from_argparse(config_file_handle, default_yml=None):
+    if default_yml is None:
+        default_yml = default_yml_config()
+    yml_data = load(config_file_handle)
+    cfg = merge_cfg(default_yml, yml_data)
     return Configuration(cfg)
 
 

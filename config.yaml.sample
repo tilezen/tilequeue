@@ -84,8 +84,8 @@ tiles:
     # process on update
     parent-zoom-until: 11
 
-  # this is the max zoom used when enqueueing the tiles of interest
-  enqueue_max_zoom: 15
+  # zoom where tile content stops changing
+  max-zoom-with-changes: 16
 
 process:
   # number of simultaneous "querysets" to issue to the database.  The
