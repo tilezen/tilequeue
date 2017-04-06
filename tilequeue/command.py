@@ -984,8 +984,9 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                   and (z between 0 and 15)
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
-                group by z, x, y
-                order by z, x, y;""".format(days=redshift_days_to_query))
+                group by z, x, y, tilesize
+                order by z, x, y, tilesize
+                """.format(days=redshift_days_to_query))
             n_trr = cur.rowcount
             for (x, y, z, tile_size) in cur:
                 coord = create_coord(x, y, z)
@@ -1019,6 +1020,9 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     coord_marshall_int(deserialize_coord(l.strip()))
                     for l in f
                 )
+
+        # Filter out nulls that might sneak in for various reasons
+        immortal_tiles = filter(None, immortal_tiles)
 
         n_inc = len(immortal_tiles)
         new_toi = new_toi.union(immortal_tiles)
