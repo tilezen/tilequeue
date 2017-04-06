@@ -18,6 +18,8 @@ class RedisCacheIndex(object):
                 yield coord
 
     def remove_tiles_of_interest(self, coord_ints):
+        # Note that this will end up as a single SREM call to Redis,
+        # so you should probably group the coords into ~1000s.
         return self.redis_client.srem(self.cache_set_key, *coord_ints)
 
     def fetch_tiles_of_interest(self):
