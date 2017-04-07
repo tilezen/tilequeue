@@ -1,6 +1,6 @@
 import sys
 import traceback
-from itertools import izip_longest
+from itertools import islice
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -15,7 +15,11 @@ def format_stacktrace_one_line(exc_info=None):
     return stacktrace
 
 
-def grouper(iterable, n, fillvalue=None):
-    """Collect data into fixed-length chunks or blocks"""
-    args = [iter(iterable)] * n
-    return izip_longest(fillvalue=fillvalue, *args)
+def grouper(iterable, n):
+    """Yield n-length chunks of the iterable"""
+    it = iter(iterable)
+    while True:
+        chunk = tuple(islice(it, n))
+        if not chunk:
+            return
+        yield chunk

@@ -1042,9 +1042,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('Computing tiles to remove ... done. %s found',
                 len(toi_to_remove))
 
-    logger.info('Removing %s tiles from TOI and S3 ...',
-                len(toi_to_remove))
-
     def delete_tile_of_interest(s3_parts, coord_ints):
         # Remove from the redis toi set
         removed = peripherals.redis_cache_index.remove_tiles_of_interest(
@@ -1070,37 +1067,50 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
         logger.info('Removed %s tiles from S3', removed)
 
-    for coord_ints in grouper(toi_to_remove, 1000):
-        delete_tile_of_interest(s3_parts, coord_ints)
+    if not toi_to_remove:
+        logger.info('Skipping TOI remove step because there are '
+                    'no tiles to remove')
+    else:
+        logger.info('Removing %s tiles from TOI and S3 ...',
+                    len(toi_to_remove))
 
-    logger.info('Removing %s tiles from TOI and S3 ... done',
-                len(toi_to_remove))
+        for coord_ints in grouper(toi_to_remove, 1000):
+            delete_tile_of_interest(s3_parts, coord_ints)
+
+        logger.info('Removing %s tiles from TOI and S3 ... done',
+                    len(toi_to_remove))
 
     logger.info('Computing tiles to add ...')
     toi_to_add = new_toi - tiles_of_interest
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
 
-    logger.info('Adding %s tiles to Redis TOI set ...',
-                len(toi_to_add))
+    if not toi_to_add:
+        logger.info('Skipping TOI add step because there are '
+                    'no tiles to add')
+    else:
+        logger.info('Adding %s tiles to Redis TOI set ...',
+                    len(toi_to_add))
 
-    for coord_ints in grouper(toi_to_add, 1000):
-        peripherals.redis_cache_index.remove_tiles_of_interest(coord_ints)
+        for coord_ints in grouper(toi_to_add, 1000):
+            added = peripherals.redis_cache_index.add_tiles_of_interest(
+                coord_ints)
+            logger.info('Added %s tiles to redis', added)
 
-    logger.info('Adding %s tiles to Redis TOI set ... done',
-                len(toi_to_add))
+        logger.info('Adding %s tiles to Redis TOI set ... done',
+                    len(toi_to_add))
 
-    logger.info('Enqueueing %s tiles to SQS ...',
-                len(toi_to_add))
+        logger.info('Enqueueing %s tiles to SQS ...',
+                    len(toi_to_add))
 
-    sqs_queue = peripherals.queue
-    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
-    n_queued, n_in_flight = enqueuer(
-        coord_unmarshall_int(coord_int) for coord_int in toi_to_add
-    )
+        sqs_queue = peripherals.queue
+        enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+        n_queued, n_in_flight = enqueuer(
+            coord_unmarshall_int(coord_int) for coord_int in toi_to_add
+        )
 
-    logger.info('Enqueueing %s tiles to SQS ... done',
-                len(toi_to_add))
+        logger.info('Enqueueing %s tiles to SQS ... done',
+                    len(toi_to_add))
 
     logger.info('Pruning tiles of interest ... done')
 
