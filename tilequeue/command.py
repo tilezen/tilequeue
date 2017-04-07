@@ -1080,10 +1080,10 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
 
-        logger.info('Computing tiles to add ...')
-        toi_to_add = new_toi - tiles_of_interest
-        logger.info('Computing tiles to add ... done. %s found',
-                    len(toi_to_add))
+    logger.info('Computing tiles to add ...')
+    toi_to_add = new_toi - tiles_of_interest
+    logger.info('Computing tiles to add ... done. %s found',
+                len(toi_to_add))
 
     if not toi_to_add:
         logger.info('Skipping TOI add step because there are '
