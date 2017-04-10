@@ -962,13 +962,16 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_uri = prune_cfg.get('redshift-uri')
+    redshift_cfg = prune_cfg.get('redshift', {})
+    redshift_uri = redshift_cfg.get('database-uri')
     assert redshift_uri, ("A redshift connection URI must "
                           "be present in the config yaml")
 
-    redshift_days_to_query = prune_cfg.get('days')
+    redshift_days_to_query = redshift_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
+
+    redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
 
     s3_parts = prune_cfg.get('s3')
     assert s3_parts, ("The name of an S3 bucket containing tiles "
@@ -981,13 +984,15 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 select x, y, z, tilesize
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
-                  and (z between 0 and 15)
+                  and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y, tilesize
                 order by z, x, y, tilesize
-                """.format(days=redshift_days_to_query))
-            n_trr = cur.rowcount
+                """.format(
+                    days=redshift_days_to_query,
+                    max_zoom=redshift_zoom_cutoff,
+            ))
             for (x, y, z, tile_size) in cur:
                 coord = create_coord(x, y, z)
                 coord_int = coord_marshall_int(coord)
@@ -998,7 +1003,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
                 new_toi.add(coord_int)
 
-    logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
+    logger.info('Fetching tiles recently requested ... done. %s found', len(new_toi))
 
     for name, info in prune_cfg.get('always-include', {}).items():
         logger.info('Adding in tiles from %s ...', name)
