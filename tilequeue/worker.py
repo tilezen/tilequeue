@@ -3,7 +3,6 @@ from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
-from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
