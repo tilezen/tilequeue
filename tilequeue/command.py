@@ -977,11 +977,11 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     assert s3_parts, ("The name of an S3 bucket containing tiles "
                       "to delete must be specified")
 
-    new_toi = set()
+    redshift_results = dict()
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                select x, y, z, tilesize
+                select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
                   and (z between 0 and {max_zoom})
@@ -993,7 +993,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     days=redshift_days_to_query,
                     max_zoom=redshift_zoom_cutoff,
             ))
-            for (x, y, z, tile_size) in cur:
+            for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
                 coord_int = coord_marshall_int(coord)
 
@@ -1001,9 +1001,45 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     # "uplift" a tile that is not explicitly a '512' size tile
                     coord_int = coord_int_zoom_up(coord_int)
 
-                new_toi.add(coord_int)
+                # Sum the counts from the 256 and 512 tile requests into the
+                # slot for the 512 tile.
+                existing_count = redshift_results.get(coord_int)
+                if existing_count:
+                    existing_count += count
+                else:
+                    existing_count = count
 
-    logger.info('Fetching tiles recently requested ... done. %s found', len(new_toi))
+                redshift_results[coord_int] = existing_count
+
+    logger.info('Fetching tiles recently requested ... done. %s found',
+                len(redshift_results))
+
+    cutoff_cfg = prune_cfg.get('cutoff', {})
+    cutoff_requests = cutoff_cfg.get('min-requests', 0)
+    cutoff_tiles = cutoff_cfg.get('max-tiles', 0)
+
+    logger.info('Finding %s tiles requested %s+ times ...',
+                cutoff_tiles,
+                cutoff_requests,
+                )
+
+    # Sort redshift_results (a dict of coord_int->score) by the score value,
+    # filter out the coords that didn't meet the requests cutoff,
+    # then take the first `cutoff_tiles`.
+
+    new_toi = set(
+        t[0] for t in filter(
+            lambda t: t[1] >= cutoff_requests,
+            sorted(redshift_results.iteritems(), key=lambda t: t[1])
+        )[:cutoff_tiles]
+    )
+    redshift_results = None
+
+    logger.info('Finding %s tiles requested %s+ times ... done. Found %s',
+                cutoff_tiles,
+                cutoff_requests,
+                len(new_toi),
+                )
 
     for name, info in prune_cfg.get('always-include', {}).items():
         logger.info('Adding in tiles from %s ...', name)
