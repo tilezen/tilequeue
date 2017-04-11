@@ -1,5 +1,6 @@
 from collections import Iterable
 from collections import namedtuple
+from collections import defaultdict
 from contextlib import closing
 from itertools import chain
 from jinja2 import Environment
@@ -43,6 +44,7 @@ import argparse
 import logging
 import logging.config
 import multiprocessing
+import operator
 import os
 import Queue
 import signal
@@ -962,33 +964,38 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_uri = prune_cfg.get('redshift-uri')
+    redshift_cfg = prune_cfg.get('redshift', {})
+    redshift_uri = redshift_cfg.get('database-uri')
     assert redshift_uri, ("A redshift connection URI must "
                           "be present in the config yaml")
 
-    redshift_days_to_query = prune_cfg.get('days')
+    redshift_days_to_query = redshift_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
+
+    redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
 
     s3_parts = prune_cfg.get('s3')
     assert s3_parts, ("The name of an S3 bucket containing tiles "
                       "to delete must be specified")
 
-    new_toi = set()
+    redshift_results = defaultdict(int)
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                select x, y, z, tilesize
+                select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
                 where (date >= dateadd(day, -{days}, current_date))
-                  and (z between 0 and 15)
+                  and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
                 group by z, x, y, tilesize
                 order by z, x, y, tilesize
-                """.format(days=redshift_days_to_query))
-            n_trr = cur.rowcount
-            for (x, y, z, tile_size) in cur:
+                """.format(
+                    days=redshift_days_to_query,
+                    max_zoom=redshift_zoom_cutoff,
+            ))
+            for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
                 coord_int = coord_marshall_int(coord)
 
@@ -996,9 +1003,37 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     # "uplift" a tile that is not explicitly a '512' size tile
                     coord_int = coord_int_zoom_up(coord_int)
 
-                new_toi.add(coord_int)
+                # Sum the counts from the 256 and 512 tile requests into the
+                # slot for the 512 tile.
+                redshift_results[coord_int] += count
 
-    logger.info('Fetching tiles recently requested ... done. %s found', n_trr)
+    logger.info('Fetching tiles recently requested ... done. %s found',
+                len(redshift_results))
+
+    cutoff_cfg = prune_cfg.get('cutoff', {})
+    cutoff_requests = cutoff_cfg.get('min-requests', 0)
+    cutoff_tiles = cutoff_cfg.get('max-tiles', 0)
+
+    logger.info('Finding %s tiles requested %s+ times ...',
+                cutoff_tiles,
+                cutoff_requests,
+                )
+
+    new_toi = set()
+    for coord_int, count in sorted(
+            redshift_results.iteritems(),
+            key=operator.itemgetter(1),
+            reverse=True)[:cutoff_tiles]:
+        if count >= cutoff_requests:
+            new_toi.add(coord_int)
+
+    redshift_results = None
+
+    logger.info('Finding %s tiles requested %s+ times ... done. Found %s',
+                cutoff_tiles,
+                cutoff_requests,
+                len(new_toi),
+                )
 
     for name, info in prune_cfg.get('always-include', {}).items():
         logger.info('Adding in tiles from %s ...', name)

@@ -3,7 +3,6 @@ from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
-from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
@@ -208,7 +207,6 @@ class DataFetch(object):
 
             metadata = data['metadata']
             metadata['timing']['fetch_seconds'] = time.time() - start
-            max_zoom = 16 - self.metatile_zoom
 
             # every tile job that we get from the queue is a "parent" tile
             # and its four children to cut from it. at zoom 15, this may
@@ -217,39 +215,6 @@ class DataFetch(object):
             cut_coords = list()
             if nominal_zoom > coord.zoom:
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
-            if coord.zoom == max_zoom:
-                async_jobs = []
-                children_until = 20
-                # ask redis if there are any tiles underneath in the
-                # tiles of interest set
-                rci = self.redis_cache_index
-                async_fn = rci.is_coord_int_in_tiles_of_interest
-
-                for child in coord_children_range(coord, children_until):
-                    # tiles descended from coord up to nominal zoom are
-                    # already included - no need to include them again.
-                    if child.zoom <= nominal_zoom:
-                        continue
-                    zoomed_coord_int = coord_marshall_int(child)
-                    async_result = self.io_pool.apply_async(
-                        async_fn, (zoomed_coord_int,))
-                    async_jobs.append((child, async_result))
-
-                async_exc_info = None
-                for async_job in async_jobs:
-                    zoomed_coord, async_result = async_job
-                    try:
-                        is_coord_in_tiles_of_interest = async_result.get()
-                    except:
-                        async_exc_info = sys.exc_info()
-                        stacktrace = format_stacktrace_one_line(async_exc_info)
-                        self.logger.error(stacktrace)
-                    else:
-                        if is_coord_in_tiles_of_interest:
-                            cut_coords.append(zoomed_coord)
-                if async_exc_info:
-                    continue
 
             data = dict(
                 metadata=metadata,
