@@ -1,5 +1,6 @@
 from collections import Iterable
 from collections import namedtuple
+from collections import defaultdict
 from contextlib import closing
 from itertools import chain
 from jinja2 import Environment
@@ -977,7 +978,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     assert s3_parts, ("The name of an S3 bucket containing tiles "
                       "to delete must be specified")
 
-    redshift_results = dict()
+    redshift_results = defaultdict(int)
     with psycopg2.connect(redshift_uri) as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -1003,13 +1004,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
                 # Sum the counts from the 256 and 512 tile requests into the
                 # slot for the 512 tile.
-                existing_count = redshift_results.get(coord_int)
-                if existing_count:
-                    existing_count += count
-                else:
-                    existing_count = count
-
-                redshift_results[coord_int] = existing_count
+                redshift_results[coord_int] += count
 
     logger.info('Fetching tiles recently requested ... done. %s found',
                 len(redshift_results))
