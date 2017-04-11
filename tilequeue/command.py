@@ -44,6 +44,7 @@ import argparse
 import logging
 import logging.config
 import multiprocessing
+import operator
 import os
 import Queue
 import signal
@@ -1018,16 +1019,14 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 cutoff_requests,
                 )
 
-    # Sort redshift_results (a dict of coord_int->score) by the score value,
-    # filter out the coords that didn't meet the requests cutoff,
-    # then take the first `cutoff_tiles`.
+    new_toi = set()
+    for coord_int, count in sorted(
+            redshift_results.iteritems(),
+            operator.itemgetter(1),
+            reverse=True)[:cutoff_tiles]:
+        if count >= cutoff_requests:
+            new_toi.add(coord_int)
 
-    new_toi = set(
-        t[0] for t in filter(
-            lambda t: t[1] >= cutoff_requests,
-            sorted(redshift_results.iteritems(), key=lambda t: t[1])
-        )[:cutoff_tiles]
-    )
     redshift_results = None
 
     logger.info('Finding %s tiles requested %s+ times ... done. Found %s',
