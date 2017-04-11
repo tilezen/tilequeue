@@ -1022,7 +1022,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     new_toi = set()
     for coord_int, count in sorted(
             redshift_results.iteritems(),
-            operator.itemgetter(1),
+            key=operator.itemgetter(1),
             reverse=True)[:cutoff_tiles]:
         if count >= cutoff_requests:
             new_toi.add(coord_int)
