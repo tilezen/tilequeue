@@ -1553,7 +1553,7 @@ def tilequeue_main(argv_args=None):
         'Config file {} does not exist!'.format(args.config)
     cfg = make_config_from_argparse(args.config)
     redis_client = make_redis_client(cfg)
-    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue statsd')
+    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue stats')
     queue = make_queue(
         cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
