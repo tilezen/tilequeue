@@ -1076,6 +1076,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     toi_to_remove = tiles_of_interest - new_toi
     logger.info('Computing tiles to remove ... done. %s found',
                 len(toi_to_remove))
+    peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
     def delete_tile_of_interest(s3_parts, coord_ints):
         # Remove from the redis toi set
@@ -1119,6 +1120,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     toi_to_add = new_toi - tiles_of_interest
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
+    peripherals.stats.gauge('gardener.added', len(toi_to_remove))
 
     if not toi_to_add:
         logger.info('Skipping TOI add step because there are '
@@ -1496,6 +1498,26 @@ class TileArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+class FakeStatsd(object):
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def incr(self, *args, **kwargs):
+        pass
+
+    def decr(self, *args, **kwargs):
+        pass
+
+    def gauge(self, *args, **kwargs):
+        pass
+
+    def set(self, *args, **kwargs):
+        pass
+
+    def timing(self, *args, **kwargs):
+        pass
+
+
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -1531,10 +1553,17 @@ def tilequeue_main(argv_args=None):
         'Config file {} does not exist!'.format(args.config)
     cfg = make_config_from_argparse(args.config)
     redis_client = make_redis_client(cfg)
-    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue')
+    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue statsd')
     queue = make_queue(
         cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
         aws_secret_access_key=cfg.aws_secret_access_key)
-    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue)
+    if cfg.statsd_host:
+        import statsd
+        stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
+                                   prefix=cfg.statsd_prefix)
+    else:
+        stats = FakeStatsd()
+    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue,
+                              stats)
     args.func(cfg, peripherals)
