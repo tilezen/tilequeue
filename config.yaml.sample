@@ -84,6 +84,9 @@ tiles:
     # process on update
     parent-zoom-until: 11
 
+  # zoom where tile content stops changing
+  max-zoom-with-changes: 16
+
 process:
   # number of simultaneous "querysets" to issue to the database.  The
   # query for each layer will be issued in parallel to the same

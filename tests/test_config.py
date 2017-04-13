@@ -41,23 +41,13 @@ class TestConfigMerge(unittest.TestCase):
 
 class TestCliConfiguration(unittest.TestCase):
 
-    def _call_fut(self, args, config_dict):
+    def _call_fut(self, config_dict):
         from tilequeue.config import make_config_from_argparse
         from yaml import dump
+        from cStringIO import StringIO
         raw_yaml = dump(config_dict)
-        return make_config_from_argparse(
-            args,
-            opencfg=self._fp(raw_yaml))
-
-    def _fp(self, raw_yaml):
-        # stub out a file object that has __enter__, __exit__ methods
-        from StringIO import StringIO
-        from contextlib import closing
-        return lambda filename: closing(StringIO(raw_yaml))
-
-    def _args(self, data):
-        # create an object with data as the attributes
-        return type('mock-args', (object,), data)
+        raw_yaml_file_obj = StringIO(raw_yaml)
+        return make_config_from_argparse(raw_yaml_file_obj)
 
     def _assert_cfg(self, cfg, to_check):
         # cfg is the config object to validate
@@ -67,8 +57,7 @@ class TestCliConfiguration(unittest.TestCase):
             self.assertEqual(v, cfg_val)
 
     def test_no_config(self):
-        cfg = self._call_fut(
-            self._args(dict(config=None)), {})
+        cfg = self._call_fut(dict(config=None))
         # just assert some of the defaults are set
         self._assert_cfg(cfg,
                          dict(s3_path='osm',
@@ -78,10 +67,49 @@ class TestCliConfiguration(unittest.TestCase):
 
     def test_config_osm_path_modified(self):
         cfg = self._call_fut(
-            self._args(dict(config='config')),
             dict(store=dict(path='custompath')))
         self._assert_cfg(cfg,
                          dict(s3_path='custompath',
                               output_formats=['json'],
                               seed_all_zoom_start=None,
                               seed_all_zoom_until=None))
+
+
+class TestMetatileConfiguration(unittest.TestCase):
+
+    def _call_fut(self, config_dict):
+        from tilequeue.config import make_config_from_argparse
+        from yaml import dump
+        from cStringIO import StringIO
+        raw_yaml = dump(config_dict)
+        raw_yaml_file_obj = StringIO(raw_yaml)
+        return make_config_from_argparse(raw_yaml_file_obj)
+
+    def test_metatile_size_default(self):
+        config_dict = {}
+        cfg = self._call_fut(config_dict)
+        self.assertIsNone(cfg.metatile_size)
+        self.assertEquals(cfg.metatile_zoom, 0)
+
+    def test_metatile_size_1(self):
+        config_dict = dict(metatile=dict(size=1))
+        cfg = self._call_fut(config_dict)
+        self.assertEquals(cfg.metatile_size, 1)
+        self.assertEquals(cfg.metatile_zoom, 0)
+
+    def test_metatile_size_2(self):
+        config_dict = dict(metatile=dict(size=2))
+        cfg = self._call_fut(config_dict)
+        self.assertEquals(cfg.metatile_size, 2)
+        self.assertEquals(cfg.metatile_zoom, 1)
+
+    def test_metatile_size_4(self):
+        config_dict = dict(metatile=dict(size=4))
+        cfg = self._call_fut(config_dict)
+        self.assertEquals(cfg.metatile_size, 4)
+        self.assertEquals(cfg.metatile_zoom, 2)
+
+    def test_max_zoom(self):
+        config_dict = dict(metatile=dict(size=2))
+        cfg = self._call_fut(config_dict)
+        self.assertEquals(cfg.max_zoom, 15)

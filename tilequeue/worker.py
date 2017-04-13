@@ -12,7 +12,6 @@ import Queue
 import signal
 import sys
 import time
-import math
 
 
 # long enough to not fight with other threads, but not long enough
@@ -92,20 +91,17 @@ class OutputQueue(object):
 
 class SqsQueueReader(object):
 
-    def __init__(self, sqs_queue, output_queue, logger, stop,
-                 metatile_size, sqs_msgs_to_read_size=10):
+    def __init__(
+            self, sqs_queue, output_queue, logger, stop, max_zoom,
+            sqs_msgs_to_read_size=10):
         self.sqs_queue = sqs_queue
         self.output = OutputQueue(output_queue, stop)
         self.sqs_msgs_to_read_size = sqs_msgs_to_read_size
         self.logger = logger
         self.stop = stop
-        self.metatile_zoom = int(math.log(metatile_size, 2))
-        assert (1 << self.metatile_zoom) == metatile_size, \
-            "Metatile size must be a power of two."
+        self.max_zoom = max_zoom
 
     def __call__(self):
-        max_zoom = 16 - self.metatile_zoom
-
         while not self.stop.is_set():
             try:
                 msgs = self.sqs_queue.read(
@@ -120,11 +116,11 @@ class SqsQueueReader(object):
                 if self.stop.is_set():
                     break
 
-                if msg.coord.zoom > max_zoom:
+                if msg.coord.zoom > self.max_zoom:
                     self.logger.log(
                         logging.WARNING,
                         'Job coordinates above max zoom are not supported, '
-                        'skipping %r > %d' % (msg.coord, max_zoom))
+                        'skipping %r > %d' % (msg.coord, self.max_zoom))
 
                     # delete jobs that we can't handle from the queue,
                     # otherwise we'll get stuck in a cycle of timed-out jobs
@@ -160,17 +156,17 @@ class SqsQueueReader(object):
 
 class DataFetch(object):
 
-    def __init__(self, fetcher, input_queue, output_queue, io_pool,
-                 redis_cache_index, logger, metatile_size):
+    def __init__(
+            self, fetcher, input_queue, output_queue, io_pool,
+            redis_cache_index, logger, metatile_zoom, max_zoom):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.redis_cache_index = redis_cache_index
         self.logger = logger
-        self.metatile_zoom = int(math.log(metatile_size, 2))
-        assert (1 << self.metatile_zoom) == metatile_size, \
-            "Metatile size must be a power of two."
+        self.metatile_zoom = metatile_zoom
+        self.max_zoom = max_zoom
 
     def __call__(self, stop):
         saw_sentinel = False
