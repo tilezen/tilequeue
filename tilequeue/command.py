@@ -992,6 +992,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
+                  and (service = 'vector-tiles')
                 group by z, x, y, tilesize
                 order by z, x, y, tilesize
                 """.format(
