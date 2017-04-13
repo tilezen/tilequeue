@@ -8,6 +8,11 @@ queue:
     # values are the queue name to use for zooms in that range
     0-10: queue-1
     11-20: queue-2
+statsd:
+  # Uncomment host to activate statsd
+  # host: 127.0.0.1
+  port: 8125
+  prefix: dev.tilequeue
 store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>

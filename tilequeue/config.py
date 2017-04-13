@@ -72,6 +72,12 @@ class Configuration(object):
         self.redis_db = self._cfg('redis db')
         self.redis_cache_set_key = self._cfg('redis cache-set-key')
 
+        self.statsd_host = None
+        if self.yml.get('statsd'):
+            self.statsd_host = self._cfg('statsd host')
+            self.statsd_port = self._cfg('statsd port')
+            self.statsd_prefix = self._cfg('statsd prefix')
+
         process_cfg = self.yml['process']
         self.n_simultaneous_query_sets = \
             process_cfg['n-simultaneous-query-sets']
