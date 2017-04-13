@@ -956,7 +956,10 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
 
 def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'prune_tiles_of_interest')
-    logger.info('Pruning tiles of interest')
+    logger.info('Pruning tiles of interest ...')
+
+    time_overall = peripherals.stats.timer('gardener.overall')
+    time_overall.start()
 
     logger.info('Fetching tiles recently requested ...')
     import psycopg2
@@ -1120,7 +1123,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     toi_to_add = new_toi - tiles_of_interest
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
-    peripherals.stats.gauge('gardener.added', len(toi_to_remove))
+    peripherals.stats.gauge('gardener.added', len(toi_to_add))
 
     if not toi_to_add:
         logger.info('Skipping TOI add step because there are '
@@ -1150,6 +1153,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_add))
 
     logger.info('Pruning tiles of interest ... done')
+    time_overall.stop()
 
 
 def tilequeue_tile_sizes(cfg, peripherals):
@@ -1515,6 +1519,20 @@ class FakeStatsd(object):
         pass
 
     def timing(self, *args, **kwargs):
+        pass
+
+    def timer(self, *args, **kwargs):
+        return FakeStatsTimer()
+
+
+class FakeStatsTimer(object):
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def start(self):
+        pass
+
+    def stop(self):
         pass
 
 
