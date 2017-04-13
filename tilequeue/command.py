@@ -1120,7 +1120,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     toi_to_add = new_toi - tiles_of_interest
     logger.info('Computing tiles to add ... done. %s found',
                 len(toi_to_add))
-    peripherals.stats.gauge('gardener.added', len(toi_to_remove))
+    peripherals.stats.gauge('gardener.added', len(toi_to_add))
 
     if not toi_to_add:
         logger.info('Skipping TOI add step because there are '
