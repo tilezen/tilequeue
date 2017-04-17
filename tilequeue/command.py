@@ -988,7 +988,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd(day, -{days}, current_date))
+                where (date >= dateadd(day, -{days}, getdate()))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
