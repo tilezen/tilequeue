@@ -199,20 +199,18 @@ toi-prune:
     layer: all
     format: zip
   always-include:
-    # Sets of tiles to always include in the tiles of interest
+    # Sets of tiles to always include in the tiles of interest.
+    # For more information about options here, see the code:
+    # https://github.com/tilezen/tilequeue/blob/1ca908e/tilequeue/command.py#L1046-L1061
     world:
       bbox: -180.0,-85.06,180.0,85.06
       min_zoom: 0
       max_zoom: 10
-    # conus:
-    #   bbox: -124.8,24.8,-66.1,49.3
-    #   min_zoom: 11
-    #   max_zoom: 14
     # sf_metro:
     #   bbox: -122.524338,37.571794,-122.345123,37.821175
     #   min_zoom: 0
     #   max_zoom: 15
-    # ny_metro:
-    #   bbox: -74.09111,40.652513,-73.831558,40.911956
-    #   min_zoom: 0
-    #   max_zoom: 15
+    # tests:
+    #  tiles: 0/0/0,1/1/0
+    # tests-file:
+    #  file: list-of-tile-coordinates.txt
