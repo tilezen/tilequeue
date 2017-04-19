@@ -5,6 +5,8 @@ v1.7.0
 ------
 * **New features:**
     * Add a new command that 'prunes' the tiles of interest set based on various rules. See [#176](https://github.com/tilezen/tilequeue/pull/176), [#178](https://github.com/tilezen/tilequeue/pull/178), [#179](https://github.com/tilezen/tilequeue/pull/179), [#180](https://github.com/tilezen/tilequeue/pull/180), [#182](https://github.com/tilezen/tilequeue/pull/182), [#183](https://github.com/tilezen/tilequeue/pull/183), [#184](https://github.com/tilezen/tilequeue/pull/184), and [#189](https://github.com/tilezen/tilequeue/pull/189).
+* **Enhancements:**
+    * When enqueueing tiles of interest for seed rendering, enqueue at zoom level 15 instead of 16. See [#181](https://github.com/tilezen/tilequeue/pull/181).
 
 v1.6.0
 ------
