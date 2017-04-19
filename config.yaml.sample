@@ -173,3 +173,44 @@ metatile:
   # addition to the metatile. this can be useful when gracefully "cutting over"
   # to a metatile-based system from an individual format based one.
   store_metatile_and_originals: false
+
+# Configuration for the tiles of interest prune/garden command.
+toi-prune:
+  # Connection and query configuration for a RedShift database containing
+  # request information for tiles.
+  redshift:
+    database-uri: postgresql://user:password@localhost:5439/database
+    # The number of days of history to query for.
+    days: 30
+    # The maximum zoom level to query redshift.
+    max-zoom: 16
+  cutoff:
+    # The minimum number of requests per tile for a tile to be included in
+    # the tiles of interest
+    min-requests: 16
+    # The maximum number of tiles to include from the RedShift-based calculation
+    max-tiles: 100000
+  s3:
+    # Connection information for deleting tiles from S3 when the tile is no longer
+    # in the tiles of interest.
+    bucket: mapzen-tiles-dev-us-east
+    date-prefix: 20170322
+    path: osm
+    layer: all
+    format: zip
+  always-include:
+    # Sets of tiles to always include in the tiles of interest.
+    # For more information about options here, see the code:
+    # https://github.com/tilezen/tilequeue/blob/1ca908e/tilequeue/command.py#L1046-L1061
+    world:
+      bbox: -180.0,-85.06,180.0,85.06
+      min_zoom: 0
+      max_zoom: 10
+    # sf_metro:
+    #   bbox: -122.524338,37.571794,-122.345123,37.821175
+    #   min_zoom: 0
+    #   max_zoom: 15
+    # tests:
+    #  tiles: 0/0/0,1/1/0
+    # tests-file:
+    #  file: list-of-tile-coordinates.txt
