@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v1.7.0
+------
+* **New features:**
+    * Add a new command that 'prunes' the tiles of interest set based on various rules. See [#176](https://github.com/tilezen/tilequeue/pull/176), [#178](https://github.com/tilezen/tilequeue/pull/178), [#179](https://github.com/tilezen/tilequeue/pull/179), and [#180](https://github.com/tilezen/tilequeue/pull/180).
+
 v1.6.0
 ------
 * **New features:**
