@@ -615,7 +615,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_fetch = DataFetch(
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
-        peripherals.redis_cache_index, logger, cfg.metatile_zoom, cfg.max_zoom)
+        logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
