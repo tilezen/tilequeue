@@ -874,7 +874,6 @@ def tilequeue_seed(cfg, peripherals):
     tile_queue = peripherals.queue
     # suppresses checking the in flight list while seeding
     tile_queue.is_seeding = True
-    redis_cache_index = peripherals.redis_cache_index
     enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
 
     # based on cfg, create tile generator
@@ -882,51 +881,41 @@ def tilequeue_seed(cfg, peripherals):
 
     queue_buf_size = 1024
     tile_queue_queue = Queue.Queue(queue_buf_size)
-    redis_queue = Queue.Queue(queue_buf_size)
 
-    # updating sqs and updating redis happen in background threads
-    def redis_add():
-        redis_coords_buf = []
-        done = False
-        while not done:
-            coord = redis_queue.get()
-            if coord is None:
-                done = True
-            else:
-                redis_coords_buf.append(coord)
-            if len(redis_coords_buf) >= 1024 or (done and redis_coords_buf):
-                redis_cache_index.index_coords(redis_coords_buf)
-                del redis_coords_buf[:]
-
+    # updating sqs happens in background threads
     def tile_queue_enqueue():
         enqueuer(tile_queue_queue)
 
-    logger.info('Sqs ... ')
+    logger.info('Enqueueing to SQS ... ')
     thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
-
-    if cfg.seed_should_add_to_tiles_of_interest:
-        logger.info('Tiles of interest ...')
-        thread_redis = threading.Thread(target=redis_add)
-        thread_redis.start()
 
     n_coords = 0
     for coord in tile_generator:
         tile_queue_queue.put(coord)
-        if cfg.seed_should_add_to_tiles_of_interest:
-            redis_queue.put(coord)
         n_coords += 1
         if n_coords % 100000 == 0:
             logger.info('%d enqueued' % n_coords)
 
     tile_queue_queue.put(None)
-    if cfg.seed_should_add_to_tiles_of_interest:
-        redis_queue.put(None)
-        thread_redis.join()
-        logger.info('Tiles of interest ... done')
 
     thread_enqueue.join()
-    logger.info('Sqs ... done')
+    logger.info('Enqueueing to SQS ... done')
+
+    if cfg.seed_should_add_to_tiles_of_interest:
+        logger.info('Adding to Redis ... ')
+
+        toi_set = peripherals.redis_cache_index.fetch_tiles_of_interest()
+
+        tile_generator = make_seed_tile_generator(cfg)
+        for coord in tile_generator:
+            coord_int = coord_marshall_int(coord)
+            toi_set.add(coord_int)
+
+        peripherals.redis_cache_index.set_tiles_of_interest(toi_set)
+
+        logger.info('Adding to Redis ... done')
+
     logger.info('Seeding tiles ... done')
     logger.info('%d coordinates enqueued' % n_coords)
 
