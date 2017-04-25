@@ -1071,13 +1071,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    def delete_tile_of_interest(s3_parts, coord_ints):
-        # Remove from the redis toi set
-        removed = peripherals.redis_cache_index.remove_tiles_of_interest(
-            coord_ints)
-
-        logger.info('Removed %s tiles from redis', removed)
-
+    def delete_from_s3(s3_parts, coord_ints):
         # Remove from S3
         s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
         buk = s3.get_bucket(s3_parts['bucket'], validate=False)
@@ -1104,7 +1098,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            delete_tile_of_interest(s3_parts, coord_ints)
+            delete_from_s3(s3_parts, coord_ints)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
@@ -1119,17 +1113,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Skipping TOI add step because there are '
                     'no tiles to add')
     else:
-        logger.info('Adding %s tiles to Redis TOI set ...',
-                    len(toi_to_add))
-
-        for coord_ints in grouper(toi_to_add, 1000):
-            added = peripherals.redis_cache_index.add_tiles_of_interest(
-                coord_ints)
-            logger.info('Added %s tiles to redis', added)
-
-        logger.info('Adding %s tiles to Redis TOI set ... done',
-                    len(toi_to_add))
-
         logger.info('Enqueueing %s tiles to SQS ...',
                     len(toi_to_add))
 
@@ -1141,6 +1124,16 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
         logger.info('Enqueueing %s tiles to SQS ... done',
                     len(toi_to_add))
+
+    if toi_to_add or toi_to_remove:
+        logger.info('Setting new tiles of interest ... ')
+
+        peripherals.redis_cache_index.set_tiles_of_interest(new_toi)
+
+        logger.info('Setting new tiles of interest ... done')
+    else:
+        logger.info('Tiles of interest did not change, '
+                    'so not setting new tiles of interest')
 
     logger.info('Pruning tiles of interest ... done')
     time_overall.stop()
