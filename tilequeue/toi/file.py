@@ -40,10 +40,10 @@ class FileTilesOfInterestSet(object):
         toi_set = set()
 
         with open(self.filename, 'r') as toi_data:
-            toi_set = load_set_from_fp(toi_data)
+            toi_set = load_set_from_gzipped_fp(toi_data)
 
         return toi_set
 
     def set_tiles_of_interest(self, new_set):
         with open(self.filename, 'w') as toi_data:
-            save_set_to_fp(new_set, toi_data)
+            save_set_to_gzipped_fp(new_set, toi_data)
