@@ -41,6 +41,14 @@ class Configuration(object):
         self.seed_top_tiles_zoom_start = seed_top_tiles_cfg['zoom-start']
         self.seed_top_tiles_zoom_until = seed_top_tiles_cfg['zoom-until']
 
+        toi_store_cfg = self.yml['toi-store']
+        self.toi_store_type = toi_store_cfg['type']
+        if self.toi_store_type == 's3':
+            self.toi_store_s3_bucket = toi_store_cfg['s3']['bucket']
+            self.toi_store_s3_key = toi_store_cfg['s3']['key']
+        elif self.toi_store_type == 'file':
+            self.toi_store_file_name = toi_store_cfg['file']['name']
+
         self.seed_should_add_to_tiles_of_interest = \
             seed_cfg['should-add-to-tiles-of-interest']
 
