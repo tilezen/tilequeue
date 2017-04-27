@@ -917,7 +917,7 @@ def tilequeue_seed(cfg, peripherals):
     logger.info('Enqueueing to SQS ... done')
 
     if cfg.seed_should_add_to_tiles_of_interest:
-        logger.info('Adding to Redis ... ')
+        logger.info('Adding to Tiles of Interest ... ')
 
         toi_set = peripherals.toi.fetch_tiles_of_interest()
 
@@ -928,7 +928,7 @@ def tilequeue_seed(cfg, peripherals):
 
         peripherals.toi.set_tiles_of_interest(toi_set)
 
-        logger.info('Adding to Redis ... done')
+        logger.info('Adding to Tiles of Interest ... done')
 
     logger.info('Seeding tiles ... done')
     logger.info('%d coordinates enqueued' % n_coords)
