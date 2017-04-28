@@ -147,3 +147,36 @@ class TestReproject(unittest.TestCase):
         coord = reproject_lnglat_to_mercator(0, 0, 0)
         self.assertAlmostEqual(0, coord[0])
         self.assertAlmostEqual(0, coord[1])
+
+
+class CoordIntZoomTest(unittest.TestCase):
+
+    def test_verify_low_seed_tiles(self):
+        from tilequeue.tile import coord_int_zoom_up
+        from tilequeue.tile import coord_marshall_int
+        from tilequeue.tile import seed_tiles
+        seed_coords = seed_tiles(1, 5)
+        for coord in seed_coords:
+            coord_int = coord_marshall_int(coord)
+            parent_coord = coord.zoomTo(coord.zoom - 1).container()
+            exp_int = coord_marshall_int(parent_coord)
+            act_int = coord_int_zoom_up(coord_int)
+            self.assertEquals(exp_int, act_int)
+
+    def test_verify_examples(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.tile import coord_int_zoom_up
+        from tilequeue.tile import coord_marshall_int
+        test_coords = (
+            Coordinate(zoom=20, column=1002463, row=312816),
+            Coordinate(zoom=20, column=(2 ** 20)-1, row=(2 ** 20)-1),
+            Coordinate(zoom=10, column=(2 ** 10)-1, row=(2 ** 10)-1),
+            Coordinate(zoom=5, column=20, row=20),
+            Coordinate(zoom=1, column=0, row=0),
+        )
+        for coord in test_coords:
+            coord_int = coord_marshall_int(coord)
+            parent_coord = coord.zoomTo(coord.zoom - 1).container()
+            exp_int = coord_marshall_int(parent_coord)
+            act_int = coord_int_zoom_up(coord_int)
+            self.assertEquals(exp_int, act_int)
