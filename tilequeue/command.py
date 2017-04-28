@@ -30,6 +30,8 @@ from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
+from tilequeue.toi import load_set_from_fp
+from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.worker import DataFetch
@@ -1419,77 +1421,61 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     )
 
 
-def tilequeue_load_tiles_of_interest(cfg, peripherals):
-    """
-    Given a newline-delimited file containing tile coordinates in
-    `zoom/column/row` format, load those tiles into a new Redis SET
-    alongside the existing one, then RENAME the new to the old.
-    """
-    logger = make_logger(cfg, 'load_tiles_of_interest')
-    logger.info('Loading tiles of interest')
+def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
+    logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
+    logger.info('Dumping TOI from Redis ...')
 
-    toi_filename = "toi.txt"
-    chunk_size = 10000
-    new_toi_key = cfg.redis_cache_set_key + "-new"
-    old_toi_key = cfg.redis_cache_set_key + "-old"
+    logger.info('Fetching tiles of interest from Redis ...')
 
     # Make a raw Redis client so we can do low-level set manipulation
     redis_client = make_redis_client(cfg)
 
+    # Hard coded key because it's
+    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key)
+
+    toi_set = set()
+    for coord_int in toi_iter:
+        coord = coord_unmarshall_int(coord_int)
+        toi_set.add(coord)
+
+    logger.info('Fetching tiles of interest from Redis ... done')
+
+    toi_filename = "toi.txt"
+
+    n_toi = len(toi_set)
+    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
+
+    with open(toi_filename, "w") as f:
+        save_set_to_fp(toi_set, f)
+
     logger.info(
-        'Adding tiles of interest from %s to key %s',
-        toi_filename,
-        new_toi_key,
+        'Writing %d tiles of interest to %s ... done',
+        n_toi,
+        toi_filename
     )
 
-    if redis_client.exists(new_toi_key):
-        raise Exception(
-            "Can't load new TOI because key {} exists. "
-            "Delete it and try again".format(new_toi_key)
-        )
 
-    n_added = 0
+def tilequeue_load_tiles_of_interest(cfg, peripherals):
+    """
+    Given a newline-delimited file containing tile coordinates in
+    `zoom/column/row` format, load those tiles into the tiles of interest.
+    """
+    logger = make_logger(cfg, 'load_tiles_of_interest')
+    logger.info('Loading tiles of interest ... ')
+
+    toi_filename = "toi.txt"
+
     with open(toi_filename, 'r') as f:
-        for lines in grouper(f, chunk_size):
-            coords = [
-                coord_marshall_int(deserialize_coord(l))
-                for l in lines if l is not None
-            ]
-            n_added += redis_client.sadd(new_toi_key, *coords)
-            logger.info("%s total tiles added", n_added)
+        new_toi = load_set_from_fp(f)
+
+    peripherals.toi.set_tiles_of_interest(new_toi)
 
     logger.info(
-        'Finished adding %s tiles of interest from %s to key %s',
-        n_added,
-        toi_filename,
-        new_toi_key,
+        'Finished setting new tiles of interest (with %s tiles)',
+        len(new_toi),
     )
 
-    if redis_client.rename(cfg.redis_cache_set_key, old_toi_key):
-        logger.info(
-            'Successfully moved existing TOI at %s to %s',
-            cfg.redis_cache_set_key,
-            old_toi_key,
-        )
-    else:
-        raise Exception(
-            "Moving existing TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!"
-        )
-
-    if redis_client.rename(new_toi_key, cfg.redis_cache_set_key):
-        logger.info(
-            'Successfully moved new TOI at %s into use at %s',
-            new_toi_key,
-            cfg.redis_cache_set_key,
-        )
-    else:
-        raise Exception(
-            "Moving new TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!"
-        )
-
-    logger.info("Finished loading TOI.")
+    logger.info('Loading tiles of interest ... done')
 
 
 class TileArgumentParser(argparse.ArgumentParser):
@@ -1547,6 +1533,9 @@ def tilequeue_main(argv_args=None):
         ('intersect', create_command_parser(tilequeue_intersect)),
         ('dump-tiles-of-interest',
             create_command_parser(tilequeue_dump_tiles_of_interest)),
+        ('dump-tiles-of-interest-from-redis',
+            create_command_parser(
+                tilequeue_dump_tiles_of_interest_from_redis)),
         ('load-tiles-of-interest',
             create_command_parser(tilequeue_load_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
