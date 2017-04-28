@@ -188,6 +188,9 @@ def default_yml_config():
             },
             'max-zoom-with-changes': 16,
         },
+        'toi-store': {
+            'type': None,
+        },
         'process': {
             'n-simultaneous-query-sets': 0,
             'n-simultaneous-s3-storage': 0,
