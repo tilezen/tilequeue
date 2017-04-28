@@ -209,17 +209,6 @@ def make_redis_client(cfg):
     return redis_client
 
 
-def make_redis_cache_index(redis_client, cfg):
-    if cfg.redis_type == 'redis_client':
-        from tilequeue.cache import RedisCacheIndex
-        redis_cache_index = RedisCacheIndex(
-            redis_client, cfg.redis_cache_set_key)
-        return redis_cache_index
-    else:
-        from tilequeue.cache import StubIndex
-        return StubIndex()
-
-
 def make_logger(cfg, logger_name):
     if getattr(cfg, 'logconfig') is not None:
         logging.config.fileConfig(cfg.logconfig)
