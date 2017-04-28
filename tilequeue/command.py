@@ -191,13 +191,13 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
 
 def make_toi_helper(cfg):
     if cfg.toi_store_type == 's3':
-        from tilequeue.toi.s3 import S3TilesOfInterestSet
+        from tilequeue.toi import S3TilesOfInterestSet
         return S3TilesOfInterestSet(
             cfg.toi_store_s3_bucket,
             cfg.toi_store_s3_key,
         )
     elif cfg.toi_store_type == 'file':
-        from tilequeue.toi.file import FileTilesOfInterestSet
+        from tilequeue.toi import FileTilesOfInterestSet
         return FileTilesOfInterestSet(
             cfg.toi_store_file_name,
         )
@@ -1419,13 +1419,11 @@ def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
     # Make a raw Redis client so we can do low-level set manipulation
     redis_client = make_redis_client(cfg)
 
-    # Hard coded key because it's
     toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key)
 
     toi_set = set()
     for coord_int in toi_iter:
-        coord = coord_unmarshall_int(coord_int)
-        toi_set.add(coord)
+        toi_set.add(coord_int)
 
     logger.info('Fetching tiles of interest from Redis ... done')
 

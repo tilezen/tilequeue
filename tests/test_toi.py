@@ -1,16 +1,21 @@
 import unittest
 import tempfile
-from tilequeue.tile import deserialize_coord
+from tilequeue.tile import deserialize_coord, coord_marshall_int
 
 
 class TestToiSet(unittest.TestCase):
+    def _coord_str_to_int(self, coord_str):
+        coord = deserialize_coord(coord_str)
+        coord_int = coord_marshall_int(coord)
+        return coord_int
+
     def test_save_set_to_fp(self):
         from tilequeue.toi import save_set_to_fp
 
         toi_set = set()
-        toi_set.add(deserialize_coord('0/0/0'))
-        toi_set.add(deserialize_coord('1/0/0'))
-        toi_set.add(deserialize_coord('1/1/0'))
+        toi_set.add(self._coord_str_to_int('0/0/0'))
+        toi_set.add(self._coord_str_to_int('1/0/0'))
+        toi_set.add(self._coord_str_to_int('1/1/0'))
 
         with tempfile.TemporaryFile() as fp:
             save_set_to_fp(toi_set, fp)
@@ -29,9 +34,9 @@ class TestToiSet(unittest.TestCase):
 
             actual_toi_set = load_set_from_fp(fp)
             expected_toi_set = set()
-            expected_toi_set.add(deserialize_coord('0/0/0'))
-            expected_toi_set.add(deserialize_coord('1/0/0'))
-            expected_toi_set.add(deserialize_coord('1/1/0'))
+            expected_toi_set.add(self._coord_str_to_int('0/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
             self.assertEquals(expected_toi_set, actual_toi_set)
 
@@ -44,9 +49,9 @@ class TestToiSet(unittest.TestCase):
 
             actual_toi_set = load_set_from_fp(fp)
             expected_toi_set = set()
-            expected_toi_set.add(deserialize_coord('0/0/0'))
-            expected_toi_set.add(deserialize_coord('1/0/0'))
-            expected_toi_set.add(deserialize_coord('1/1/0'))
+            expected_toi_set.add(self._coord_str_to_int('0/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
             self.assertEquals(expected_toi_set, actual_toi_set)
 
@@ -55,9 +60,9 @@ class TestToiSet(unittest.TestCase):
         from tilequeue.toi import save_set_to_gzipped_fp
 
         toi_set = set()
-        toi_set.add(deserialize_coord('0/0/0'))
-        toi_set.add(deserialize_coord('1/0/0'))
-        toi_set.add(deserialize_coord('1/1/0'))
+        toi_set.add(self._coord_str_to_int('0/0/0'))
+        toi_set.add(self._coord_str_to_int('1/0/0'))
+        toi_set.add(self._coord_str_to_int('1/1/0'))
 
         with tempfile.TemporaryFile() as fp:
             save_set_to_gzipped_fp(toi_set, fp)
@@ -79,8 +84,8 @@ class TestToiSet(unittest.TestCase):
 
             actual_toi_set = load_set_from_gzipped_fp(fp)
             expected_toi_set = set()
-            expected_toi_set.add(deserialize_coord('0/0/0'))
-            expected_toi_set.add(deserialize_coord('1/0/0'))
-            expected_toi_set.add(deserialize_coord('1/1/0'))
+            expected_toi_set.add(self._coord_str_to_int('0/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/0/0'))
+            expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
             self.assertEquals(expected_toi_set, actual_toi_set)
