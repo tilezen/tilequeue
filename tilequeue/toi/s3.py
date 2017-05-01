@@ -10,7 +10,7 @@ class S3TilesOfInterestSet(object):
     def __init__(self, bucket, key):
         s3 = boto.connect_s3()
         buk = s3.get_bucket(bucket)
-        self.key = buk.get_key(key)
+        self.key = buk.get_key(key, validate=False)
 
     def fetch_tiles_of_interest(self):
         toi_data_gz = StringIO()
