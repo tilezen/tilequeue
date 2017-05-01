@@ -1392,17 +1392,17 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     logger.info('Dumping tiles of interest')
 
     logger.info('Fetching tiles of interest ...')
-    coords = peripherals.toi.fetch_tiles_of_interest()
-    n_toi = len(coords)
+    toi_set = peripherals.toi.fetch_tiles_of_interest()
+    n_toi = len(toi_set)
     logger.info('Fetching tiles of interest ... done')
 
     toi_filename = "toi.txt"
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
+
     with open(toi_filename, "w") as f:
-        for coord in coords:
-            c = coord_unmarshall_int(coord)
-            f.write("{}/{}/{}\n".format(c.zoom, c.column, c.row))
+        save_set_to_fp(toi_set, f)
+
     logger.info(
         'Writing %d tiles of interest to %s ... done',
         n_toi,
@@ -1426,7 +1426,7 @@ def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
     # Make a raw Redis client so we can do low-level set manipulation
     redis_client = make_redis_client(cfg)
 
-    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key)
+    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key, count=10000)
 
     toi_set = set()
     for coord_int in toi_iter:
@@ -1455,19 +1455,19 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     `zoom/column/row` format, load those tiles into the tiles of interest.
     """
     logger = make_logger(cfg, 'load_tiles_of_interest')
-    logger.info('Loading tiles of interest ... ')
 
     toi_filename = "toi.txt"
+    logger.info('Loading tiles of interest from %s ... ', toi_filename)
 
     with open(toi_filename, 'r') as f:
         new_toi = load_set_from_fp(f)
 
+    logger.info('Loading tiles of interest from %s ... done', toi_filename)
+    logger.info('Setting new TOI (with %s tiles) ... ', len(new_toi))
+
     peripherals.toi.set_tiles_of_interest(new_toi)
 
-    logger.info(
-        'Finished setting new tiles of interest (with %s tiles)',
-        len(new_toi),
-    )
+    logger.info('Setting new TOI (with %s tiles) ... done', len(new_toi))
 
     logger.info('Loading tiles of interest ... done')
 
