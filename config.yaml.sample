@@ -175,7 +175,7 @@ metatile:
   store_metatile_and_originals: false
 
 # Configuration for where to store the tiles of interest set
-toi:
+toi-store:
   # We support storing the TOI in S3 or as a file
   type: <file or s3>
   file:
