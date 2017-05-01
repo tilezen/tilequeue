@@ -30,6 +30,8 @@ from tilequeue.tile import seed_tiles
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
+from tilequeue.toi import load_set_from_fp
+from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.worker import DataFetch
@@ -187,21 +189,24 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
         raise ValueError('Unknown queue type: %s' % queue_type)
 
 
+def make_toi_helper(cfg):
+    if cfg.toi_store_type == 's3':
+        from tilequeue.toi import S3TilesOfInterestSet
+        return S3TilesOfInterestSet(
+            cfg.toi_store_s3_bucket,
+            cfg.toi_store_s3_key,
+        )
+    elif cfg.toi_store_type == 'file':
+        from tilequeue.toi import FileTilesOfInterestSet
+        return FileTilesOfInterestSet(
+            cfg.toi_store_file_name,
+        )
+
+
 def make_redis_client(cfg):
     from redis import StrictRedis
     redis_client = StrictRedis(cfg.redis_host, cfg.redis_port, cfg.redis_db)
     return redis_client
-
-
-def make_redis_cache_index(redis_client, cfg):
-    if cfg.redis_type == 'redis_client':
-        from tilequeue.cache import RedisCacheIndex
-        redis_cache_index = RedisCacheIndex(
-            redis_client, cfg.redis_cache_set_key)
-        return redis_cache_index
-    else:
-        from tilequeue.cache import StubIndex
-        return StubIndex()
 
 
 def make_logger(cfg, logger_name):
@@ -362,7 +367,7 @@ def tilequeue_intersect(cfg, peripherals):
                           for x in file_names]
 
     logger.info('Fetching tiles of interest ...')
-    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     logger.info('Fetching tiles of interest ... done')
 
     logger.info('Will process %d expired tile files.'
@@ -615,7 +620,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_fetch = DataFetch(
         feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
-        peripherals.redis_cache_index, logger, cfg.metatile_zoom, cfg.max_zoom)
+        logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
@@ -874,7 +879,6 @@ def tilequeue_seed(cfg, peripherals):
     tile_queue = peripherals.queue
     # suppresses checking the in flight list while seeding
     tile_queue.is_seeding = True
-    redis_cache_index = peripherals.redis_cache_index
     enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
 
     # based on cfg, create tile generator
@@ -882,51 +886,41 @@ def tilequeue_seed(cfg, peripherals):
 
     queue_buf_size = 1024
     tile_queue_queue = Queue.Queue(queue_buf_size)
-    redis_queue = Queue.Queue(queue_buf_size)
 
-    # updating sqs and updating redis happen in background threads
-    def redis_add():
-        redis_coords_buf = []
-        done = False
-        while not done:
-            coord = redis_queue.get()
-            if coord is None:
-                done = True
-            else:
-                redis_coords_buf.append(coord)
-            if len(redis_coords_buf) >= 1024 or (done and redis_coords_buf):
-                redis_cache_index.index_coords(redis_coords_buf)
-                del redis_coords_buf[:]
-
+    # updating sqs happens in background threads
     def tile_queue_enqueue():
         enqueuer(tile_queue_queue)
 
-    logger.info('Sqs ... ')
+    logger.info('Enqueueing to SQS ... ')
     thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
-
-    if cfg.seed_should_add_to_tiles_of_interest:
-        logger.info('Tiles of interest ...')
-        thread_redis = threading.Thread(target=redis_add)
-        thread_redis.start()
 
     n_coords = 0
     for coord in tile_generator:
         tile_queue_queue.put(coord)
-        if cfg.seed_should_add_to_tiles_of_interest:
-            redis_queue.put(coord)
         n_coords += 1
         if n_coords % 100000 == 0:
             logger.info('%d enqueued' % n_coords)
 
     tile_queue_queue.put(None)
-    if cfg.seed_should_add_to_tiles_of_interest:
-        redis_queue.put(None)
-        thread_redis.join()
-        logger.info('Tiles of interest ... done')
 
     thread_enqueue.join()
-    logger.info('Sqs ... done')
+    logger.info('Enqueueing to SQS ... done')
+
+    if cfg.seed_should_add_to_tiles_of_interest:
+        logger.info('Adding to Tiles of Interest ... ')
+
+        toi_set = peripherals.toi.fetch_tiles_of_interest()
+
+        tile_generator = make_seed_tile_generator(cfg)
+        for coord in tile_generator:
+            coord_int = coord_marshall_int(coord)
+            toi_set.add(coord_int)
+
+        peripherals.toi.set_tiles_of_interest(toi_set)
+
+        logger.info('Adding to Tiles of Interest ... done')
+
     logger.info('Seeding tiles ... done')
     logger.info('%d coordinates enqueued' % n_coords)
 
@@ -937,7 +931,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
 
     sqs_queue = peripherals.queue
     logger.info('Fetching tiles of interest ...')
-    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     n_toi = len(tiles_of_interest)
     logger.info('Fetching tiles of interest ... done')
 
@@ -1071,7 +1065,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger.info('New tiles of interest set includes %s tiles', len(new_toi))
 
     logger.info('Fetching existing tiles of interest ...')
-    tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     n_toi = len(tiles_of_interest)
     logger.info('Fetching existing tiles of interest ... done. %s found',
                 n_toi)
@@ -1082,13 +1076,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    def delete_tile_of_interest(s3_parts, coord_ints):
-        # Remove from the redis toi set
-        removed = peripherals.redis_cache_index.remove_tiles_of_interest(
-            coord_ints)
-
-        logger.info('Removed %s tiles from redis', removed)
-
+    def delete_from_s3(s3_parts, coord_ints):
         # Remove from S3
         s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
         buk = s3.get_bucket(s3_parts['bucket'], validate=False)
@@ -1115,7 +1103,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            delete_tile_of_interest(s3_parts, coord_ints)
+            delete_from_s3(s3_parts, coord_ints)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
@@ -1130,17 +1118,6 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Skipping TOI add step because there are '
                     'no tiles to add')
     else:
-        logger.info('Adding %s tiles to Redis TOI set ...',
-                    len(toi_to_add))
-
-        for coord_ints in grouper(toi_to_add, 1000):
-            added = peripherals.redis_cache_index.add_tiles_of_interest(
-                coord_ints)
-            logger.info('Added %s tiles to redis', added)
-
-        logger.info('Adding %s tiles to Redis TOI set ... done',
-                    len(toi_to_add))
-
         logger.info('Enqueueing %s tiles to SQS ...',
                     len(toi_to_add))
 
@@ -1152,6 +1129,16 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
         logger.info('Enqueueing %s tiles to SQS ... done',
                     len(toi_to_add))
+
+    if toi_to_add or toi_to_remove:
+        logger.info('Setting new tiles of interest ... ')
+
+        peripherals.toi.set_tiles_of_interest(new_toi)
+
+        logger.info('Setting new tiles of interest ... done')
+    else:
+        logger.info('Tiles of interest did not change, '
+                    'so not setting new tiles of interest')
 
     logger.info('Pruning tiles of interest ... done')
     time_overall.stop()
@@ -1364,7 +1351,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     n_enqueue_threads = 20
     current_date = datetime.date.today()
     processor = make_wof_processor(
-        fetcher, model, peripherals.redis_cache_index, peripherals.queue,
+        fetcher, model, peripherals.toi, peripherals.queue,
         n_enqueue_threads, logger, current_date)
 
     logger.info('Processing ...')
@@ -1405,17 +1392,56 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     logger.info('Dumping tiles of interest')
 
     logger.info('Fetching tiles of interest ...')
-    coords = peripherals.redis_cache_index.fetch_tiles_of_interest()
-    n_toi = len(coords)
+    toi_set = peripherals.toi.fetch_tiles_of_interest()
+    n_toi = len(toi_set)
     logger.info('Fetching tiles of interest ... done')
 
     toi_filename = "toi.txt"
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
+
     with open(toi_filename, "w") as f:
-        for coord in coords:
-            c = coord_unmarshall_int(coord)
-            f.write("{}/{}/{}\n".format(c.zoom, c.column, c.row))
+        save_set_to_fp(toi_set, f)
+
+    logger.info(
+        'Writing %d tiles of interest to %s ... done',
+        n_toi,
+        toi_filename
+    )
+
+
+def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
+    """
+    Dumps the tiles of interest from Redis into a newline-delimited
+    file called 'toi.txt'.
+
+    This is intended to be used once to migrate away from using Redis
+    and then removed.
+    """
+    logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
+    logger.info('Dumping TOI from Redis ...')
+
+    logger.info('Fetching tiles of interest from Redis ...')
+
+    # Make a raw Redis client so we can do low-level set manipulation
+    redis_client = make_redis_client(cfg)
+
+    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key, count=10000)
+
+    toi_set = set()
+    for coord_int in toi_iter:
+        toi_set.add(coord_int)
+
+    logger.info('Fetching tiles of interest from Redis ... done')
+
+    toi_filename = "toi.txt"
+
+    n_toi = len(toi_set)
+    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
+
+    with open(toi_filename, "w") as f:
+        save_set_to_fp(toi_set, f)
+
     logger.info(
         'Writing %d tiles of interest to %s ... done',
         n_toi,
@@ -1426,74 +1452,24 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
 def tilequeue_load_tiles_of_interest(cfg, peripherals):
     """
     Given a newline-delimited file containing tile coordinates in
-    `zoom/column/row` format, load those tiles into a new Redis SET
-    alongside the existing one, then RENAME the new to the old.
+    `zoom/column/row` format, load those tiles into the tiles of interest.
     """
     logger = make_logger(cfg, 'load_tiles_of_interest')
-    logger.info('Loading tiles of interest')
 
     toi_filename = "toi.txt"
-    chunk_size = 10000
-    new_toi_key = cfg.redis_cache_set_key + "-new"
-    old_toi_key = cfg.redis_cache_set_key + "-old"
+    logger.info('Loading tiles of interest from %s ... ', toi_filename)
 
-    # Make a raw Redis client so we can do low-level set manipulation
-    redis_client = make_redis_client(cfg)
-
-    logger.info(
-        'Adding tiles of interest from %s to key %s',
-        toi_filename,
-        new_toi_key,
-    )
-
-    if redis_client.exists(new_toi_key):
-        raise Exception(
-            "Can't load new TOI because key {} exists. "
-            "Delete it and try again".format(new_toi_key)
-        )
-
-    n_added = 0
     with open(toi_filename, 'r') as f:
-        for lines in grouper(f, chunk_size):
-            coords = [
-                coord_marshall_int(deserialize_coord(l))
-                for l in lines if l is not None
-            ]
-            n_added += redis_client.sadd(new_toi_key, *coords)
-            logger.info("%s total tiles added", n_added)
+        new_toi = load_set_from_fp(f)
 
-    logger.info(
-        'Finished adding %s tiles of interest from %s to key %s',
-        n_added,
-        toi_filename,
-        new_toi_key,
-    )
+    logger.info('Loading tiles of interest from %s ... done', toi_filename)
+    logger.info('Setting new TOI (with %s tiles) ... ', len(new_toi))
 
-    if redis_client.rename(cfg.redis_cache_set_key, old_toi_key):
-        logger.info(
-            'Successfully moved existing TOI at %s to %s',
-            cfg.redis_cache_set_key,
-            old_toi_key,
-        )
-    else:
-        raise Exception(
-            "Moving existing TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!"
-        )
+    peripherals.toi.set_tiles_of_interest(new_toi)
 
-    if redis_client.rename(new_toi_key, cfg.redis_cache_set_key):
-        logger.info(
-            'Successfully moved new TOI at %s into use at %s',
-            new_toi_key,
-            cfg.redis_cache_set_key,
-        )
-    else:
-        raise Exception(
-            "Moving new TOI failed. WARNING: There's "
-            "probably no TOI key and this is bad!"
-        )
+    logger.info('Setting new TOI (with %s tiles) ... done', len(new_toi))
 
-    logger.info("Finished loading TOI.")
+    logger.info('Loading tiles of interest ... done')
 
 
 class TileArgumentParser(argparse.ArgumentParser):
@@ -1551,6 +1527,9 @@ def tilequeue_main(argv_args=None):
         ('intersect', create_command_parser(tilequeue_intersect)),
         ('dump-tiles-of-interest',
             create_command_parser(tilequeue_dump_tiles_of_interest)),
+        ('dump-tiles-of-interest-from-redis',
+            create_command_parser(
+                tilequeue_dump_tiles_of_interest_from_redis)),
         ('load-tiles-of-interest',
             create_command_parser(tilequeue_load_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
@@ -1573,17 +1552,21 @@ def tilequeue_main(argv_args=None):
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh)
     redis_client = make_redis_client(cfg)
-    Peripherals = namedtuple('Peripherals', 'redis_cache_index queue stats')
+    Peripherals = namedtuple('Peripherals', 'toi queue stats')
+
+    toi_helper = make_toi_helper(cfg)
+
     queue = make_queue(
         cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
         aws_secret_access_key=cfg.aws_secret_access_key)
+
     if cfg.statsd_host:
         import statsd
         stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
                                    prefix=cfg.statsd_prefix)
     else:
         stats = FakeStatsd()
-    peripherals = Peripherals(make_redis_cache_index(redis_client, cfg), queue,
-                              stats)
+
+    peripherals = Peripherals(toi_helper, queue, stats)
     args.func(cfg, peripherals)

@@ -158,12 +158,11 @@ class DataFetch(object):
 
     def __init__(
             self, fetcher, input_queue, output_queue, io_pool,
-            redis_cache_index, logger, metatile_zoom, max_zoom):
+            logger, metatile_zoom, max_zoom):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
-        self.redis_cache_index = redis_cache_index
         self.logger = logger
         self.metatile_zoom = metatile_zoom
         self.max_zoom = max_zoom

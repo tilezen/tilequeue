@@ -71,7 +71,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         periperals_mock = MagicMock()
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
-        periperals_mock.redis_cache_index = MagicMock(
+        periperals_mock.toi = MagicMock(
             intersect=lambda x, y: ([]))
         queue_mock = MagicMock()
         periperals_mock.queue = queue_mock
@@ -101,7 +101,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         c0 = Coordinate(row=0, column=0, zoom=0)
         c1 = Coordinate(row=1, column=1, zoom=1)
         coords = (c0, c1)
-        periperals_mock.redis_cache_index = MagicMock(
+        periperals_mock.toi = MagicMock(
             fetch_tiles_of_interest=lambda: set(
                 map(coord_marshall_int, coords)))
         queue_mock = MagicMock()
