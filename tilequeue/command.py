@@ -1411,6 +1411,13 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
 
 
 def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
+    """
+    Dumps the tiles of interest from Redis into a newline-delimited
+    file called 'toi.txt'.
+
+    This is intended to be used once to migrate away from using Redis
+    and then removed.
+    """
     logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
     logger.info('Dumping TOI from Redis ...')
 
