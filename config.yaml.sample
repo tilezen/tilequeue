@@ -78,7 +78,8 @@ tiles:
     unique: true
 
   intersect:
-    # directory path to where expired tile files are generated
+    # path to file that contains expired tile coordinates
+    # or directory where expired tile coordinates files are generated  
     expired-location: <path/to/expired/tiles/list>
     # the lowest zoom level to consider when enqueueing tiles to
     # process on update

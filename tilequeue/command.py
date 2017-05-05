@@ -345,21 +345,24 @@ def tilequeue_intersect(cfg, peripherals):
 
     assert cfg.intersect_expired_tiles_location, \
         'Missing tiles expired-location configuration'
-    assert os.path.isdir(cfg.intersect_expired_tiles_location), \
-        'tiles expired-location is not a directory'
+    assert os.path.exists(cfg.intersect_expired_tiles_location), \
+        'tiles expired-location does not exist'
 
-    file_names = os.listdir(cfg.intersect_expired_tiles_location)
-    if not file_names:
-        logger.info('No expired tiles found, terminating.')
-        return
-    file_names.sort()
-    # cap the total number of files that we process in one shot
-    # this will limit memory usage, as well as keep progress moving
-    # along more consistently rather than bursts
-    expired_tile_files_cap = 20
-    file_names = file_names[:expired_tile_files_cap]
-    expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
-                          for x in file_names]
+    if os.path.isdir(cfg.intersect_expired_tiles_location):
+        file_names = os.listdir(cfg.intersect_expired_tiles_location)
+        if not file_names:
+            logger.info('No expired tiles found, terminating.')
+            return
+        file_names.sort()
+        # cap the total number of files that we process in one shot
+        # this will limit memory usage, as well as keep progress moving
+        # along more consistently rather than bursts
+        expired_tile_files_cap = 20
+        file_names = file_names[:expired_tile_files_cap]
+        expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
+                              for x in file_names]
+    else:
+        expired_tile_paths = [cfg.intersect_expired_tiles_location]
 
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
