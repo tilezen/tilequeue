@@ -217,6 +217,10 @@ toi-prune:
     path: osm
     layer: all
     format: zip
+  # a reduced version of prev s3 entity
+  store:
+    layer: all
+    format: zip
   always-include:
     # Sets of tiles to always include in the tiles of interest.
     # For more information about options here, see the code:

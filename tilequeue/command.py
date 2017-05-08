@@ -1016,9 +1016,17 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
 
-    s3_parts = prune_cfg.get('s3')
-    assert s3_parts, ("The name of an S3 bucket containing tiles "
-                      "to delete must be specified")
+    # flag indicating that s3 entry in toi-prune is used for s3 store 
+    legacy_fallback = 's3' in prune_cfg
+    store_parts = prune_cfg.get('s3') or prune_cfg.get('store')
+    assert store_parts, ("The configuration of a store containing tiles "
+                      "to delete must be specified under toi-prune:store or toi-prune:s3")
+    # explictly override the store configuration with values provided in toi-prune:s3
+    if legacy_fallback:
+        cfg.store_type = 's3'
+        cfg.s3_bucket = store_parts['bucket']
+        cfg.s3_date_prefix = store_parts['date-prefix']
+        cfg.s3_path = store_parts['path']
 
     redshift_results = defaultdict(int)
     # db_conn_info is uri when using redshift, dict otherwise
@@ -1123,25 +1131,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    def delete_from_s3(s3_parts, coord_ints):
-        # Remove from S3
-        s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-        buk = s3.get_bucket(s3_parts['bucket'], validate=False)
-        keys = [
-            s3_tile_key(
-                s3_parts['date-prefix'],
-                s3_parts['path'],
-                s3_parts['layer'],
-                coord_unmarshall_int(coord_int),
-                s3_parts['format']
-            )
-            for coord_int in coord_ints
-        ]
-        del_result = buk.delete_keys(keys)
-        removed = len(del_result.deleted)
-
-        logger.info('Removed %s tiles from S3', removed)
-
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
     if not toi_to_remove:
         logger.info('Skipping TOI remove step because there are '
                     'no tiles to remove')
@@ -1150,7 +1140,9 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            delete_from_s3(s3_parts, coord_ints)
+            removed = store.delete_tiles(map(lambda coord_int: coord_unmarshall_int(coord_int), coord_ints), 
+                                         lookup_format_by_extension(store_parts['format']), store_parts['layer'])
+            logger.info('Removed %s tiles from S3', removed)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
