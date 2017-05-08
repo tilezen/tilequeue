@@ -1022,7 +1022,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     redshift_cfg = prune_cfg.get('redshift', {})
     db_conn_info = redshift_cfg.get('database-uri') or cfg.postgresql_conn_info
-    assert db_conn_info, ("A redshift connection or postgres configuration URI must "
+    assert db_conn_info, ("A redshift connection URI or postgres configuration must "
                           "be present in the config yaml")
     
     is_postgres_conn_info = isinstance(db_conn_info, dict)
