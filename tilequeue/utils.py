@@ -1,7 +1,10 @@
 import sys
 import traceback
+import re
 from itertools import islice
-
+from datetime import datetime
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import create_coord
 
 def format_stacktrace_one_line(exc_info=None):
     # exc_info is expected to be an exception tuple from sys.exc_info()
@@ -23,3 +26,51 @@ def grouper(iterable, n):
         if not chunk:
             return
         yield chunk
+
+def parse_log_file(log_file):
+    ip_pattern = '(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+    # didn't match againts explicit date pattern, in case it changes
+    date_pattern = '\[([\d\w\s\/:]+)\]'
+    tile_id_pattern = '\/([\w]+)\/([\d]+)\/([\d]+)\/([\d]+)\.([\d\w]*)'
+
+    log_pattern = '%s - - %s "([\w]+) %s.*' % (ip_pattern, date_pattern, tile_id_pattern)
+    
+    matches = filter(
+        lambda match: match and len(match.groups()) == 8, 
+        map(lambda log_string: re.search(log_pattern, log_string), log_file)
+    )
+
+    iped_dated_coords = map(lambda match: (match.group(1), 
+                                           datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'), 
+                                           coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))), matches)
+    return iped_dated_coords
+
+def mimic_prune_tiles_of_interest_sql_structure(cursor):
+    cursor.execute('''CREATE TABLE IF NOT EXISTS tile_traffic_v4 (
+            id bigserial primary key,
+            date timestamp(6) not null,
+            z integer not null,
+            x integer not null,
+            y integer not null,
+            tilesize integer not null,
+            service varchar(32),
+            host inet not null
+        )''')
+
+def postgres_add_compat_date_utils(cursor):
+    cursor.execute('''
+        CREATE OR REPLACE FUNCTION DATEADD(interval_kind VARCHAR(20), interval_offset INTEGER, dt DATE)
+        RETURNS TIMESTAMP AS $$
+        BEGIN
+            RETURN (SELECT dt + (interval_offset || ' ' || interval_kind)::INTERVAL);
+        END;
+        $$ language plpgsql
+    ''')
+    cursor.execute('''
+        CREATE OR REPLACE FUNCTION GETDATE()
+        RETURNS DATE AS $$
+        BEGIN
+            RETURN (SELECT current_date);
+        END;
+        $$ language plpgsql
+    ''')

@@ -34,12 +34,16 @@ from tilequeue.toi import load_set_from_fp
 from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
+from tilequeue.utils import parse_log_file
+from tilequeue.utils import mimic_prune_tiles_of_interest_sql_structure
+from tilequeue.utils import postgres_add_compat_date_utils
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
+from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
@@ -948,6 +952,40 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('%d tiles of interest processed' % n_toi)
 
 
+def tilequeue_consume_tile_traffic(cfg, peripherals):
+    logger = make_logger(cfg, 'consume_tile_traffic')
+    logger.info('Consuming tile traffic logs ...')
+    logger.info(cfg.tile_traffic_log_path)
+
+    iped_dated_coords = None
+    with open(cfg.tile_traffic_log_path, 'r') as log_file:
+        iped_dated_coords = parse_log_file(log_file)
+
+    if not iped_dated_coords:
+        logger.info("Couldn't parse log file")
+        sys.exit(1)
+    
+    conn_info = dict(cfg.postgresql_conn_info)
+    dbnames = conn_info.pop('dbnames')
+    sql_conn_pool = DBAffinityConnectionsNoLimit(dbnames, conn_info, False)
+    sql_conn = sql_conn_pool.get_conns(1)[0]
+    with sql_conn.cursor() as cursor:
+        mimic_prune_tiles_of_interest_sql_structure(cursor)
+        postgres_add_compat_date_utils(cursor)
+        
+        # insert the log records after the latest_date
+        cursor.execute('SELECT max(date) from tile_traffic_v4')
+        max_timestamp = cursor.fetchone()[0]
+        iped_dated_coords_to_insert = filter(lambda iped_dated_coord: iped_dated_coord[1] > max_timestamp, iped_dated_coords) if max_timestamp else iped_dated_coords
+        for (host, timestamp, marchalled_coord) in iped_dated_coords_to_insert:
+            coord = coord_unmarshall_int(marchalled_coord)
+            cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
+                            % (timestamp, coord.zoom, coord.column, coord.row, 512, 'vector-tiles', host))
+
+        logger.info('Inserted %d records' % len(iped_dated_coords_to_insert))
+
+    sql_conn_pool.put_conns([sql_conn])
+        
 def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'prune_tiles_of_interest')
     logger.info('Pruning tiles of interest ...')
@@ -1541,6 +1579,8 @@ def tilequeue_main(argv_args=None):
             tilequeue_process_wof_neighbourhoods)),
         ('wof-load-initial-neighbourhoods', create_command_parser(
             tilequeue_initial_load_wof_neighbourhoods)),
+        ('consume-tile-traffic', create_command_parser(
+            tilequeue_consume_tile_traffic))
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

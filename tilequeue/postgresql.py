@@ -11,15 +11,16 @@ class DBAffinityConnectionsNoLimit(object):
     # the connections. It's the caller's responsibility to call us
     # back with the connection objects so that we can close them.
 
-    def __init__(self, dbnames, conn_info):
+    def __init__(self, dbnames, conn_info, readonly=True):
         self.dbnames = cycle(dbnames)
         self.conn_info = conn_info
         self.conn_mapping = {}
         self.lock = threading.Lock()
+        self.readonly = readonly
 
     def _make_conn(self, conn_info):
         conn = psycopg2.connect(**conn_info)
-        conn.set_session(readonly=True, autocommit=True)
+        conn.set_session(readonly=self.readonly, autocommit=True)
         register_hstore(conn)
         register_json(conn, loads=ujson.loads)
         return conn
