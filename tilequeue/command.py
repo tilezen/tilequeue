@@ -922,6 +922,7 @@ def tilequeue_seed(cfg, peripherals):
             toi_set.add(coord_int)
 
         peripherals.toi.set_tiles_of_interest(toi_set)
+        emit_toi_stats(toi_set, peripherals)
 
         logger.info('Adding to Tiles of Interest ... done')
 
@@ -986,6 +987,26 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
 
     sql_conn_pool.put_conns([sql_conn])
         
+
+def emit_toi_stats(toi_set, peripherals):
+    """
+    Calculates new TOI stats and emits them via statsd.
+    """
+
+    count_by_zoom = defaultdict(int)
+    total = 0
+    for coord_int in toi_set:
+        coord = coord_unmarshall_int(coord_int)
+        count_by_zoom[coord.zoom] += 1
+        total += 1
+
+    peripherals.stats.gauge('tiles-of-interest.count', total)
+    for zoom, count in count_by_zoom.items():
+        peripherals.stats.gauge(
+            'tiles-of-interest.by-zoom.z{:02d}'.format(zoom),
+            count
+        )
+
 def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'prune_tiles_of_interest')
     logger.info('Pruning tiles of interest ...')
@@ -1173,6 +1194,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Setting new tiles of interest ... ')
 
         peripherals.toi.set_tiles_of_interest(new_toi)
+        emit_toi_stats(new_toi, peripherals)
 
         logger.info('Setting new tiles of interest ... done')
     else:
@@ -1505,6 +1527,7 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger.info('Setting new TOI (with %s tiles) ... ', len(new_toi))
 
     peripherals.toi.set_tiles_of_interest(new_toi)
+    emit_toi_stats(new_toi, peripherals)
 
     logger.info('Setting new TOI (with %s tiles) ... done', len(new_toi))
 
