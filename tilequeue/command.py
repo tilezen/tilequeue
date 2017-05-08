@@ -1000,9 +1000,15 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     prune_cfg = cfg.yml.get('toi-prune', {})
 
     redshift_cfg = prune_cfg.get('redshift', {})
-    redshift_uri = redshift_cfg.get('database-uri')
-    assert redshift_uri, ("A redshift connection URI must "
+    db_conn_info = redshift_cfg.get('database-uri') or cfg.postgresql_conn_info
+    assert db_conn_info, ("A redshift connection or postgres configuration URI must "
                           "be present in the config yaml")
+    
+    is_postgres_conn_info = isinstance(db_conn_info, dict)
+    if is_postgres_conn_info:
+        # use first database specified in postgres config for connection
+        dbname = db_conn_info.pop('dbnames')[0]
+        db_conn_info = dict(db_conn_info, dbname=dbname)
 
     redshift_days_to_query = redshift_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
@@ -1015,12 +1021,13 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                       "to delete must be specified")
 
     redshift_results = defaultdict(int)
-    with psycopg2.connect(redshift_uri) as conn:
+    # db_conn_info is uri when using redshift, dict otherwise
+    with psycopg2.connect(**db_conn_info if is_postgres_conn_info else db_conn_info) as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd(day, -{days}, getdate()))
+                where (date >= dateadd({opt_quote}day{opt_quote}, -{days}, getdate()))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1030,6 +1037,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 """.format(
                     days=redshift_days_to_query,
                     max_zoom=redshift_zoom_cutoff,
+                    # postgres replica of dateadd(check utils.py) first arg(interval kind) is a string
+                    opt_quote="'" if is_postgres_conn_info else ""
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
