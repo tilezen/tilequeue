@@ -188,6 +188,9 @@ toi-store:
 
 # Configuration for the tiles of interest prune/garden command.
 toi-prune:
+  # location of tileserver logs
+  tile-traffic-log-path: ../tileserver/nohup.out
+  
   # Connection and query configuration for a RedShift database containing
   # request information for tiles.
   redshift:
