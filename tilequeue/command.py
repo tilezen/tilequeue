@@ -1058,7 +1058,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd({opt_quote}day{opt_quote}, -{days}, getdate()))
+                where (date >= dateadd('day', -{days}, getdate()))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1067,9 +1067,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 order by z, x, y, tilesize
                 """.format(
                     days=redshift_days_to_query,
-                    max_zoom=redshift_zoom_cutoff,
-                    # postgres replica of dateadd(check utils.py) first arg(interval kind) is a string
-                    opt_quote="'" if is_postgres_conn_info else ""
+                    max_zoom=redshift_zoom_cutoff
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
@@ -1163,7 +1161,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            removed = store.delete_tiles(map(lambda coord_int: coord_unmarshall_int(coord_int), coord_ints), 
+            removed = store.delete_tiles(map(coord_unmarshall_int, coord_ints), 
                                          lookup_format_by_extension(store_parts['format']), store_parts['layer'])
             logger.info('Removed %s tiles from S3', removed)
 
