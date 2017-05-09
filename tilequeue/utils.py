@@ -34,15 +34,15 @@ def parse_log_file(log_file):
     tile_id_pattern = '\/([\w]+)\/([\d]+)\/([\d]+)\/([\d]+)\.([\d\w]*)'
 
     log_pattern = '%s - - %s "([\w]+) %s.*' % (ip_pattern, date_pattern, tile_id_pattern)
-    
-    matches = filter(
-        lambda match: match and len(match.groups()) == 8, 
-        map(lambda log_string: re.search(log_pattern, log_string), log_file)
-    )
 
-    iped_dated_coords = map(lambda match: (match.group(1), 
-                                           datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'), 
-                                           coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))), matches)
+    iped_dated_coords = []
+    for log_string in log_file:
+        match = re.search(log_pattern, log_string)
+        if match and len(match.groups()) == 8:
+            iped_dated_coords.append((match.group(1), 
+                                      datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'), 
+                                      coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))))
+
     return iped_dated_coords
 
 def mimic_prune_tiles_of_interest_sql_structure(cursor):

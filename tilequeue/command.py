@@ -956,8 +956,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
 def tilequeue_consume_tile_traffic(cfg, peripherals):
     logger = make_logger(cfg, 'consume_tile_traffic')
     logger.info('Consuming tile traffic logs ...')
-    logger.info(cfg.tile_traffic_log_path)
-
+    
     iped_dated_coords = None
     with open(cfg.tile_traffic_log_path, 'r') as log_file:
         iped_dated_coords = parse_log_file(log_file)
@@ -977,13 +976,16 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
         # insert the log records after the latest_date
         cursor.execute('SELECT max(date) from tile_traffic_v4')
         max_timestamp = cursor.fetchone()[0]
-        iped_dated_coords_to_insert = filter(lambda iped_dated_coord: iped_dated_coord[1] > max_timestamp, iped_dated_coords) if max_timestamp else iped_dated_coords
-        for (host, timestamp, marchalled_coord) in iped_dated_coords_to_insert:
-            coord = coord_unmarshall_int(marchalled_coord)
-            cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
+        
+        n_coords_inserted = 0
+        for host, timestamp, coord_int in iped_dated_coords:
+            if not max_timestamp or timestamp > max_timestamp:
+                coord = coord_unmarshall_int(coord_int)
+                cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
                             % (timestamp, coord.zoom, coord.column, coord.row, 512, 'vector-tiles', host))
+                n_coords_inserted += 1
 
-        logger.info('Inserted %d records' % len(iped_dated_coords_to_insert))
+        logger.info('Inserted %d records' % n_coords_inserted)
 
     sql_conn_pool.put_conns([sql_conn])
         
