@@ -1085,8 +1085,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 coord = deserialize_coord(line.strip())
                 if coord:
                     coord_int = coord_marshall_int(coord)
-                    uplifted_coord_int = coord_int_zoom_up(coord_int)
-                    immortal_tiles.add(uplifted_coord_int)
+                    immortal_tiles.add(coord_int)
 
         # Filter out nulls that might sneak in for various reasons
         immortal_tiles = filter(None, immortal_tiles)
