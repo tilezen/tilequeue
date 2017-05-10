@@ -1074,6 +1074,20 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     coord_marshall_int(deserialize_coord(l.strip()))
                     for l in f
                 )
+        elif 's3' in info:
+            from boto import connect_s3
+            from boto.s3.bucket import Bucket
+            s3_conn = connect_s3()
+            bucket = Bucket(s3_conn, info['s3']['bucket'])
+            key = bucket.get_key(info['s3']['key'])
+            raw_coord_data = key.get_contents_as_string()
+            for line in raw_coord_data.splitlines():
+                coord = deserialize_coord(line.strip())
+                if coord:
+                    # NOTE: the tiles in the file should be of the
+                    # same size as the toi
+                    coord_int = coord_marshall_int(coord)
+                    immortal_tiles.add(coord_int)
 
         # Filter out nulls that might sneak in for various reasons
         immortal_tiles = filter(None, immortal_tiles)
