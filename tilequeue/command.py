@@ -1084,6 +1084,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             for line in raw_coord_data.splitlines():
                 coord = deserialize_coord(line.strip())
                 if coord:
+                    # NOTE: the tiles in the file should be of the
+                    # same size as the toi
                     coord_int = coord_marshall_int(coord)
                     immortal_tiles.add(coord_int)
 
