@@ -957,11 +957,11 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     logger = make_logger(cfg, 'consume_tile_traffic')
     logger.info('Consuming tile traffic logs ...')
     
-    iped_dated_coords = None
+    tile_log_records = None
     with open(cfg.tile_traffic_log_path, 'r') as log_file:
-        iped_dated_coords = parse_log_file(log_file)
+        tile_log_records = parse_log_file(log_file)
 
-    if not iped_dated_coords:
+    if not tile_log_records:
         logger.info("Couldn't parse log file")
         sys.exit(1)
     
@@ -978,7 +978,7 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
         max_timestamp = cursor.fetchone()[0]
         
         n_coords_inserted = 0
-        for host, timestamp, coord_int in iped_dated_coords:
+        for host, timestamp, coord_int in tile_log_records:
             if not max_timestamp or timestamp > max_timestamp:
                 coord = coord_unmarshall_int(coord_int)
                 cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
