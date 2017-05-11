@@ -1078,8 +1078,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             from boto import connect_s3
             from boto.s3.bucket import Bucket
             s3_conn = connect_s3()
-            bucket = Bucket(s3_conn, info['s3']['bucket'])
-            key = bucket.get_key(info['s3']['key'])
+            bucket = Bucket(s3_conn, info['bucket'])
+            key = bucket.get_key(info['key'])
             raw_coord_data = key.get_contents_as_string()
             for line in raw_coord_data.splitlines():
                 coord = deserialize_coord(line.strip())

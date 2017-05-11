@@ -228,6 +228,5 @@ toi-prune:
     #  file: list-of-tile-coordinates.txt
     # NOTE: the coordinates should be of the same size as the toi, currently 512
     # integration-test-coordinates:
-    #   s3:
-    #     bucket: mapzen-tiles-assets
-    #     key: test/integration-test-coords.txt
+    #   bucket: mapzen-tiles-assets
+    #   key: test/integration-test-coords.txt
