@@ -1074,7 +1074,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     coord_marshall_int(deserialize_coord(l.strip()))
                     for l in f
                 )
-        elif 's3' in info:
+        elif 'bucket' in info:
             from boto import connect_s3
             from boto.s3.bucket import Bucket
             s3_conn = connect_s3()
