@@ -361,22 +361,20 @@ def _cut_child_tiles(
         buffer_cfg)
 
 
-# given a coord and the raw feature layers results from the database,
-# filter, transform, sort, post-process and then format according to
-# each formatter. this is the entry point from the worker process
-#
-# the nominal zoom is the "display scale" zoom, which may not correspond
-# to actual tile coordinates in future versions of the code. it just
-# becomes a measure of the scale between tile features and intended
-# display size.
-def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
-                  formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  scale=4096):
+def process_coord_no_format(
+        coord, nominal_zoom, unpadded_bounds, feature_layers,
+        post_process_data):
     feature_layers, extra_data = _preprocess_data(feature_layers)
 
     processed_feature_layers = _process_feature_layers(
         feature_layers, nominal_zoom, post_process_data, unpadded_bounds)
 
+    return processed_feature_layers, extra_data
+
+
+def format_coord(
+        coord, processed_feature_layers, formats, unpadded_bounds, cut_coords,
+        buffer_cfg, extra_data, scale=4096):
     coord_formatted_tiles = _format_feature_layers(
         processed_feature_layers, coord, formats, unpadded_bounds, scale,
         buffer_cfg)
@@ -390,4 +388,26 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
             children_formatted_tiles.extend(child_tiles)
 
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
+    return all_formatted_tiles, extra_data
+
+
+# given a coord and the raw feature layers results from the database,
+# filter, transform, sort, post-process and then format according to
+# each formatter. this is the entry point from the worker process
+#
+# the nominal zoom is the "display scale" zoom, which may not correspond
+# to actual tile coordinates in future versions of the code. it just
+# becomes a measure of the scale between tile features and intended
+# display size.
+def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
+                  formats, unpadded_bounds, cut_coords, buffer_cfg,
+                  scale=4096):
+    processed_feature_layers, extra_data = process_coord_no_format(
+        coord, nominal_zoom, unpadded_bounds, feature_layers,
+        post_process_data)
+
+    all_formatted_tiles, extra_data = format_coord(
+        coord, processed_feature_layers, formats, unpadded_bounds, cut_coords,
+        buffer_cfg, extra_data, scale)
+
     return all_formatted_tiles, extra_data
