@@ -176,7 +176,7 @@ def _visible_shape(shape, area_threshold_meters):
 
 def _create_formatted_tile(
         feature_layers, format, scale, unpadded_bounds, unpadded_bounds_lnglat,
-        coord, layer, meters_per_pixel_dim, buffer_cfg):
+        coord, nominal_zoom, layer, meters_per_pixel_dim, buffer_cfg):
 
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
@@ -185,8 +185,9 @@ def _create_formatted_tile(
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
-    format.format_tile(tile_data_file, transformed_feature_layers, coord.zoom,
-                       unpadded_bounds, unpadded_bounds_lnglat)
+    format.format_tile(
+        tile_data_file, transformed_feature_layers, nominal_zoom,
+        unpadded_bounds, unpadded_bounds_lnglat)
     tile = tile_data_file.getvalue()
 
     formatted_tile = dict(format=format, tile=tile, coord=coord, layer=layer)
@@ -291,14 +292,8 @@ def process_coord_no_format(
 
 
 def _format_feature_layers(
-        processed_feature_layers, coord, formats, unpadded_bounds, scale,
-        buffer_cfg):
-
-    # the nominal zoom is the "display scale" zoom, which may not correspond
-    # to actual tile coordinates in future versions of the code. it just
-    # becomes a measure of the scale between tile features and intended
-    # display size.
-    nominal_zoom = coord.zoom
+        processed_feature_layers, coord, nominal_zoom, formats,
+        unpadded_bounds, scale, buffer_cfg):
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
@@ -314,40 +309,41 @@ def _format_feature_layers(
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
-            unpadded_bounds_lnglat, coord, layer, meters_per_pixel_dim,
-            buffer_cfg)
+            unpadded_bounds_lnglat, coord, nominal_zoom, layer,
+            meters_per_pixel_dim, buffer_cfg)
         formatted_tiles.append(formatted_tile)
 
     return formatted_tiles
 
 
 def _cut_child_tiles(
-        feature_layers, cut_coord, formats, scale, buffer_cfg):
+        feature_layers, cut_coord, nominal_zoom, formats, scale, buffer_cfg):
 
     unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
-    meters_per_pixel_dim = calc_meters_per_pixel_dim(cut_coord.zoom)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
     cut_feature_layers = _cut_coord(
         feature_layers, unpadded_cut_bounds, meters_per_pixel_dim, buffer_cfg)
 
     return _format_feature_layers(
-        cut_feature_layers, cut_coord, formats, unpadded_cut_bounds, scale,
-        buffer_cfg)
+        cut_feature_layers, cut_coord, nominal_zoom, formats,
+        unpadded_cut_bounds, scale, buffer_cfg)
 
 
 def format_coord(
-        coord, processed_feature_layers, formats, unpadded_bounds, cut_coords,
-        buffer_cfg, extra_data, scale=4096):
+        coord, nominal_zoom, processed_feature_layers, formats,
+        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale=4096):
+
     coord_formatted_tiles = _format_feature_layers(
-        processed_feature_layers, coord, formats, unpadded_bounds, scale,
-        buffer_cfg)
+        processed_feature_layers, coord, nominal_zoom, formats,
+        unpadded_bounds, scale, buffer_cfg)
 
     children_formatted_tiles = []
     if cut_coords:
         for cut_coord in cut_coords:
             child_tiles = _cut_child_tiles(
-                processed_feature_layers, cut_coord, formats, scale,
-                buffer_cfg)
+                processed_feature_layers, cut_coord, nominal_zoom, formats,
+                scale, buffer_cfg)
             children_formatted_tiles.extend(child_tiles)
 
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
@@ -369,7 +365,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data)
 
     all_formatted_tiles, extra_data = format_coord(
-        coord, processed_feature_layers, formats, unpadded_bounds, cut_coords,
-        buffer_cfg, extra_data, scale)
+        coord, nominal_zoom, processed_feature_layers, formats,
+        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
     return all_formatted_tiles, extra_data
