@@ -47,79 +47,6 @@ def _sizeof(val):
     return size
 
 
-def _preprocess_data(feature_layers):
-    preproc_feature_layers = []
-    extra_data = dict(size={})
-
-    for feature_layer in feature_layers:
-        layer_datum = feature_layer['layer_datum']
-        geometry_types = layer_datum['geometry_types']
-        padded_bounds = feature_layer['padded_bounds']
-
-        features = []
-        features_size = 0
-        for row in feature_layer['features']:
-            wkb = row.pop('__geometry__')
-            shape = loads(wkb)
-
-            if shape.is_empty:
-                continue
-
-            if not shape.is_valid:
-                continue
-
-            if geometry_types is not None:
-                if shape.type not in geometry_types:
-                    continue
-
-            # since a bounding box intersection is used, we
-            # perform a more accurate check here to filter out
-            # any extra features
-            # the formatter specific transformations will take
-            # care of any additional filtering
-            geom_type_bounds = padded_bounds[
-                normalize_geometry_type(shape.type)]
-            shape_padded_bounds = geometry.box(*geom_type_bounds)
-            if not shape_padded_bounds.intersects(shape):
-                continue
-
-            feature_id = row.pop('__id__')
-            props = dict()
-            feature_size = getsizeof(feature_id) + len(wkb)
-            for k, v in row.iteritems():
-                if k == 'mz_properties':
-                    for output_key, output_val in v.items():
-                        if output_val is not None:
-                            # all other tags are utf8 encoded, encode
-                            # these the same way to be consistent
-                            if isinstance(output_key, unicode):
-                                output_key = output_key.encode('utf-8')
-                            if isinstance(output_val, unicode):
-                                output_val = output_val.encode('utf-8')
-                            props[output_key] = output_val
-                            feature_size += len(output_key) + \
-                                _sizeof(output_val)
-                else:
-                    props[k] = v
-                    feature_size += len(k) + _sizeof(v)
-
-            feature = shape, props, feature_id
-            features.append(feature)
-            features_size += feature_size
-
-        extra_data['size'][layer_datum['name']] = features_size
-
-        preproc_feature_layer = dict(
-            name=layer_datum['name'],
-            layer_datum=layer_datum,
-            features=features,
-            padded_bounds=padded_bounds,
-        )
-        preproc_feature_layers.append(preproc_feature_layer)
-
-    return preproc_feature_layers, extra_data
-
-
 # shared context for all the post-processor functions. this single object can
 # be passed around rather than needing all the parameters to be explicit.
 Context = namedtuple('Context', [
@@ -249,7 +176,7 @@ def _visible_shape(shape, area_threshold_meters):
 
 def _create_formatted_tile(
         feature_layers, format, scale, unpadded_bounds, unpadded_bounds_lnglat,
-        coord, layer, meters_per_pixel_dim, buffer_cfg):
+        coord, nominal_zoom, layer, meters_per_pixel_dim, buffer_cfg):
 
     # perform format specific transformations
     transformed_feature_layers = transform_feature_layers_shape(
@@ -258,23 +185,26 @@ def _create_formatted_tile(
 
     # use the formatter to generate the tile
     tile_data_file = StringIO()
-    format.format_tile(tile_data_file, transformed_feature_layers, coord.zoom,
-                       unpadded_bounds, unpadded_bounds_lnglat)
+    format.format_tile(
+        tile_data_file, transformed_feature_layers, nominal_zoom,
+        unpadded_bounds, unpadded_bounds_lnglat)
     tile = tile_data_file.getvalue()
 
     formatted_tile = dict(format=format, tile=tile, coord=coord, layer=layer)
     return formatted_tile
 
 
-def _process_feature_layers(
-        feature_layers, nominal_zoom, post_process_data, unpadded_bounds):
+def process_coord_no_format(
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data):
 
+    extra_data = dict(size={})
     processed_feature_layers = []
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         layer_name = layer_datum['name']
-        features = feature_layer['features']
+        geometry_types = layer_datum['geometry_types']
+        padded_bounds = feature_layer['padded_bounds']
 
         transform_fn_names = layer_datum['transform_fn_names']
         if transform_fn_names:
@@ -283,28 +213,73 @@ def _process_feature_layers(
         else:
             layer_transform_fn = None
 
-        # perform any specific layer transformations
-        if layer_transform_fn is None:
-            processed_features = features
-        else:
-            processed_features = []
-            for feature in features:
-                shape, props, feature_id = feature
+        features = []
+        features_size = 0
+        for row in feature_layer['features']:
+            wkb = row.pop('__geometry__')
+            shape = loads(wkb)
+
+            if shape.is_empty:
+                continue
+
+            if not shape.is_valid:
+                continue
+
+            if geometry_types is not None:
+                if shape.type not in geometry_types:
+                    continue
+
+            # since a bounding box intersection is used, we
+            # perform a more accurate check here to filter out
+            # any extra features
+            # the formatter specific transformations will take
+            # care of any additional filtering
+            geom_type_bounds = padded_bounds[
+                normalize_geometry_type(shape.type)]
+            shape_padded_bounds = geometry.box(*geom_type_bounds)
+            if not shape_padded_bounds.intersects(shape):
+                continue
+
+            feature_id = row.pop('__id__')
+            props = dict()
+            feature_size = getsizeof(feature_id) + len(wkb)
+            for k, v in row.iteritems():
+                if k == 'mz_properties':
+                    for output_key, output_val in v.items():
+                        if output_val is not None:
+                            # all other tags are utf8 encoded, encode
+                            # these the same way to be consistent
+                            if isinstance(output_key, unicode):
+                                output_key = output_key.encode('utf-8')
+                            if isinstance(output_val, unicode):
+                                output_val = output_val.encode('utf-8')
+                            props[output_key] = output_val
+                            feature_size += len(output_key) + \
+                                _sizeof(output_val)
+                else:
+                    props[k] = v
+                    feature_size += len(k) + _sizeof(v)
+                features_size += feature_size
+
+            extra_data['size'][layer_datum['name']] = features_size
+
+            if layer_transform_fn:
                 shape, props, feature_id = layer_transform_fn(
                     shape, props, feature_id, nominal_zoom)
-                transformed_feature = shape, props, feature_id
-                processed_features.append(transformed_feature)
+
+            feature = shape, props, feature_id
+            features.append(feature)
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
             sort_fn = resolve(sort_fn_name)
-            processed_features = sort_fn(processed_features, nominal_zoom)
+            features = sort_fn(features, nominal_zoom)
 
         feature_layer = dict(
             name=layer_name,
-            features=processed_features,
+            features=features,
             layer_datum=layer_datum,
-            padded_bounds=feature_layer['padded_bounds'],
+            padded_bounds=padded_bounds,
         )
         processed_feature_layers.append(feature_layer)
 
@@ -313,18 +288,12 @@ def _process_feature_layers(
         processed_feature_layers, post_process_data, nominal_zoom,
         unpadded_bounds)
 
-    return processed_feature_layers
+    return processed_feature_layers, extra_data
 
 
 def _format_feature_layers(
-        processed_feature_layers, coord, formats, unpadded_bounds, scale,
-        buffer_cfg):
-
-    # the nominal zoom is the "display scale" zoom, which may not correspond
-    # to actual tile coordinates in future versions of the code. it just
-    # becomes a measure of the scale between tile features and intended
-    # display size.
-    nominal_zoom = coord.zoom
+        processed_feature_layers, coord, nominal_zoom, formats,
+        unpadded_bounds, scale, buffer_cfg):
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
@@ -340,25 +309,45 @@ def _format_feature_layers(
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
-            unpadded_bounds_lnglat, coord, layer, meters_per_pixel_dim,
-            buffer_cfg)
+            unpadded_bounds_lnglat, coord, nominal_zoom, layer,
+            meters_per_pixel_dim, buffer_cfg)
         formatted_tiles.append(formatted_tile)
 
     return formatted_tiles
 
 
 def _cut_child_tiles(
-        feature_layers, cut_coord, formats, scale, buffer_cfg):
+        feature_layers, cut_coord, nominal_zoom, formats, scale, buffer_cfg):
 
     unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
-    meters_per_pixel_dim = calc_meters_per_pixel_dim(cut_coord.zoom)
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
 
     cut_feature_layers = _cut_coord(
         feature_layers, unpadded_cut_bounds, meters_per_pixel_dim, buffer_cfg)
 
     return _format_feature_layers(
-        cut_feature_layers, cut_coord, formats, unpadded_cut_bounds, scale,
-        buffer_cfg)
+        cut_feature_layers, cut_coord, nominal_zoom, formats,
+        unpadded_cut_bounds, scale, buffer_cfg)
+
+
+def format_coord(
+        coord, nominal_zoom, processed_feature_layers, formats,
+        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale=4096):
+
+    coord_formatted_tiles = _format_feature_layers(
+        processed_feature_layers, coord, nominal_zoom, formats,
+        unpadded_bounds, scale, buffer_cfg)
+
+    children_formatted_tiles = []
+    if cut_coords:
+        for cut_coord in cut_coords:
+            child_tiles = _cut_child_tiles(
+                processed_feature_layers, cut_coord, nominal_zoom, formats,
+                scale, buffer_cfg)
+            children_formatted_tiles.extend(child_tiles)
+
+    all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
+    return all_formatted_tiles, extra_data
 
 
 # given a coord and the raw feature layers results from the database,
@@ -372,22 +361,11 @@ def _cut_child_tiles(
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
                   scale=4096):
-    feature_layers, extra_data = _preprocess_data(feature_layers)
+    processed_feature_layers, extra_data = process_coord_no_format(
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data)
 
-    processed_feature_layers = _process_feature_layers(
-        feature_layers, nominal_zoom, post_process_data, unpadded_bounds)
+    all_formatted_tiles, extra_data = format_coord(
+        coord, nominal_zoom, processed_feature_layers, formats,
+        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
-    coord_formatted_tiles = _format_feature_layers(
-        processed_feature_layers, coord, formats, unpadded_bounds, scale,
-        buffer_cfg)
-
-    children_formatted_tiles = []
-    if cut_coords:
-        for cut_coord in cut_coords:
-            child_tiles = _cut_child_tiles(
-                processed_feature_layers, cut_coord, formats, scale,
-                buffer_cfg)
-            children_formatted_tiles.extend(child_tiles)
-
-    all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
     return all_formatted_tiles, extra_data
