@@ -122,8 +122,6 @@ class Configuration(object):
         assert self.max_zoom_with_changes > self.metatile_zoom
         self.max_zoom = self.max_zoom_with_changes - self.metatile_zoom
 
-        self.store_orig = self._cfg('metatile store_metatile_and_originals')
-
         self.sql_queue_buffer_size = self._cfg('queue_buffer_size sql')
         self.proc_queue_buffer_size = self._cfg('queue_buffer_size proc')
         self.s3_queue_buffer_size = self._cfg('queue_buffer_size s3')
@@ -221,7 +219,6 @@ def default_yml_config():
         },
         'metatile': {
             'size': None,
-            'store_metatile_and_originals': False,
         },
         'queue_buffer_size': {
             'sql': None,

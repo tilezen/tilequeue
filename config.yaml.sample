@@ -169,11 +169,6 @@ metatile:
   # be available in the future.
   size: null
 
-  # if this is set to true, then tilequeue will write the individual formats in
-  # addition to the metatile. this can be useful when gracefully "cutting over"
-  # to a metatile-based system from an individual format based one.
-  store_metatile_and_originals: false
-
 # Configuration for where to store the tiles of interest set
 toi-store:
   # We support storing the TOI in S3 or as a file
