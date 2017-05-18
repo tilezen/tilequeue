@@ -910,7 +910,10 @@ def tilequeue_seed(cfg, peripherals):
     if cfg.seed_should_add_to_tiles_of_interest:
         logger.info('Adding to Tiles of Interest ... ')
 
-        toi_set = peripherals.toi.fetch_tiles_of_interest()
+        if not os.path.exists(cfg.toi_store_file_name) and cfg.toi_store_type == 'file':
+            toi_set = set()
+        else:
+            toi_set = peripherals.toi.fetch_tiles_of_interest()
 
         tile_generator = make_seed_tile_generator(cfg)
         for coord in tile_generator:
