@@ -21,6 +21,7 @@ from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
 from tilequeue.store import s3_tile_key
 from tilequeue.tile import coord_int_zoom_up
+from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
@@ -1098,6 +1099,14 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
         n_inc = len(immortal_tiles)
         new_toi = new_toi.union(immortal_tiles)
+
+        # ensure that the new coordinates have valid zooms
+        new_toi_valid_range = set()
+        for coord_int in new_toi:
+            coord = coord_unmarshall_int(coord_int)
+            if coord_is_valid(coord, cfg.max_zoom):
+                new_toi_valid_range.add(coord_int)
+        new_toi = new_toi_valid_range
 
         logger.info('Adding in tiles from %s ... done. %s found', name, n_inc)
 

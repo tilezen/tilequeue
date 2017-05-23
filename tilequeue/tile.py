@@ -346,8 +346,8 @@ def normalize_geometry_type(geom_type):
     return result
 
 
-def coord_is_valid(coord):
-    if coord.zoom < 0 or coord.zoom > 20:
+def coord_is_valid(coord, max_zoom=20):
+    if coord.zoom < 0 or coord.zoom > max_zoom:
         return False
     if coord.column < 0 or coord.row < 0:
         return False
