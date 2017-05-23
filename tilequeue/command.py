@@ -364,8 +364,9 @@ def tilequeue_intersect(cfg, peripherals):
         # along more consistently rather than bursts
         expired_tile_files_cap = 20
         file_names = file_names[:expired_tile_files_cap]
-        expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
-                              for x in file_names]
+        expired_tile_paths = \
+            [os.path.join(cfg.intersect_expired_tiles_location, x)
+             for x in file_names]
     else:
         expired_tile_paths = [cfg.intersect_expired_tiles_location]
 
@@ -424,7 +425,6 @@ def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
         return make_tile_file_store(cfg.s3_path or store_name)
-
 
     elif store_type == 's3':
         from tilequeue.store import make_s3_store
