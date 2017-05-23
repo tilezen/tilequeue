@@ -570,7 +570,7 @@ def tilequeue_process(cfg, peripherals):
     assert n_simultaneous_query_sets > 0
     # reduce queue size when we're rendering metatiles to try and avoid the
     # geometry waiting to be processed from taking up all the RAM!
-    default_queue_buffer_size = max(1, 128 >> (2 * cfg.metatile_size))
+    default_queue_buffer_size = max(1, 128 >> (2 * (cfg.metatile_size or 0)))
     sql_queue_buffer_size = cfg.sql_queue_buffer_size or \
         default_queue_buffer_size
     proc_queue_buffer_size = cfg.proc_queue_buffer_size or \
