@@ -1,6 +1,6 @@
+from collections import defaultdict
 from collections import Iterable
 from collections import namedtuple
-from collections import defaultdict
 from contextlib import closing
 from itertools import chain
 from jinja2 import Environment
@@ -12,12 +12,12 @@ from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
+from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_bbox_filter
 from tilequeue.query import jinja_filter_bbox_intersection
-from tilequeue.query import jinja_filter_bbox_padded_intersection
-from tilequeue.query import jinja_filter_bbox
-from tilequeue.query import jinja_filter_geometry
 from tilequeue.query import jinja_filter_bbox_overlaps
+from tilequeue.query import jinja_filter_bbox_padded_intersection
+from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
 from tilequeue.store import s3_tile_key
 from tilequeue.tile import coord_int_zoom_up
@@ -43,20 +43,20 @@ from tilequeue.worker import SqsQueueWriter
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
+import datetime
 import logging
 import logging.config
 import multiprocessing
 import operator
 import os
+import os.path
 import Queue
 import signal
 import sys
 import threading
 import time
-import yaml
-import datetime
-import os.path
 import traceback
+import yaml
 
 
 def create_command_parser(fn):
