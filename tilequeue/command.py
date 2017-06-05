@@ -1463,45 +1463,6 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     )
 
 
-def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
-    """
-    Dumps the tiles of interest from Redis into a newline-delimited
-    file called 'toi.txt'.
-
-    This is intended to be used once to migrate away from using Redis
-    and then removed.
-    """
-    logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
-    logger.info('Dumping TOI from Redis ...')
-
-    logger.info('Fetching tiles of interest from Redis ...')
-
-    # Make a raw Redis client so we can do low-level set manipulation
-    redis_client = make_redis_client(cfg)
-
-    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key, count=10000)
-
-    toi_set = set()
-    for coord_int in toi_iter:
-        toi_set.add(coord_int)
-
-    logger.info('Fetching tiles of interest from Redis ... done')
-
-    toi_filename = "toi.txt"
-
-    n_toi = len(toi_set)
-    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
-
-    with open(toi_filename, "w") as f:
-        save_set_to_fp(toi_set, f)
-
-    logger.info(
-        'Writing %d tiles of interest to %s ... done',
-        n_toi,
-        toi_filename
-    )
-
-
 def tilequeue_load_tiles_of_interest(cfg, peripherals):
     """
     Given a newline-delimited file containing tile coordinates in
@@ -1581,9 +1542,6 @@ def tilequeue_main(argv_args=None):
         ('intersect', create_command_parser(tilequeue_intersect)),
         ('dump-tiles-of-interest',
             create_command_parser(tilequeue_dump_tiles_of_interest)),
-        ('dump-tiles-of-interest-from-redis',
-            create_command_parser(
-                tilequeue_dump_tiles_of_interest_from_redis)),
         ('load-tiles-of-interest',
             create_command_parser(tilequeue_load_tiles_of_interest)),
         ('enqueue-tiles-of-interest',
