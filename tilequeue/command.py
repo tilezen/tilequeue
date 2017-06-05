@@ -35,12 +35,14 @@ from tilequeue.toi import load_set_from_fp
 from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
+from tilequeue.utils import parse_log_file
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
+from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
@@ -958,6 +960,41 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('%d tiles of interest processed' % n_toi)
 
 
+def tilequeue_consume_tile_traffic(cfg, peripherals):
+    logger = make_logger(cfg, 'consume_tile_traffic')
+    logger.info('Consuming tile traffic logs ...')
+    
+    tile_log_records = None
+    with open(cfg.tile_traffic_log_path, 'r') as log_file:
+        tile_log_records = parse_log_file(log_file)
+
+    if not tile_log_records:
+        logger.info("Couldn't parse log file")
+        sys.exit(1)
+    
+    conn_info = dict(cfg.postgresql_conn_info)
+    dbnames = conn_info.pop('dbnames')
+    sql_conn_pool = DBAffinityConnectionsNoLimit(dbnames, conn_info, False)
+    sql_conn = sql_conn_pool.get_conns(1)[0]
+    with sql_conn.cursor() as cursor:
+        
+        # insert the log records after the latest_date
+        cursor.execute('SELECT max(date) from tile_traffic_v4')
+        max_timestamp = cursor.fetchone()[0]
+        
+        n_coords_inserted = 0
+        for host, timestamp, coord_int in tile_log_records:
+            if not max_timestamp or timestamp > max_timestamp:
+                coord = coord_unmarshall_int(coord_int)
+                cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
+                            % (timestamp, coord.zoom, coord.column, coord.row, 512, 'vector-tiles', host))
+                n_coords_inserted += 1
+
+        logger.info('Inserted %d records' % n_coords_inserted)
+
+    sql_conn_pool.put_conns([sql_conn])
+        
+
 def emit_toi_stats(toi_set, peripherals):
     """
     Calculates new TOI stats and emits them via statsd.
@@ -977,7 +1014,6 @@ def emit_toi_stats(toi_set, peripherals):
             count
         )
 
-
 def tilequeue_prune_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'prune_tiles_of_interest')
     logger.info('Pruning tiles of interest ...')
@@ -991,28 +1027,36 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_cfg = prune_cfg.get('redshift', {})
-    redshift_uri = redshift_cfg.get('database-uri')
-    assert redshift_uri, ("A redshift connection URI must "
+    tile_history_cfg = prune_cfg.get('tile-history', {})
+    db_conn_info = tile_history_cfg.get('database-uri')
+    assert db_conn_info, ("A postgres-compatible connection URI must "
                           "be present in the config yaml")
-
-    redshift_days_to_query = redshift_cfg.get('days')
+    
+    redshift_days_to_query = tile_history_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
-    redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
+    redshift_zoom_cutoff = int(tile_history_cfg.get('max-zoom', '16'))
 
-    s3_parts = prune_cfg.get('s3')
-    assert s3_parts, ("The name of an S3 bucket containing tiles "
-                      "to delete must be specified")
+    # flag indicating that s3 entry in toi-prune is used for s3 store 
+    legacy_fallback = 's3' in prune_cfg
+    store_parts = prune_cfg.get('s3') or prune_cfg.get('store')
+    assert store_parts, ("The configuration of a store containing tiles "
+                      "to delete must be specified under toi-prune:store or toi-prune:s3")
+    # explictly override the store configuration with values provided in toi-prune:s3
+    if legacy_fallback:
+        cfg.store_type = 's3'
+        cfg.s3_bucket = store_parts['bucket']
+        cfg.s3_date_prefix = store_parts['date-prefix']
+        cfg.s3_path = store_parts['path']
 
     redshift_results = defaultdict(int)
-    with psycopg2.connect(redshift_uri) as conn:
+    with psycopg2.connect(db_conn_info) as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd(day, -{days}, getdate()))
+                where (date >= (current_timestamp - interval '{days} days'))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1021,7 +1065,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 order by z, x, y, tilesize
                 """.format(
                     days=redshift_days_to_query,
-                    max_zoom=redshift_zoom_cutoff,
+                    max_zoom=redshift_zoom_cutoff
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
@@ -1128,25 +1172,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    def delete_from_s3(s3_parts, coord_ints):
-        # Remove from S3
-        s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-        buk = s3.get_bucket(s3_parts['bucket'], validate=False)
-        keys = [
-            s3_tile_key(
-                s3_parts['date-prefix'],
-                s3_parts['path'],
-                s3_parts['layer'],
-                coord_unmarshall_int(coord_int),
-                s3_parts['format']
-            )
-            for coord_int in coord_ints
-        ]
-        del_result = buk.delete_keys(keys)
-        removed = len(del_result.deleted)
-
-        logger.info('Removed %s tiles from S3', removed)
-
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
     if not toi_to_remove:
         logger.info('Skipping TOI remove step because there are '
                     'no tiles to remove')
@@ -1155,7 +1181,9 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            delete_from_s3(s3_parts, coord_ints)
+            removed = store.delete_tiles(map(coord_unmarshall_int, coord_ints), 
+                                         lookup_format_by_extension(store_parts['format']), store_parts['layer'])
+            logger.info('Removed %s tiles from S3', removed)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
@@ -1553,6 +1581,8 @@ def tilequeue_main(argv_args=None):
             tilequeue_process_wof_neighbourhoods)),
         ('wof-load-initial-neighbourhoods', create_command_parser(
             tilequeue_initial_load_wof_neighbourhoods)),
+        ('consume-tile-traffic', create_command_parser(
+            tilequeue_consume_tile_traffic))
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)

@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,intersect,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query
+keys=root,process,seed,intersect,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic
 
 [handlers]
 keys=consoleHandler
@@ -69,6 +69,12 @@ propagate=0
 level=DEBUG
 handlers=consoleHandler
 qualName=query
+propagate=0
+
+[logger_consume_tile_traffic]
+level=INFO
+handlers=consoleHandler
+qualName=consume_tile_traffic
 propagate=0
 
 [handler_consoleHandler]

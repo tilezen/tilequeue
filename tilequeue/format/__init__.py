@@ -108,6 +108,7 @@ extension_to_format = dict(
     vtm=vtm_format,
     mvt=mvt_format,
     mvtb=mvtb_format,
+    zip=zip_format
 )
 
 name_to_format = {
@@ -116,6 +117,7 @@ name_to_format = {
     'TopoJSON': topojson_format,
     'MVT': mvt_format,
     'MVT Buffered': mvtb_format,
+    'ZIP Metatile': zip_format
 }
 
 
