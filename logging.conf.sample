@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,intersect,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,dump_tiles_of_interest_from_redis,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic
+keys=root,process,seed,intersect,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic
 
 [handlers]
 keys=consoleHandler
