@@ -29,12 +29,6 @@ handlers=consoleHandler
 qualName=dump_tiles_of_interest
 propagate=0
 
-[logger_dump_tiles_of_interest_from_redis]
-level=INFO
-handlers=consoleHandler
-qualName=dump_tiles_of_interest_from_redis
-propagate=0
-
 [logger_load_tiles_of_interest]
 level=INFO
 handlers=consoleHandler

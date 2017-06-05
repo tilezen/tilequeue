@@ -1,6 +1,16 @@
 CHANGELOG
 =========
 
+v1.8.0
+------
+* Move TOI from redis to s3.
+* Support reading immortal tiles from s3.
+* Split up process_coord into process and format.
+* Create a TOI set on seed if file toi-set doesn’t exist.
+* Add fix when metatiles are disabled.
+* Support single file for intersect command.
+* Add only valid zoom levels to TOI.
+
 v1.7.0
 ------
 * **New features:**

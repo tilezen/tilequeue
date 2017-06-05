@@ -78,7 +78,8 @@ tiles:
     unique: true
 
   intersect:
-    # directory path to where expired tile files are generated
+    # path to file that contains expired tile coordinates
+    # or directory where expired tile coordinates files are generated  
     expired-location: <path/to/expired/tiles/list>
     # the lowest zoom level to consider when enqueueing tiles to
     # process on update
@@ -169,11 +170,6 @@ metatile:
   # be available in the future.
   size: null
 
-  # if this is set to true, then tilequeue will write the individual formats in
-  # addition to the metatile. this can be useful when gracefully "cutting over"
-  # to a metatile-based system from an individual format based one.
-  store_metatile_and_originals: false
-
 # Configuration for where to store the tiles of interest set
 toi-store:
   # We support storing the TOI in S3 or as a file
@@ -233,3 +229,7 @@ toi-prune:
     #  tiles: 0/0/0,1/1/0
     # tests-file:
     #  file: list-of-tile-coordinates.txt
+    # NOTE: the coordinates should be of the same size as the toi, currently 512
+    # integration-test-coordinates:
+    #   bucket: mapzen-tiles-assets
+    #   key: test/integration-test-coords.txt
