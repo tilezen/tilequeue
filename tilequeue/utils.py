@@ -44,33 +44,3 @@ def parse_log_file(log_file):
                                       coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))))
 
     return tile_log_records
-
-def mimic_prune_tiles_of_interest_sql_structure(cursor):
-    cursor.execute('''CREATE TABLE IF NOT EXISTS tile_traffic_v4 (
-            id bigserial primary key,
-            date timestamp(6) not null,
-            z integer not null,
-            x integer not null,
-            y integer not null,
-            tilesize integer not null,
-            service varchar(32),
-            host inet not null
-        )''')
-
-def postgres_add_compat_date_utils(cursor):
-    cursor.execute('''
-        CREATE OR REPLACE FUNCTION DATEADD(interval_kind VARCHAR(20), interval_offset INTEGER, dt DATE)
-        RETURNS TIMESTAMP AS $$
-        BEGIN
-            RETURN (SELECT dt + (interval_offset || ' ' || interval_kind)::INTERVAL);
-        END;
-        $$ language plpgsql
-    ''')
-    cursor.execute('''
-        CREATE OR REPLACE FUNCTION GETDATE()
-        RETURNS DATE AS $$
-        BEGIN
-            RETURN (SELECT current_date);
-        END;
-        $$ language plpgsql
-    ''')
