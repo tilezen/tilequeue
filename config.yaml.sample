@@ -209,7 +209,7 @@ toi-prune:
     path: osm
     layer: all
     format: zip
-  # a reduced version of prev s3 entity
+  # layer and format of tiles to be deleted
   store:
     layer: all
     format: zip
