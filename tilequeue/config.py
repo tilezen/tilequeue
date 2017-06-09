@@ -126,7 +126,8 @@ class Configuration(object):
         self.proc_queue_buffer_size = self._cfg('queue_buffer_size proc')
         self.s3_queue_buffer_size = self._cfg('queue_buffer_size s3')
 
-        self.tile_traffic_log_path = self._cfg('toi-prune tile-traffic-log-path')
+        self.tile_traffic_log_path = self._cfg(
+            'toi-prune tile-traffic-log-path')
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
