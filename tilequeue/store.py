@@ -69,7 +69,8 @@ class S3(object):
 
     def delete_tiles(self, coords, format, layer):
         key_names = [
-            s3_tile_key(self.date_prefix, self.path, layer, coord, format.extension)
+            s3_tile_key(self.date_prefix, self.path, layer, coord,
+                        format.extension)
             for coord in coords
         ]
         del_result = self.bucket.delete_keys(key_names)
@@ -211,7 +212,8 @@ class TileDirectory(object):
     def delete_tiles(self, coords, format, layer):
         delete_count = 0
         for coord in coords:
-            file_path = make_file_path(self.base_path, coord, layer, format.extension)
+            file_path = make_file_path(
+                self.base_path, coord, layer, format.extension)
             if os.path.isfile(file_path):
                 os.remove(file_path)
                 delete_count += 1
