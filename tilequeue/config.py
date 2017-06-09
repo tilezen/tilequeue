@@ -192,6 +192,9 @@ def default_yml_config():
         'toi-store': {
             'type': None,
         },
+        'toi-prune': {
+            'tile-traffic-log-path': '/tmp/tile-traffic.log',
+        },
         'process': {
             'n-simultaneous-query-sets': 0,
             'n-simultaneous-s3-storage': 0,
