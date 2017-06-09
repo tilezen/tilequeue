@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+v1.9.0
+------
+* Add additional postgres support to toi (tiles-of-interest) gardening. See [#204](https://github.com/tilezen/tilequeue/pull/204).
+* Add default toi-prune cfg to fix test failures. See [#215](https://github.com/tilezen/tilequeue/pull/215).
+* Reduce default queue buffer size. See [#214](https://github.com/tilezen/tilequeue/pull/214).
+* Remove temporary Redis TOI dump command. See [#196](https://github.com/tilezen/tilequeue/pull/196).
+
 v1.8.0
 ------
 * Move TOI from redis to s3.
