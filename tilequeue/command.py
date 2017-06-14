@@ -552,14 +552,14 @@ def make_output_calc_mapping(process_yaml_cfg):
         yaml_path = parse_cfg['path']
         assert os.path.isdir(yaml_path)
         from vectordatasource.meta.python import parse_layers
-        layer_data = parse_layers(yaml_path)
-        for layer_datum in layer_data:
+        layer_parse_result = parse_layers(yaml_path)
+        for layer_datum in layer_parse_result.layer_data:
             output_calc_mapping[layer_datum.layer] = layer_datum.fn
     elif process_yaml_cfg['type'] == 'callable':
         callable_cfg = process_yaml_cfg['callable']
         dotted_name = callable_cfg['dotted-name']
         fn = resolve(dotted_name)
-        output_calc_mapping = fn()
+        output_calc_mapping = fn(*callable_cfg['args'])
     else:
         raise ValueError('Invalid process yaml config: %s' % process_yaml_cfg)
 
