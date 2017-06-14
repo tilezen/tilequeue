@@ -233,13 +233,14 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, buffer_cfg, logger):
+                 output_queue, buffer_cfg, output_calc_mapping, logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.buffer_cfg = buffer_cfg
+        self.output_calc_mapping = output_calc_mapping
         self.logger = logger
 
     def __call__(self, stop):
@@ -270,7 +271,7 @@ class ProcessAndFormatData(object):
                 formatted_tiles, extra_data = process_coord(
                     coord, nominal_zoom, feature_layers,
                     self.post_process_data, self.formats, unpadded_bounds,
-                    cut_coords, self.buffer_cfg)
+                    cut_coords, self.buffer_cfg, self.output_calc_mapping)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (

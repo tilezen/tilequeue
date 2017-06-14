@@ -545,6 +545,27 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
     return all_layer_data, layer_data, post_process_data
 
 
+def make_output_calc_mapping(process_yaml_cfg):
+    output_calc_mapping = {}
+    if process_yaml_cfg['type'] == 'parse':
+        parse_cfg = process_yaml_cfg['parse']
+        yaml_path = parse_cfg['path']
+        assert os.path.isdir(yaml_path)
+        from vectordatasource.meta.python import parse_layers
+        layer_data = parse_layers(yaml_path)
+        for layer_datum in layer_data:
+            output_calc_mapping[layer_datum.layer] = layer_datum.fn
+    elif process_yaml_cfg['type'] == 'callable':
+        callable_cfg = process_yaml_cfg['callable']
+        dotted_name = callable_cfg['dotted-name']
+        fn = resolve(dotted_name)
+        output_calc_mapping = fn()
+    else:
+        raise ValueError('Invalid process yaml config: %s' % process_yaml_cfg)
+
+    return output_calc_mapping
+
+
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
     logger.warn('tilequeue processing started')
@@ -566,6 +587,8 @@ def tilequeue_process(cfg, peripherals):
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
 
     n_cpu = multiprocessing.cpu_count()
     sqs_messages_per_batch = 10
@@ -631,7 +654,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, logger)
+        cfg.buffer_cfg, output_calc_mapping, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            logger, cfg.metatile_size)

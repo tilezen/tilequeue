@@ -100,6 +100,7 @@ class Configuration(object):
         self.reload_templates = process_cfg['reload-templates']
         self.output_formats = process_cfg['formats']
         self.buffer_cfg = process_cfg['buffer']
+        self.process_yaml_cfg = process_cfg['yaml']
 
         self.postgresql_conn_info = self.yml['postgresql']
         dbnames = self.postgresql_conn_info.get('dbnames')
@@ -205,6 +206,15 @@ def default_yml_config():
             'reload-templates': False,
             'formats': ['json'],
             'buffer': {},
+            'yaml': {
+                'type': None,
+                'parse': {
+                    'path': '',
+                },
+                'callable': {
+                    'dotted-name': '',
+                },
+            },
         },
         'logging': {
             'config': None

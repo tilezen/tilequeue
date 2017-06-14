@@ -195,7 +195,8 @@ def _create_formatted_tile(
 
 
 def process_coord_no_format(
-        feature_layers, nominal_zoom, unpadded_bounds, post_process_data):
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
+        output_calc_mapping):
 
     extra_data = dict(size={})
     processed_feature_layers = []
@@ -212,6 +213,10 @@ def process_coord_no_format(
             layer_transform_fn = make_transform_fn(transform_fns)
         else:
             layer_transform_fn = None
+
+        layer_output_calc = output_calc_mapping.get(layer_name)
+        assert layer_output_calc, 'output_calc_mapping missing layer: %s' % \
+            layer_name
 
         features = []
         features_size = 0
@@ -243,6 +248,7 @@ def process_coord_no_format(
             feature_id = row.pop('__id__')
             props = dict()
             feature_size = getsizeof(feature_id) + len(wkb)
+
             for k, v in row.iteritems():
                 if k == 'mz_properties':
                     for output_key, output_val in v.items():
@@ -256,6 +262,15 @@ def process_coord_no_format(
                             props[output_key] = output_val
                             feature_size += len(output_key) + \
                                 _sizeof(output_val)
+                elif k == 'tags':
+                    tags = dict(v)
+                    output_props = layer_output_calc(
+                        shape, tags, feature_id)
+                    if output_props:
+                        for op_k, op_v in output_props.items():
+                            if op_v is not None:
+                                props[op_k] = op_v
+                                feature_size += len(op_k) + _sizeof(op_v)
                 else:
                     props[k] = v
                     feature_size += len(k) + _sizeof(v)
@@ -360,9 +375,10 @@ def format_coord(
 # display size.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  scale=4096):
+                  output_calc_spec, scale=4096):
     processed_feature_layers, extra_data = process_coord_no_format(
-        feature_layers, nominal_zoom, unpadded_bounds, post_process_data)
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
+        output_calc_spec)
 
     all_formatted_tiles, extra_data = format_coord(
         coord, nominal_zoom, processed_feature_layers, formats,
