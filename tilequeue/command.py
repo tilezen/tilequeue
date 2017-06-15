@@ -551,8 +551,11 @@ def make_output_calc_mapping(process_yaml_cfg):
         parse_cfg = process_yaml_cfg['parse']
         yaml_path = parse_cfg['path']
         assert os.path.isdir(yaml_path)
+        from vectordatasource.meta.python import make_function_name_props
+        from vectordatasource.meta.python import output_kind
         from vectordatasource.meta.python import parse_layers
-        layer_parse_result = parse_layers(yaml_path)
+        layer_parse_result = parse_layers(
+            yaml_path, output_kind, make_function_name_props)
         for layer_datum in layer_parse_result.layer_data:
             output_calc_mapping[layer_datum.layer] = layer_datum.fn
     elif process_yaml_cfg['type'] == 'callable':
