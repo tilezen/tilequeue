@@ -271,6 +271,8 @@ def process_coord_no_format(
                             if op_v is not None:
                                 props[op_k] = op_v
                                 feature_size += len(op_k) + _sizeof(op_v)
+                    props[k] = v
+                    feature_size += len(k) + _sizeof(v)
                 else:
                     props[k] = v
                     feature_size += len(k) + _sizeof(v)
