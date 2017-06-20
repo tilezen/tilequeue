@@ -249,8 +249,15 @@ def process_coord_no_format(
             props = dict()
             feature_size = getsizeof(feature_id) + len(wkb)
 
+            # TODO: rob couldn't figure out how to concatenate the
+            # tags hstore with arbitrary json in the query in
+            # postgresql 9.3 which is why mz_additional_tags exists
+            mz_additional_tags = row.pop('mz_additional_tags', None)
             for k, v in row.iteritems():
                 if k == 'mz_properties':
+                    # TODO skip for now, but can compare with python
+                    # calculation
+                    continue
                     for output_key, output_val in v.items():
                         if output_val is not None:
                             # all other tags are utf8 encoded, encode
@@ -264,6 +271,12 @@ def process_coord_no_format(
                                 _sizeof(output_val)
                 elif k == 'tags':
                     tags = dict(v)
+                    if mz_additional_tags:
+                        for mz_at_k, mz_at_v in mz_additional_tags.items():
+                            mz_at_k = mz_at_k.encode('utf-8')
+                            if isinstance(mz_at_v, unicode):
+                                mz_at_v = mz_at_v.encode('utf-8')
+                            tags[mz_at_k] = mz_at_v
                     output_props = layer_output_calc(
                         shape, tags, feature_id)
                     if output_props:
@@ -271,8 +284,8 @@ def process_coord_no_format(
                             if op_v is not None:
                                 props[op_k] = op_v
                                 feature_size += len(op_k) + _sizeof(op_v)
-                    props[k] = v
-                    feature_size += len(k) + _sizeof(v)
+                    props['tags'] = tags
+                    feature_size += len('tags') + _sizeof(tags)
                 else:
                     props[k] = v
                     feature_size += len(k) + _sizeof(v)
