@@ -3,14 +3,15 @@ from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
+from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
+from tilequeue import utils
 from zope.dottedname.resolve import resolve
-from sys import getsizeof
 
 
 def make_transform_fn(transform_fns):
@@ -194,6 +195,22 @@ def _create_formatted_tile(
     return formatted_tile
 
 
+def _accumulate_props(dest_props, src_props):
+    """
+    helper to accumulate a dict of properties
+
+    Mutates dest_props by adding the non None src_props and returns
+    the new size
+    """
+    props_size = 0
+    if src_props:
+        for k, v in src_props.items():
+            if v is not None:
+                props_size += len(k) + _sizeof(v)
+                dest_props[k] = v
+    return props_size
+
+
 def process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_mapping):
@@ -249,49 +266,63 @@ def process_coord_no_format(
             props = dict()
             feature_size = getsizeof(feature_id) + len(wkb)
 
+            # first ensure that all strings are utf-8 encoded
+            # it would be better for it all to be unicode instead, but
+            # some downstream transforms / formatters might be
+            # expecting utf-8
+            row = utils.encode_utf8(row)
+
             # TODO: rob couldn't figure out how to concatenate the
             # tags hstore with arbitrary json in the query in
             # postgresql 9.3 which is why mz_additional_tags exists
             mz_additional_tags = row.pop('mz_additional_tags', None)
-            for k, v in row.iteritems():
-                if k == 'mz_properties':
-                    # TODO skip for now, but can compare with python
-                    # calculation
-                    continue
-                    for output_key, output_val in v.items():
-                        if output_val is not None:
-                            # all other tags are utf8 encoded, encode
-                            # these the same way to be consistent
-                            if isinstance(output_key, unicode):
-                                output_key = output_key.encode('utf-8')
-                            if isinstance(output_val, unicode):
-                                output_val = output_val.encode('utf-8')
-                            props[output_key] = output_val
-                            feature_size += len(output_key) + \
-                                _sizeof(output_val)
-                elif k == 'tags':
-                    tags = dict(v)
-                    if mz_additional_tags:
-                        for mz_at_k, mz_at_v in mz_additional_tags.items():
-                            mz_at_k = mz_at_k.encode('utf-8')
-                            if isinstance(mz_at_v, unicode):
-                                mz_at_v = mz_at_v.encode('utf-8')
-                            tags[mz_at_k] = mz_at_v
-                    output_props = layer_output_calc(
-                        shape, tags, feature_id)
-                    if output_props:
-                        for op_k, op_v in output_props.items():
-                            if op_v is not None:
-                                props[op_k] = op_v
-                                feature_size += len(op_k) + _sizeof(op_v)
-                    props['tags'] = tags
-                    feature_size += len('tags') + _sizeof(tags)
-                else:
-                    props[k] = v
-                    feature_size += len(k) + _sizeof(v)
-                features_size += feature_size
+            mz_properties = row.pop('mz_properties', None)
+            tags = row.pop('tags', {})
 
-            extra_data['size'][layer_datum['name']] = features_size
+            # set the initial properties
+            feature_size += _accumulate_props(props, row)
+
+            output_props = {}
+            if tags:
+                if not isinstance(tags, dict):
+                    tags = dict(tags)
+
+                if mz_additional_tags:
+                    tags.update(mz_additional_tags)
+
+                props['tags'] = tags
+                feature_size += len('tags') + _sizeof(tags)
+
+                output_props = utils.encode_utf8(layer_output_calc(
+                    shape, tags, feature_id))
+                if output_props:
+                    feature_size += _accumulate_props(props, output_props)
+
+            if mz_properties:
+                pass
+                # TODO compare with python calculation
+                # if mz_properties != output_props:
+                #     from pprint import pprint
+                #     pprint(mz_properties)
+                #     pprint(output_props)
+                #     for k, v in mz_properties.items():
+                #         if v != output_props.get(k):
+                #             print k
+                #     import pdb; pdb.set_trace();
+                # continue
+                # for output_key, output_val in v.items():
+                #     if output_val is not None:
+                #         # all other tags are utf8 encoded, encode
+                #         # these the same way to be consistent
+                #         if isinstance(output_key, unicode):
+                #             output_key = output_key.encode('utf-8')
+                #         if isinstance(output_val, unicode):
+                #             output_val = output_val.encode('utf-8')
+                #         props[output_key] = output_val
+                #         feature_size += len(output_key) + \
+                #             _sizeof(output_val)
+
+            features_size += feature_size
 
             if layer_transform_fn:
                 shape, props, feature_id = layer_transform_fn(
@@ -299,6 +330,8 @@ def process_coord_no_format(
 
             feature = shape, props, feature_id
             features.append(feature)
+
+        extra_data['size'][layer_datum['name']] = features_size
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
