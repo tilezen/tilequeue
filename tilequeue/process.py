@@ -280,7 +280,7 @@ def process_coord_no_format(
             # TODO this is here for now to help with comparisons
             # this can/should be removed once we fully transition to
             # python output calculation
-            mz_properties = row.pop('mz_properties', None)
+            mz_properties = row.pop('mz_properties', None)  # noqa
 
             query_props = row.pop('__properties__')
             feature_size += len('__properties__') + _sizeof(query_props)

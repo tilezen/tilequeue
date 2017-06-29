@@ -63,7 +63,6 @@ class TestProcess(unittest.TestCase):
         def _test_output_fn(*args):
             return dict(foo='bar')
 
-
         output_calc_mapping = dict(fake_layer=_test_output_fn)
         tiles, extra = process_coord(
             coord, coord.zoom, feature_layers, post_process_data, formats,
