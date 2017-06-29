@@ -25,9 +25,13 @@ class TestProcess(unittest.TestCase):
         )]
         formats = [json_format]
 
+        def _test_output_fn(*args):
+            return dict(foo='bar')
+
+        output_calc_mapping = dict(fake_layer=_test_output_fn)
         tiles, extra = process_coord(
             coord, coord.zoom, feature_layers, post_process_data, formats,
-            unpadded_bounds, cut_coords, buffer_cfg)
+            unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
 
         return tiles
 
@@ -56,9 +60,13 @@ class TestProcess(unittest.TestCase):
         cut_coords = []
         buffer_cfg = {}
 
+        def _test_output_fn(*args):
+            return dict(foo='bar')
+
+        output_calc_mapping = dict(fake_layer=_test_output_fn)
         tiles, extra = process_coord(
             coord, coord.zoom, feature_layers, post_process_data, formats,
-            unpadded_bounds, cut_coords, buffer_cfg)
+            unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
 
         self.assertEqual([], tiles)
         self.assertEqual({'size': {}}, extra)
@@ -72,7 +80,7 @@ class TestProcess(unittest.TestCase):
                 # this is a point at (90, 40) in mercator
                 __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
                 'cA\x1f\x85\xeb\x91\xe5\x8fRA',
-                foo="bar"
+                __properties__=dict(foo='bar'),
             )]
             post_process_data = [
                 dict(
@@ -93,7 +101,8 @@ class TestProcess(unittest.TestCase):
                     },
                     'type': 'Feature',
                     'properties': {
-                        'foo': 'bar'
+                        'foo': 'bar',
+                        'tags': dict(foo='bar'),
                     },
                     'id': 1
                 }]
@@ -121,7 +130,7 @@ class TestProcess(unittest.TestCase):
             # this is a point at (90, 40) in mercator
             __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
             'cA\x1f\x85\xeb\x91\xe5\x8fRA',
-            foo="bar"
+            __properties__=dict(foo='bar'),
         )]
         post_process_data = [
             dict(

@@ -263,8 +263,13 @@ def process_coord_no_format(
                 continue
 
             feature_id = row.pop('__id__')
-            props = dict()
+            props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
+
+            label = row.pop('__label__', None)
+            if label:
+                # TODO probably formalize as part of the feature
+                props['mz_label_placement'] = label
 
             # first ensure that all strings are utf-8 encoded
             # it would be better for it all to be unicode instead, but
@@ -272,57 +277,26 @@ def process_coord_no_format(
             # expecting utf-8
             row = utils.encode_utf8(row)
 
-            # TODO: rob couldn't figure out how to concatenate the
-            # tags hstore with arbitrary json in the query in
-            # postgresql 9.3 which is why mz_additional_tags exists
-            mz_additional_tags = row.pop('mz_additional_tags', None)
-            mz_properties = row.pop('mz_properties', None)
-            tags = row.pop('tags', {})
+            # TODO this is here for now to help with comparisons
+            # this can/should be removed once we fully transition to
+            # python output calculation
+            mz_properties = row.pop('mz_properties', None)  # noqa
 
-            # set the initial properties
-            feature_size += _accumulate_props(props, row)
+            query_props = row.pop('__properties__')
+            feature_size += len('__properties__') + _sizeof(query_props)
+            # set the "tags" key
+            # some transforms expect to be able to read it from this location
+            # longer term, we might want to separate the notion of
+            # "input" and "output" properties as a part of the feature
+            props['tags'] = query_props
+            output_props = layer_output_calc(shape, query_props, feature_id)
 
-            output_props = {}
-            if tags:
-                if not isinstance(tags, dict):
-                    tags = dict(tags)
+            assert output_props, 'No ouptut calc rule matched'
 
-                if mz_additional_tags:
-                    tags.update(mz_additional_tags)
-
-                props['tags'] = tags
-                feature_size += len('tags') + _sizeof(tags)
-
-                output_props = utils.encode_utf8(layer_output_calc(
-                    shape, tags, feature_id))
-                if output_props:
-                    feature_size += _accumulate_props(props, output_props)
-
-            if mz_properties:
-                pass
-                # TODO compare with python calculation
-                # if mz_properties != output_props:
-                #     from pprint import pprint
-                #     pprint(mz_properties)
-                #     pprint(output_props)
-                #     for k, v in mz_properties.items():
-                #         if v != output_props.get(k):
-                #             print k
-                #     import pdb; pdb.set_trace();
-                # continue
-                # for output_key, output_val in v.items():
-                #     if output_val is not None:
-                #         # all other tags are utf8 encoded, encode
-                #         # these the same way to be consistent
-                #         if isinstance(output_key, unicode):
-                #             output_key = output_key.encode('utf-8')
-                #         if isinstance(output_val, unicode):
-                #             output_val = output_val.encode('utf-8')
-                #         props[output_key] = output_val
-                #         feature_size += len(output_key) + \
-                #             _sizeof(output_val)
-
-            features_size += feature_size
+            if output_props:
+                for k, v in output_props.items():
+                    if v is not None:
+                        props[k] = v
 
             if layer_transform_fn:
                 shape, props, feature_id = layer_transform_fn(
