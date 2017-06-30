@@ -211,6 +211,13 @@ def _accumulate_props(dest_props, src_props):
     return props_size
 
 
+Metadata = namedtuple('Metadata', 'source')
+
+
+def make_metadata(source):
+    return Metadata(source)
+
+
 def process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_mapping):
@@ -284,12 +291,40 @@ def process_coord_no_format(
 
             query_props = row.pop('__properties__')
             feature_size += len('__properties__') + _sizeof(query_props)
+
+            # TODO:
+            # Right now this is hacked to map the particular source,
+            # which all relevant queries include, back to another
+            # metadata property
+            # The reason for this is to support the same yaml syntax
+            # for python output calculation and sql min zoom function
+            # generation.
+            # This is done in python here to avoid having to update
+            # all the queries in the jinja file with redundant
+            # information.
+            meta = None
+            query_props_source = query_props.get('source')
+            if query_props_source:
+                source = None
+                if query_props_source == 'openstreetmap.org':
+                    source = 'osm'
+                elif query_props_source == 'naturalearthdata.com':
+                    source = 'ne'
+                elif query_props_source == 'openstreetmapdata.com':
+                    source = 'shp'
+                elif query_props_source == 'whosonfirst.mapzen.com':
+                    source = 'wof'
+                else:
+                    assert 0, 'Unknown source: %s' % query_props_source
+                meta = make_metadata(source)
+
             # set the "tags" key
             # some transforms expect to be able to read it from this location
             # longer term, we might want to separate the notion of
             # "input" and "output" properties as a part of the feature
             props['tags'] = query_props
-            output_props = layer_output_calc(shape, query_props, feature_id)
+            output_props = layer_output_calc(
+                shape, query_props, feature_id, meta)
 
             assert output_props, 'No ouptut calc rule matched'
 
