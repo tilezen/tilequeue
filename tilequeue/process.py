@@ -277,6 +277,7 @@ def process_coord_no_format(
             if label:
                 # TODO probably formalize as part of the feature
                 props['mz_label_placement'] = label
+            feature_size += len('__label__') + _sizeof(label)
 
             # first ensure that all strings are utf-8 encoded
             # it would be better for it all to be unicode instead, but
@@ -339,6 +340,7 @@ def process_coord_no_format(
 
             feature = shape, props, feature_id
             features.append(feature)
+            features_size += feature_size
 
         extra_data['size'][layer_datum['name']] = features_size
 
