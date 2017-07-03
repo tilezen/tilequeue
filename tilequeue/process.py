@@ -326,7 +326,7 @@ def process_coord_no_format(
             output_props = layer_output_calc(
                 shape, query_props, feature_id, meta)
 
-            assert output_props, 'No ouptut calc rule matched'
+            assert output_props, 'No output calc rule matched'
 
             if output_props:
                 for k, v in output_props.items():
