@@ -218,6 +218,19 @@ def make_metadata(source):
     return Metadata(source)
 
 
+def lookup_source(source):
+    result = None
+    if source == 'openstreetmap.org':
+        result = 'osm'
+    elif source == 'naturalearthdata.com':
+        result = 'ne'
+    elif source == 'openstreetmapdata.com':
+        result = 'shp'
+    elif source == 'whosonfirst.mapzen.com':
+        result = 'wof'
+    return result
+
+
 def process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_mapping):
@@ -306,16 +319,8 @@ def process_coord_no_format(
             meta = None
             query_props_source = query_props.get('source')
             if query_props_source:
-                source = None
-                if query_props_source == 'openstreetmap.org':
-                    source = 'osm'
-                elif query_props_source == 'naturalearthdata.com':
-                    source = 'ne'
-                elif query_props_source == 'openstreetmapdata.com':
-                    source = 'shp'
-                elif query_props_source == 'whosonfirst.mapzen.com':
-                    source = 'wof'
-                else:
+                source = lookup_source(query_props_source)
+                if not source:
                     assert 0, 'Unknown source: %s' % query_props_source
                 meta = make_metadata(source)
 
@@ -329,10 +334,9 @@ def process_coord_no_format(
 
             assert output_props, 'No output calc rule matched'
 
-            if output_props:
-                for k, v in output_props.items():
-                    if v is not None:
-                        props[k] = v
+            for k, v in output_props.items():
+                if v is not None:
+                    props[k] = v
 
             if layer_transform_fn:
                 shape, props, feature_id = layer_transform_fn(
