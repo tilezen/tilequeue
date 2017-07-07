@@ -550,7 +550,7 @@ def make_output_calc_mapping(process_yaml_cfg):
     if process_yaml_cfg['type'] == 'parse':
         parse_cfg = process_yaml_cfg['parse']
         yaml_path = parse_cfg['path']
-        assert os.path.isdir(yaml_path)
+        assert os.path.isdir(yaml_path), 'Invalid yaml path: %s' % yaml_path
         from vectordatasource.meta.python import make_function_name_props
         from vectordatasource.meta.python import output_kind
         from vectordatasource.meta.python import parse_layers
