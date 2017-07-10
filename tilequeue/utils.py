@@ -50,3 +50,23 @@ def parse_log_file(log_file):
                          match.group(6), match.group(7), match.group(5)))))
 
     return tile_log_records
+
+
+def encode_utf8(x):
+    if x is None:
+        return None
+    elif isinstance(x, unicode):
+        return x.encode('utf-8')
+    elif isinstance(x, dict):
+        result = {}
+        for k, v in x.items():
+            if isinstance(k, unicode):
+                k = k.encode('utf-8')
+            result[k] = encode_utf8(v)
+        return result
+    elif isinstance(x, list):
+        return map(encode_utf8, x)
+    elif isinstance(x, tuple):
+        return tuple(encode_utf8(list(x)))
+    else:
+        return x

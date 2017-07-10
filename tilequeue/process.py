@@ -3,14 +3,15 @@ from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
+from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
+from tilequeue import utils
 from zope.dottedname.resolve import resolve
-from sys import getsizeof
 
 
 def make_transform_fn(transform_fns):
@@ -194,8 +195,45 @@ def _create_formatted_tile(
     return formatted_tile
 
 
+def _accumulate_props(dest_props, src_props):
+    """
+    helper to accumulate a dict of properties
+
+    Mutates dest_props by adding the non None src_props and returns
+    the new size
+    """
+    props_size = 0
+    if src_props:
+        for k, v in src_props.items():
+            if v is not None:
+                props_size += len(k) + _sizeof(v)
+                dest_props[k] = v
+    return props_size
+
+
+Metadata = namedtuple('Metadata', 'source')
+
+
+def make_metadata(source):
+    return Metadata(source)
+
+
+def lookup_source(source):
+    result = None
+    if source == 'openstreetmap.org':
+        result = 'osm'
+    elif source == 'naturalearthdata.com':
+        result = 'ne'
+    elif source == 'openstreetmapdata.com':
+        result = 'shp'
+    elif source == 'whosonfirst.mapzen.com':
+        result = 'wof'
+    return result
+
+
 def process_coord_no_format(
-        feature_layers, nominal_zoom, unpadded_bounds, post_process_data):
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
+        output_calc_mapping):
 
     extra_data = dict(size={})
     processed_feature_layers = []
@@ -212,6 +250,10 @@ def process_coord_no_format(
             layer_transform_fn = make_transform_fn(transform_fns)
         else:
             layer_transform_fn = None
+
+        layer_output_calc = output_calc_mapping.get(layer_name)
+        assert layer_output_calc, 'output_calc_mapping missing layer: %s' % \
+            layer_name
 
         features = []
         features_size = 0
@@ -241,27 +283,55 @@ def process_coord_no_format(
                 continue
 
             feature_id = row.pop('__id__')
-            props = dict()
+            props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
-            for k, v in row.iteritems():
-                if k == 'mz_properties':
-                    for output_key, output_val in v.items():
-                        if output_val is not None:
-                            # all other tags are utf8 encoded, encode
-                            # these the same way to be consistent
-                            if isinstance(output_key, unicode):
-                                output_key = output_key.encode('utf-8')
-                            if isinstance(output_val, unicode):
-                                output_val = output_val.encode('utf-8')
-                            props[output_key] = output_val
-                            feature_size += len(output_key) + \
-                                _sizeof(output_val)
-                else:
-                    props[k] = v
-                    feature_size += len(k) + _sizeof(v)
-                features_size += feature_size
 
-            extra_data['size'][layer_datum['name']] = features_size
+            label = row.pop('__label__', None)
+            if label:
+                # TODO probably formalize as part of the feature
+                props['mz_label_placement'] = label
+            feature_size += len('__label__') + _sizeof(label)
+
+            # first ensure that all strings are utf-8 encoded
+            # it would be better for it all to be unicode instead, but
+            # some downstream transforms / formatters might be
+            # expecting utf-8
+            row = utils.encode_utf8(row)
+
+            query_props = row.pop('__properties__')
+            feature_size += len('__properties__') + _sizeof(query_props)
+
+            # TODO:
+            # Right now this is hacked to map the particular source,
+            # which all relevant queries include, back to another
+            # metadata property
+            # The reason for this is to support the same yaml syntax
+            # for python output calculation and sql min zoom function
+            # generation.
+            # This is done in python here to avoid having to update
+            # all the queries in the jinja file with redundant
+            # information.
+            meta = None
+            query_props_source = query_props.get('source')
+            if query_props_source:
+                source = lookup_source(query_props_source)
+                if not source:
+                    assert 0, 'Unknown source: %s' % query_props_source
+                meta = make_metadata(source)
+
+            # set the "tags" key
+            # some transforms expect to be able to read it from this location
+            # longer term, we might want to separate the notion of
+            # "input" and "output" properties as a part of the feature
+            props['tags'] = query_props
+            output_props = layer_output_calc(
+                shape, query_props, feature_id, meta)
+
+            assert output_props, 'No output calc rule matched'
+
+            for k, v in output_props.items():
+                if v is not None:
+                    props[k] = v
 
             if layer_transform_fn:
                 shape, props, feature_id = layer_transform_fn(
@@ -269,6 +339,9 @@ def process_coord_no_format(
 
             feature = shape, props, feature_id
             features.append(feature)
+            features_size += feature_size
+
+        extra_data['size'][layer_datum['name']] = features_size
 
         sort_fn_name = layer_datum['sort_fn_name']
         if sort_fn_name:
@@ -360,9 +433,10 @@ def format_coord(
 # display size.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  scale=4096):
+                  output_calc_spec, scale=4096):
     processed_feature_layers, extra_data = process_coord_no_format(
-        feature_layers, nominal_zoom, unpadded_bounds, post_process_data)
+        feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
+        output_calc_spec)
 
     all_formatted_tiles, extra_data = format_coord(
         coord, nominal_zoom, processed_feature_layers, formats,
