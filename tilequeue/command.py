@@ -591,6 +591,13 @@ def tilequeue_process(cfg, peripherals):
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
+    from shapely import speedups
+    if speedups.available:
+        speedups.enable()
+        logger.info('Shapely speedups enabled')
+    else:
+        logger.warn('Shapely speedups not enabled, they were not available')
+
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
 
     n_cpu = multiprocessing.cpu_count()
