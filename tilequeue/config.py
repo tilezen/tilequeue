@@ -24,6 +24,8 @@ class Configuration(object):
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
         self.s3_date_prefix = self._cfg('store date-prefix')
+        self.s3_delete_retry_interval = \
+            self._cfg('store delete-retry-interval')
 
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
@@ -151,6 +153,7 @@ def default_yml_config():
             'path': 'osm',
             'reduced-redundancy': False,
             'date-prefix': '',
+            'delete-retry-interval': 60,
         },
         'aws': {
             'credentials': {

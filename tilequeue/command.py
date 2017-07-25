@@ -433,7 +433,8 @@ def make_store(store_type, store_name, cfg):
         return make_s3_store(
             cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
             path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy,
-            date_prefix=cfg.s3_date_prefix)
+            date_prefix=cfg.s3_date_prefix,
+            delete_retry_interval=cfg.s3_delete_retry_interval)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))

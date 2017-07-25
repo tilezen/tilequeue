@@ -10,6 +10,7 @@ from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
 import random
 import threading
+import time
 
 
 def calc_hash(s):
@@ -41,11 +42,13 @@ def s3_tile_key(date, path, layer, coord, extension):
 class S3(object):
 
     def __init__(
-            self, bucket, date_prefix, path, reduced_redundancy):
+            self, bucket, date_prefix, path, reduced_redundancy,
+            delete_retry_interval):
         self.bucket = bucket
         self.date_prefix = date_prefix
         self.path = path
         self.reduced_redundancy = reduced_redundancy
+        self.delete_retry_interval = delete_retry_interval
 
     def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
@@ -73,8 +76,31 @@ class S3(object):
                         format.extension)
             for coord in coords
         ]
-        del_result = self.bucket.delete_keys(key_names)
-        return len(del_result.deleted)
+
+        num_deleted = 0
+        while key_names:
+            del_result = self.bucket.delete_keys(key_names)
+            num_deleted += len(del_result.deleted)
+
+            key_names = []
+            for error in del_result.errors:
+                # retry on internal error. documentation implies that the only
+                # possible two errors are AccessDenied and InternalError.
+                # retrying when access denied seems unlikely to work, but an
+                # internal error might be transient.
+                if error.code == 'InternalError':
+                    key_names.append(error.key)
+
+            # pause a bit to give transient errors a chance to clear.
+            if key_names:
+                time.sleep(self.delete_retry_interval)
+
+        # make sure that we deleted all the tiles - this seems like the
+        # expected behaviour from the calling code.
+        assert num_deleted == len(coords), \
+            "Failed to delete some coordinates from S3."
+
+        return num_deleted
 
 
 def make_dir_path(base_path, coord, layer):
@@ -244,10 +270,12 @@ class Memory(object):
 
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
-                  path='osm', reduced_redundancy=False, date_prefix=''):
+                  path='osm', reduced_redundancy=False, date_prefix='',
+                  delete_retry_interval=60):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
-    s3_store = S3(bucket, date_prefix, path, reduced_redundancy)
+    s3_store = S3(bucket, date_prefix, path, reduced_redundancy,
+                  delete_retry_interval)
     return s3_store
 
 
