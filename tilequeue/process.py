@@ -445,7 +445,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
     return all_formatted_tiles, extra_data
 
 
-def convert_source_data_to_feature_layers(rows, layer_data, bounds):
+def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
     # TODO we might want to fold in the other processing into this
     # step at some point. This will prevent us from having to iterate
     # through all the features again.
@@ -494,13 +494,26 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds):
         for layer in layers:
             layer_props = row_props_by_layer[layer]
             if layer_props is not None:
-                query_props = {}
-
-                query_props['__id__'] = fid
-
                 props = common_props.copy()
                 props.update(layer_props)
-                query_props['__properties__'] = props
+
+                min_zoom = props.get('min_zoom', None)
+                assert min_zoom is not None, \
+                    'Missing min_zoom in layer %s' % layer
+
+                # a feature can belong to more than one layer
+                # this check ensures that it only appears in the
+                # layers it should
+                if min_zoom is None:
+                    continue
+                # TODO would be better if 16 wasn't hard coded here
+                if zoom < 16 and min_zoom >= zoom + 1:
+                    continue
+
+                query_props = dict(
+                    __properties__=props,
+                    __id__=fid,
+                )
 
                 if boundaries_geometry and layer == 'boundaries':
                     geom = boundaries_geometry
