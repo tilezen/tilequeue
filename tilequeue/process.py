@@ -443,3 +443,108 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
     return all_formatted_tiles, extra_data
+
+
+def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
+    # TODO we might want to fold in the other processing into this
+    # step at some point. This will prevent us from having to iterate
+    # through all the features again.
+
+    layers = (
+        'boundaries',
+        'buildings',
+        'earth',
+        'landuse',
+        'places',
+        'pois',
+        'roads',
+        'transit',
+        'water',
+    )
+
+    features_by_layer = {}
+    for layer in layers:
+        features_by_layer[layer] = []
+
+    for row in rows:
+
+        fid = row.pop('__id__')
+
+        geometry = row.pop('__geometry__', None)
+        label_geometry = row.pop('__label__', None)
+        boundaries_geometry = row.pop('__boundaries_geometry__', None)
+        assert geometry or boundaries_geometry
+
+        common_props = row.pop('__properties__', None)
+        if common_props is None:
+            # if __properties__ exists but is null in the query, we
+            # want to normalize that to an empty dict too
+            common_props = {}
+
+        row_props_by_layer = dict(
+            boundaries=row.pop('__boundaries_properties__', None),
+            buildings=row.pop('__buildings_properties__', None),
+            earth=row.pop('__earth_properties__', None),
+            landuse=row.pop('__landuse_properties__', None),
+            places=row.pop('__places_properties__', None),
+            pois=row.pop('__pois_properties__', None),
+            roads=row.pop('__roads_properties__', None),
+            transit=row.pop('__transit_properties__', None),
+            water=row.pop('__water_properties__', None),
+        )
+
+        # TODO at first pass, simulate the structure that we're
+        # expecting downstream in the process_coord function
+        for layer in layers:
+            layer_props = row_props_by_layer[layer]
+            if layer_props is not None:
+                props = common_props.copy()
+                props.update(layer_props)
+
+                min_zoom = props.get('min_zoom', None)
+                assert min_zoom is not None, \
+                    'Missing min_zoom in layer %s' % layer
+
+                # a feature can belong to more than one layer
+                # this check ensures that it only appears in the
+                # layers it should
+                if min_zoom is None:
+                    continue
+                # TODO would be better if 16 wasn't hard coded here
+                if zoom < 16 and min_zoom >= zoom + 1:
+                    continue
+
+                query_props = dict(
+                    __properties__=props,
+                    __id__=fid,
+                )
+
+                if boundaries_geometry and layer == 'boundaries':
+                    geom = boundaries_geometry
+                else:
+                    geom = geometry
+                query_props['__geometry__'] = geom
+                if label_geometry:
+                    query_props['__label__'] = label_geometry
+
+                features_by_layer[layer].append(query_props)
+
+    feature_layers = []
+    for layer_datum in layer_data:
+        layer = layer_datum['name']
+        features = features_by_layer[layer]
+        # TODO padded bounds
+        padded_bounds = dict(
+            polygon=bounds,
+            line=bounds,
+            point=bounds,
+        )
+        feature_layer = dict(
+            name=layer,
+            features=features,
+            layer_datum=layer_datum,
+            padded_bounds=padded_bounds,
+        )
+        feature_layers.append(feature_layer)
+
+    return feature_layers

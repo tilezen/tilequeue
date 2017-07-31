@@ -18,6 +18,9 @@ from tilequeue.query import jinja_filter_bbox_intersection
 from tilequeue.query import jinja_filter_bbox_overlaps
 from tilequeue.query import jinja_filter_bbox_padded_intersection
 from tilequeue.query import jinja_filter_geometry
+from tilequeue.query import SourcesQueriesGenerator
+from tilequeue.query import TemplateFinder
+from tilequeue.query import TemplateQueryGenerator
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
@@ -41,7 +44,7 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
-from tilequeue.postgresql import DBAffinityConnectionsNoLimit
+from tilequeue.postgresql import DBConnectionPool
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
@@ -477,19 +480,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
-                     cfg_path):
-    if reload_templates:
-        from tilequeue.query import DevJinjaQueryGenerator
-    else:
-        from tilequeue.query import JinjaQueryGenerator
-    all_layer_names = query_cfg['all']
-    layers_config = query_cfg['layers']
-    post_process_config = query_cfg.get('post_process', [])
-    layer_data = []
-    all_layer_data = []
-    post_process_data = []
-
+def make_jinja_environment(template_path):
     environment = Environment(loader=FileSystemLoader(template_path))
     environment.filters['geometry'] = jinja_filter_geometry
     environment.filters['bbox_filter'] = jinja_filter_bbox_filter
@@ -498,20 +489,45 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
         jinja_filter_bbox_padded_intersection)
     environment.filters['bbox'] = jinja_filter_bbox
     environment.filters['bbox_overlaps'] = jinja_filter_bbox_overlaps
+    return environment
+
+
+SourcesConfig = namedtuple('SourcesConfig', 'sources queries_generator')
+
+
+def parse_source_data(queries_cfg):
+    from tilequeue.query import make_source
+    sources_cfg = queries_cfg['sources']
+    sources = []
+    for source_name, source_data in sources_cfg.items():
+        template = source_data['template']
+        start_zoom = int(source_data.get('start_zoom', 0))
+        source = make_source(source_name, template, start_zoom)
+        sources.append(source)
+    return sources
+
+
+def make_queries_generator(sources, template_path, reload_templates):
+    jinja_environment = make_jinja_environment(template_path)
+    cache_templates = not reload_templates
+    template_finder = TemplateFinder(jinja_environment, cache_templates)
+    query_generator = TemplateQueryGenerator(template_finder)
+    queries_generator = SourcesQueriesGenerator(sources, query_generator)
+    return queries_generator
+
+
+def parse_layer_data(query_cfg, buffer_cfg, cfg_path):
+    all_layer_names = query_cfg['all']
+    layers_config = query_cfg['layers']
+    post_process_config = query_cfg.get('post_process', [])
+    layer_data = []
+    all_layer_data = []
+    post_process_data = []
 
     for layer_name, layer_config in layers_config.items():
-        template_name = layer_config['template']
-        start_zoom = layer_config['start_zoom']
         area_threshold = int(layer_config.get('area-inclusion-threshold', 1))
-        if reload_templates:
-            query_generator = DevJinjaQueryGenerator(
-                environment, template_name, start_zoom)
-        else:
-            template = environment.get_template(template_name)
-            query_generator = JinjaQueryGenerator(template, start_zoom)
         layer_datum = dict(
             name=layer_name,
-            query_generator=query_generator,
             is_clipped=layer_config.get('clip', True),
             clip_factor=layer_config.get('clip_factor', 1.0),
             geometry_types=layer_config['geometry_types'],
@@ -581,8 +597,7 @@ def tilequeue_process(cfg, peripherals):
         query_cfg = yaml.load(query_cfg_fp)
     all_layer_data, layer_data, post_process_data = (
         parse_layer_data(
-            query_cfg, cfg.buffer_cfg, cfg.template_path, cfg.reload_templates,
-            os.path.dirname(cfg.query_cfg)))
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
 
     formats = lookup_formats(cfg.output_formats)
 
@@ -632,9 +647,11 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-
-    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, all_layer_data,
-                                  io_pool, n_layers)
+    sources = parse_source_data(query_cfg)
+    queries_generator = make_queries_generator(
+        sources, cfg.template_path, cfg.reload_templates)
+    feature_fetcher = DataFetcher(
+        cfg.postgresql_conn_info, queries_generator, io_pool)
 
     # create all queues used to manage pipeline
 
@@ -665,7 +682,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, output_calc_mapping, logger)
+        cfg.buffer_cfg, output_calc_mapping, layer_data, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            logger, cfg.metatile_size)
@@ -1008,7 +1025,7 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
 
     conn_info = dict(cfg.postgresql_conn_info)
     dbnames = conn_info.pop('dbnames')
-    sql_conn_pool = DBAffinityConnectionsNoLimit(dbnames, conn_info, False)
+    sql_conn_pool = DBConnectionPool(dbnames, conn_info, False)
     sql_conn = sql_conn_pool.get_conns(1)[0]
     with sql_conn.cursor() as cursor:
 
