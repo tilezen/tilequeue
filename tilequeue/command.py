@@ -597,8 +597,7 @@ def tilequeue_process(cfg, peripherals):
         query_cfg = yaml.load(query_cfg_fp)
     all_layer_data, layer_data, post_process_data = (
         parse_layer_data(
-            query_cfg, cfg.buffer_cfg, cfg.template_path, cfg.reload_templates,
-            os.path.dirname(cfg.query_cfg)))
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
 
     formats = lookup_formats(cfg.output_formats)
 
@@ -648,9 +647,11 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-
-    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, all_layer_data,
-                                  io_pool, n_layers)
+    sources = parse_source_data(query_cfg)
+    queries_generator = make_queries_generator(
+        sources, cfg.template_path, cfg.reload_templates)
+    feature_fetcher = DataFetcher(
+        cfg.postgresql_conn_info, queries_generator, io_pool)
 
     # create all queues used to manage pipeline
 
@@ -681,7 +682,7 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, output_calc_mapping, logger)
+        cfg.buffer_cfg, output_calc_mapping, layer_data, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            logger, cfg.metatile_size)

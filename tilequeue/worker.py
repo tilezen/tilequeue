@@ -1,5 +1,6 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
+from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
@@ -187,7 +188,7 @@ class DataFetch(object):
             start = time.time()
 
             try:
-                fetch_data = self.fetcher(nominal_zoom, unpadded_bounds)
+                source_rows = self.fetcher(nominal_zoom, unpadded_bounds)
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 stacktrace = format_stacktrace_one_line(
@@ -214,8 +215,8 @@ class DataFetch(object):
             data = dict(
                 metadata=metadata,
                 coord=coord,
-                feature_layers=fetch_data['feature_layers'],
-                unpadded_bounds=fetch_data['unpadded_bounds'],
+                source_rows=source_rows,
+                unpadded_bounds=unpadded_bounds,
                 cut_coords=cut_coords,
                 nominal_zoom=nominal_zoom,
             )
@@ -233,7 +234,8 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, buffer_cfg, output_calc_mapping, logger):
+                 output_queue, buffer_cfg, output_calc_mapping, layer_data,
+                 logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
@@ -241,6 +243,7 @@ class ProcessAndFormatData(object):
         self.output_queue = output_queue
         self.buffer_cfg = buffer_cfg
         self.output_calc_mapping = output_calc_mapping
+        self.layer_data = layer_data
         self.logger = logger
 
     def __call__(self, stop):
@@ -260,14 +263,17 @@ class ProcessAndFormatData(object):
                 break
 
             coord = data['coord']
-            feature_layers = data['feature_layers']
             unpadded_bounds = data['unpadded_bounds']
             cut_coords = data['cut_coords']
             nominal_zoom = data['nominal_zoom']
+            source_rows = data['source_rows']
 
             start = time.time()
 
             try:
+                feature_layers = convert_source_data_to_feature_layers(
+                    source_rows, self.layer_data, unpadded_bounds,
+                    nominal_zoom)
                 formatted_tiles, extra_data = process_coord(
                     coord, nominal_zoom, feature_layers,
                     self.post_process_data, self.formats, unpadded_bounds,
