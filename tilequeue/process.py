@@ -475,7 +475,11 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
         boundaries_geometry = row.pop('__boundaries_geometry__', None)
         assert geometry or boundaries_geometry
 
-        common_props = row.pop('__properties__', None) or {}
+        common_props = row.pop('__properties__', None)
+        if common_props is None:
+            # if __properties__ exists but is null in the query, we
+            # want to normalize that to an empty dict too
+            common_props = {}
 
         row_props_by_layer = dict(
             boundaries=row.pop('__boundaries_properties__', None),
