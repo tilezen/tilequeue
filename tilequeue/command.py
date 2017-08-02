@@ -3,24 +3,13 @@ from collections import Iterable
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
-from jinja2 import Environment
-from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.query import DataFetcher
-from tilequeue.query import jinja_filter_bbox
-from tilequeue.query import jinja_filter_bbox_filter
-from tilequeue.query import jinja_filter_bbox_intersection
-from tilequeue.query import jinja_filter_bbox_overlaps
-from tilequeue.query import jinja_filter_bbox_padded_intersection
-from tilequeue.query import jinja_filter_geometry
-from tilequeue.query import SourcesQueriesGenerator
-from tilequeue.query import TemplateFinder
-from tilequeue.query import TemplateQueryGenerator
+from tilequeue.query import make_db_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
@@ -480,40 +469,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def make_jinja_environment(template_path):
-    environment = Environment(loader=FileSystemLoader(template_path))
-    environment.filters['geometry'] = jinja_filter_geometry
-    environment.filters['bbox_filter'] = jinja_filter_bbox_filter
-    environment.filters['bbox_intersection'] = jinja_filter_bbox_intersection
-    environment.filters['bbox_padded_intersection'] = (
-        jinja_filter_bbox_padded_intersection)
-    environment.filters['bbox'] = jinja_filter_bbox
-    environment.filters['bbox_overlaps'] = jinja_filter_bbox_overlaps
-    return environment
-
-
 SourcesConfig = namedtuple('SourcesConfig', 'sources queries_generator')
-
-
-def parse_source_data(queries_cfg):
-    from tilequeue.query import make_source
-    sources_cfg = queries_cfg['sources']
-    sources = []
-    for source_name, source_data in sources_cfg.items():
-        template = source_data['template']
-        start_zoom = int(source_data.get('start_zoom', 0))
-        source = make_source(source_name, template, start_zoom)
-        sources.append(source)
-    return sources
-
-
-def make_queries_generator(sources, template_path, reload_templates):
-    jinja_environment = make_jinja_environment(template_path)
-    cache_templates = not reload_templates
-    template_finder = TemplateFinder(jinja_environment, cache_templates)
-    query_generator = TemplateQueryGenerator(template_finder)
-    queries_generator = SourcesQueriesGenerator(sources, query_generator)
-    return queries_generator
 
 
 def parse_layer_data(query_cfg, buffer_cfg, cfg_path):
@@ -647,11 +603,9 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-    sources = parse_source_data(query_cfg)
-    queries_generator = make_queries_generator(
-        sources, cfg.template_path, cfg.reload_templates)
-    feature_fetcher = DataFetcher(
-        cfg.postgresql_conn_info, queries_generator, io_pool)
+    feature_fetcher = make_db_data_fetcher(
+        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
+        query_cfg, io_pool)
 
     # create all queues used to manage pipeline
 
