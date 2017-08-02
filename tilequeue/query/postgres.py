@@ -1,4 +1,6 @@
 from collections import namedtuple
+from jinja2 import Environment
+from jinja2 import FileSystemLoader
 from psycopg2.extras import RealDictCursor
 from tilequeue.postgresql import DBConnectionPool
 from tilequeue.transform import calculate_padded_bounds
@@ -203,3 +205,49 @@ class DataFetcher(object):
             read_rows.append(read_row)
 
         return read_rows
+
+
+def make_jinja_environment(template_path):
+    environment = Environment(loader=FileSystemLoader(template_path))
+    environment.filters['geometry'] = jinja_filter_geometry
+    environment.filters['bbox_filter'] = jinja_filter_bbox_filter
+    environment.filters['bbox_intersection'] = jinja_filter_bbox_intersection
+    environment.filters['bbox_padded_intersection'] = (
+        jinja_filter_bbox_padded_intersection)
+    environment.filters['bbox'] = jinja_filter_bbox
+    environment.filters['bbox_overlaps'] = jinja_filter_bbox_overlaps
+    return environment
+
+
+def make_queries_generator(sources, template_path, reload_templates):
+    jinja_environment = make_jinja_environment(template_path)
+    cache_templates = not reload_templates
+    template_finder = TemplateFinder(jinja_environment, cache_templates)
+    query_generator = TemplateQueryGenerator(template_finder)
+    queries_generator = SourcesQueriesGenerator(sources, query_generator)
+    return queries_generator
+
+
+def parse_source_data(queries_cfg):
+    sources_cfg = queries_cfg['sources']
+    sources = []
+    for source_name, source_data in sources_cfg.items():
+        template = source_data['template']
+        start_zoom = int(source_data.get('start_zoom', 0))
+        source = make_source(source_name, template, start_zoom)
+        sources.append(source)
+    return sources
+
+
+def make_db_data_fetcher(postgresql_conn_info, template_path, reload_templates,
+                         query_cfg, io_pool):
+    """
+    Returns an object which is callable with the zoom and unpadded bounds and
+    which returns a list of rows.
+    """
+
+    sources = parse_source_data(query_cfg)
+    queries_generator = make_queries_generator(
+        sources, template_path, reload_templates)
+    return DataFetcher(
+        postgresql_conn_info, queries_generator, io_pool)
