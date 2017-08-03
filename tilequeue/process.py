@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections import namedtuple
 from cStringIO import StringIO
 from shapely.geometry import MultiPolygon
@@ -450,21 +451,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
     # step at some point. This will prevent us from having to iterate
     # through all the features again.
 
-    layers = (
-        'boundaries',
-        'buildings',
-        'earth',
-        'landuse',
-        'places',
-        'pois',
-        'roads',
-        'transit',
-        'water',
-    )
-
-    features_by_layer = {}
-    for layer in layers:
-        features_by_layer[layer] = []
+    features_by_layer = defaultdict(list)
 
     for row in rows:
 
@@ -495,15 +482,16 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
 
         # TODO at first pass, simulate the structure that we're
         # expecting downstream in the process_coord function
-        for layer in layers:
-            layer_props = row_props_by_layer[layer]
+        for layer_datum in layer_data:
+            layer_name = layer_datum['name']
+            layer_props = row_props_by_layer[layer_name]
             if layer_props is not None:
                 props = common_props.copy()
                 props.update(layer_props)
 
                 min_zoom = props.get('min_zoom', None)
                 assert min_zoom is not None, \
-                    'Missing min_zoom in layer %s' % layer
+                    'Missing min_zoom in layer %s' % layer_name
 
                 # a feature can belong to more than one layer
                 # this check ensures that it only appears in the
@@ -519,7 +507,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
                     __id__=fid,
                 )
 
-                if boundaries_geometry and layer == 'boundaries':
+                if boundaries_geometry and layer_name == 'boundaries':
                     geom = boundaries_geometry
                 else:
                     geom = geometry
@@ -527,12 +515,12 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
                 if label_geometry:
                     query_props['__label__'] = label_geometry
 
-                features_by_layer[layer].append(query_props)
+                features_by_layer[layer_name].append(query_props)
 
     feature_layers = []
     for layer_datum in layer_data:
-        layer = layer_datum['name']
-        features = features_by_layer[layer]
+        layer_name = layer_datum['name']
+        features = features_by_layer[layer_name]
         # TODO padded bounds
         padded_bounds = dict(
             polygon=bounds,
@@ -540,7 +528,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
             point=bounds,
         )
         feature_layer = dict(
-            name=layer,
+            name=layer_name,
             features=features,
             layer_datum=layer_datum,
             padded_bounds=padded_bounds,
