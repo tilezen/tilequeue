@@ -1547,12 +1547,12 @@ def tilequeue_tile_status(cfg, peripherals, args):
         # input checking! make sure that the coordinate is okay to use in
         # the rest of the code.
         if not coord:
-            logger.warning('Could not deserialize %r as coordinate' \
+            logger.warning('Could not deserialize %r as coordinate'
                            % (coord_str,))
             continue
 
         if not coord_is_valid(coord):
-            logger.warning('Coordinate is not valid: %r (parsed from %r)' \
+            logger.warning('Coordinate is not valid: %r (parsed from %r)'
                            % (coord, coord_str))
             continue
 
@@ -1567,7 +1567,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
                 if callable(peripherals.queue._inflight):
                     is_inflight = peripherals.queue._inflight(coord_int)
                     logger.info('inflight: %r' % (is_inflight,))
-            except AttributeError, e:
+            except AttributeError:
                 logger.info('inflight: NOT SUPPORTED BY QUEUE')
 
         if peripherals.toi:
@@ -1645,6 +1645,7 @@ def tilequeue_main(argv_args=None):
     )
     for parser_name, func in parser_config:
         subparser = subparsers.add_parser(parser_name)
+
         def command_fn(cfg, peripherals, args):
             func(cfg, peripherals)
 
