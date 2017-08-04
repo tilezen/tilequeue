@@ -1547,26 +1547,25 @@ def tilequeue_tile_status(cfg, peripherals, args):
         # input checking! make sure that the coordinate is okay to use in
         # the rest of the code.
         if not coord:
-            logger.warning('Could not deserialize %r as coordinate'
-                           % (coord_str,))
+            logger.warning('Could not deserialize %r as coordinate', coord_str)
             continue
 
         if not coord_is_valid(coord):
-            logger.warning('Coordinate is not valid: %r (parsed from %r)'
-                           % (coord, coord_str))
+            logger.warning('Coordinate is not valid: %r (parsed from %r)',
+                           coord, coord_str)
             continue
 
         # now we think we probably have a valid coordinate. go look up
         # whether it exists in various places.
 
-        logger.info("=== %s ===" % (coord_str,))
+        logger.info("=== %s ===", coord_str)
         coord_int = coord_marshall_int(coord)
 
         if peripherals.queue:
             try:
                 if callable(peripherals.queue._inflight):
                     is_inflight = peripherals.queue._inflight(coord_int)
-                    logger.info('inflight: %r' % (is_inflight,))
+                    logger.info('inflight: %r', is_inflight)
             except AttributeError:
                 logger.info('inflight: NOT SUPPORTED BY QUEUE')
 
@@ -1575,7 +1574,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
             logger.info('in TOI: %r' % (in_toi,))
 
         data = store.read_tile(coord, tile_format, tile_layer)
-        logger.info('tile in store: %r' % (bool(data),))
+        logger.info('tile in store: %r', bool(data))
 
 
 class TileArgumentParser(argparse.ArgumentParser):
