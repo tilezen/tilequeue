@@ -1560,6 +1560,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
         # whether it exists in various places.
 
         logger.info("=== %s ===" % (coord_str,))
+        coord_int = coord_marshall_int(coord)
 
         if peripherals.queue:
             try:
