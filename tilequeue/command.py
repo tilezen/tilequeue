@@ -53,15 +53,6 @@ import traceback
 import yaml
 
 
-def create_command_parser(fn):
-    def create_parser_fn(parser):
-        parser.add_argument('--config', required=True,
-                            help='The path to the tilequeue config file.')
-        parser.set_defaults(func=fn)
-        return parser
-    return create_parser_fn
-
-
 def create_coords_generator_from_tiles_file(fp, logger=None):
     for line in fp:
         line = line.strip()
@@ -1528,6 +1519,64 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger.info('Loading tiles of interest ... done')
 
 
+def tilequeue_tile_status(cfg, peripherals, args):
+    """
+    Report the status of the given tiles in the store, queue and TOI.
+    """
+    logger = make_logger(cfg, 'tile_status')
+
+    # friendly warning to avoid confusion when this command outputs nothing
+    # at all when called with no positional arguments.
+    if not args.coords:
+        logger.warning('No coordinates given on the command line.')
+        return
+
+    # pre-load TOI to avoid having to do it for each coordinate
+    toi = None
+    if peripherals.toi:
+        toi = peripherals.toi.fetch_tiles_of_interest()
+
+    # TODO: make these configurable!
+    tile_format = lookup_format_by_extension('zip')
+    tile_layer = 'all'
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+
+    for coord_str in args.coords:
+        coord = deserialize_coord(coord_str)
+
+        # input checking! make sure that the coordinate is okay to use in
+        # the rest of the code.
+        if not coord:
+            logger.warning('Could not deserialize %r as coordinate' \
+                           % (coord_str,))
+            continue
+
+        if not coord_is_valid(coord):
+            logger.warning('Coordinate is not valid: %r (parsed from %r)' \
+                           % (coord, coord_str))
+            continue
+
+        # now we think we probably have a valid coordinate. go look up
+        # whether it exists in various places.
+
+        logger.info("=== %s ===" % (coord_str,))
+
+        if peripherals.queue:
+            try:
+                if callable(peripherals.queue._inflight):
+                    is_inflight = peripherals.queue._inflight(coord_int)
+                    logger.info('inflight: %r' % (is_inflight,))
+            except AttributeError, e:
+                logger.info('inflight: NOT SUPPORTED BY QUEUE')
+
+        if peripherals.toi:
+            in_toi = coord_int in toi
+            logger.info('in TOI: %r' % (in_toi,))
+
+        data = store.read_tile(coord, tile_format, tile_layer)
+        logger.info('tile in store: %r' % (bool(data),))
+
+
 class TileArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -1576,30 +1625,41 @@ def tilequeue_main(argv_args=None):
     parser = TileArgumentParser()
     subparsers = parser.add_subparsers()
 
+    # these are all the "standard" parsers which just take a config argument
+    # that is already included at the top level.
     parser_config = (
-        ('process', create_command_parser(tilequeue_process)),
-        ('seed', create_command_parser(tilequeue_seed)),
-        ('drain', create_command_parser(tilequeue_drain)),
-        ('intersect', create_command_parser(tilequeue_intersect)),
-        ('dump-tiles-of-interest',
-            create_command_parser(tilequeue_dump_tiles_of_interest)),
-        ('load-tiles-of-interest',
-            create_command_parser(tilequeue_load_tiles_of_interest)),
-        ('enqueue-tiles-of-interest',
-         create_command_parser(tilequeue_enqueue_tiles_of_interest)),
-        ('prune-tiles-of-interest',
-         create_command_parser(tilequeue_prune_tiles_of_interest)),
-        ('tile-size', create_command_parser(tilequeue_tile_sizes)),
-        ('wof-process-neighbourhoods', create_command_parser(
-            tilequeue_process_wof_neighbourhoods)),
-        ('wof-load-initial-neighbourhoods', create_command_parser(
-            tilequeue_initial_load_wof_neighbourhoods)),
-        ('consume-tile-traffic', create_command_parser(
-            tilequeue_consume_tile_traffic))
+        ('process', tilequeue_process),
+        ('seed', tilequeue_seed),
+        ('drain', tilequeue_drain),
+        ('intersect', tilequeue_intersect),
+        ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
+        ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
+        ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
+        ('prune-tiles-of-interest', tilequeue_prune_tiles_of_interest),
+        ('tile-size', tilequeue_tile_sizes),
+        ('wof-process-neighbourhoods', tilequeue_process_wof_neighbourhoods),
+        ('wof-load-initial-neighbourhoods',
+            tilequeue_initial_load_wof_neighbourhoods),
+        ('consume-tile-traffic', tilequeue_consume_tile_traffic),
     )
-    for parser_name, parser_func in parser_config:
+    for parser_name, func in parser_config:
         subparser = subparsers.add_parser(parser_name)
-        parser_func(subparser)
+        def command_fn(cfg, peripherals, args):
+            func(cfg, peripherals)
+
+        # config parameter is shared amongst all parsers, but appears here so
+        # that it can be given _after_ the name of the command.
+        subparser.add_argument('--config', required=True,
+                               help='The path to the tilequeue config file.')
+        subparser.set_defaults(func=command_fn)
+
+    # add "special" commands which take arguments
+    subparser = subparsers.add_parser('tile-status')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('coords', nargs='*',
+                           help='Tile coordinates as "z/x/y".')
+    subparser.set_defaults(func=tilequeue_tile_status)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
@@ -1624,4 +1684,4 @@ def tilequeue_main(argv_args=None):
         stats = FakeStatsd()
 
     peripherals = Peripherals(toi_helper, queue, stats)
-    args.func(cfg, peripherals)
+    args.func(cfg, peripherals, args)
