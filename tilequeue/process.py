@@ -330,6 +330,19 @@ def process_coord_no_format(
 
             assert output_props, 'No output calc rule matched'
 
+            # a feature can belong to more than one layer
+            # this check ensures that it only appears in the
+            # layers it should
+            # NOTE: the min zoom can be calculated by the yaml, so
+            # this check must happen after that
+            min_zoom = output_props.get('min_zoom')
+            assert min_zoom is not None, \
+                'Missing min_zoom in layer %s' % layer_name
+
+            # TODO would be better if 16 wasn't hard coded here
+            if nominal_zoom < 16 and min_zoom >= nominal_zoom + 1:
+                continue
+
             for k, v in output_props.items():
                 if v is not None:
                     props[k] = v
@@ -488,19 +501,6 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
             if layer_props is not None:
                 props = common_props.copy()
                 props.update(layer_props)
-
-                min_zoom = props.get('min_zoom', None)
-                assert min_zoom is not None, \
-                    'Missing min_zoom in layer %s' % layer_name
-
-                # a feature can belong to more than one layer
-                # this check ensures that it only appears in the
-                # layers it should
-                if min_zoom is None:
-                    continue
-                # TODO would be better if 16 wasn't hard coded here
-                if zoom < 16 and min_zoom >= zoom + 1:
-                    continue
 
                 query_props = dict(
                     __properties__=props,

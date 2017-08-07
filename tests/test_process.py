@@ -26,7 +26,7 @@ class TestProcess(unittest.TestCase):
         formats = [json_format]
 
         def _test_output_fn(*args):
-            return dict(foo='bar')
+            return dict(foo='bar', min_zoom=0)
 
         output_calc_mapping = dict(fake_layer=_test_output_fn)
         tiles, extra = process_coord(
@@ -102,6 +102,7 @@ class TestProcess(unittest.TestCase):
                     'type': 'Feature',
                     'properties': {
                         'foo': 'bar',
+                        'min_zoom': 0,
                         'tags': dict(foo='bar'),
                     },
                     'id': 1
