@@ -66,6 +66,7 @@ class SourcesQueriesGenerator(object):
         for source in self.sources:
             template_queries = []
             for template_spec in source.template_specs:
+                # NOTE: zoom_stop is exclusive
                 if template_spec.zoom_start <= zoom < template_spec.zoom_stop:
                     template_query = self.query_generator(
                         template_spec.template, bounds, zoom)
@@ -239,6 +240,7 @@ def parse_source_data(queries_cfg):
         for template_data in templates:
             template = template_data['template']
             zoom_start = int(template_data.get('zoom_start', 0))
+            # NOTE: zoom_stop is exclusive
             zoom_stop = int(template_data.get('zoom_stop', 21))
             template_spec = TemplateSpec(template, zoom_start, zoom_stop)
             template_specs.append(template_spec)
