@@ -9,6 +9,7 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
+from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_db_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
@@ -33,7 +34,6 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import SqsQueueReader
 from tilequeue.worker import SqsQueueWriter
-from tilequeue.postgresql import DBConnectionPool
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse

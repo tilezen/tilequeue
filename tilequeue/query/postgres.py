@@ -2,7 +2,7 @@ from collections import namedtuple
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from psycopg2.extras import RealDictCursor
-from tilequeue.postgresql import DBConnectionPool
+from tilequeue.query import DBConnectionPool
 from tilequeue.transform import calculate_padded_bounds
 import sys
 
