@@ -7,11 +7,8 @@ from tilequeue.transform import calculate_padded_bounds
 import sys
 
 
-DataSource = namedtuple('DataSource', 'name template, start_zoom')
-
-
-def make_source(name, template, start_zoom):
-    return DataSource(name, template, start_zoom)
+TemplateSpec = namedtuple('TemplateSpec', 'template zoom_start zoom_stop')
+DataSource = namedtuple('DataSource', 'name template_specs')
 
 
 class TemplateFinder(object):
@@ -67,9 +64,16 @@ class SourcesQueriesGenerator(object):
     def __call__(self, zoom, bounds):
         queries = []
         for source in self.sources:
-            if source.start_zoom <= zoom:
-                query = self.query_generator(source.template, bounds, zoom)
-                queries.append(query)
+            template_queries = []
+            for template_spec in source.template_specs:
+                # NOTE: zoom_stop is exclusive
+                if template_spec.zoom_start <= zoom < template_spec.zoom_stop:
+                    template_query = self.query_generator(
+                        template_spec.template, bounds, zoom)
+                    template_queries.append(template_query)
+            if template_queries:
+                source_query = '\nUNION ALL\n'.join(template_queries)
+                queries.append(source_query)
         return queries
 
 
@@ -231,10 +235,16 @@ def make_queries_generator(sources, template_path, reload_templates):
 def parse_source_data(queries_cfg):
     sources_cfg = queries_cfg['sources']
     sources = []
-    for source_name, source_data in sources_cfg.items():
-        template = source_data['template']
-        start_zoom = int(source_data.get('start_zoom', 0))
-        source = make_source(source_name, template, start_zoom)
+    for source_name, templates in sources_cfg.items():
+        template_specs = []
+        for template_data in templates:
+            template = template_data['template']
+            zoom_start = int(template_data.get('zoom_start', 0))
+            # NOTE: zoom_stop is exclusive
+            zoom_stop = int(template_data.get('zoom_stop', 21))
+            template_spec = TemplateSpec(template, zoom_start, zoom_stop)
+            template_specs.append(template_spec)
+        source = DataSource(source_name, template_specs)
         sources.append(source)
     return sources
 
