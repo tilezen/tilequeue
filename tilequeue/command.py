@@ -1642,16 +1642,20 @@ def tilequeue_main(argv_args=None):
             tilequeue_initial_load_wof_neighbourhoods),
         ('consume-tile-traffic', tilequeue_consume_tile_traffic),
     )
+
+    def _make_command_fn(func):
+        def command_fn(cfg, peripherals, args):
+            return func(cfg, peripherals)
+        return command_fn
+
     for parser_name, func in parser_config:
         subparser = subparsers.add_parser(parser_name)
-
-        def command_fn(cfg, peripherals, args):
-            func(cfg, peripherals)
 
         # config parameter is shared amongst all parsers, but appears here so
         # that it can be given _after_ the name of the command.
         subparser.add_argument('--config', required=True,
                                help='The path to the tilequeue config file.')
+        command_fn = _make_command_fn(func)
         subparser.set_defaults(func=command_fn)
 
     # add "special" commands which take arguments
