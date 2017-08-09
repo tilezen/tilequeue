@@ -7,7 +7,7 @@ from tilequeue.transform import calculate_padded_bounds
 import sys
 
 
-TemplateSpec = namedtuple('TemplateSpec', 'template zoom_start zoom_stop')
+TemplateSpec = namedtuple('TemplateSpec', 'template start_zoom end_zoom')
 DataSource = namedtuple('DataSource', 'name template_specs')
 
 
@@ -66,8 +66,8 @@ class SourcesQueriesGenerator(object):
         for source in self.sources:
             template_queries = []
             for template_spec in source.template_specs:
-                # NOTE: zoom_stop is exclusive
-                if template_spec.zoom_start <= zoom < template_spec.zoom_stop:
+                # NOTE: end_zoom is exclusive
+                if template_spec.start_zoom <= zoom < template_spec.end_zoom:
                     template_query = self.query_generator(
                         template_spec.template, bounds, zoom)
                     template_queries.append(template_query)
@@ -239,10 +239,10 @@ def parse_source_data(queries_cfg):
         template_specs = []
         for template_data in templates:
             template = template_data['template']
-            zoom_start = int(template_data.get('zoom_start', 0))
-            # NOTE: zoom_stop is exclusive
-            zoom_stop = int(template_data.get('zoom_stop', 21))
-            template_spec = TemplateSpec(template, zoom_start, zoom_stop)
+            start_zoom = int(template_data.get('start_zoom', 0))
+            # NOTE: end_zoom is exclusive
+            end_zoom = int(template_data.get('end_zoom', 21))
+            template_spec = TemplateSpec(template, start_zoom, end_zoom)
             template_specs.append(template_spec)
         source = DataSource(source_name, template_specs)
         sources.append(source)
