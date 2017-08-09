@@ -232,6 +232,17 @@ def lookup_source(source):
     return result
 
 
+def meta_for_properties(query_props):
+    meta = None
+    query_props_source = query_props.get('source')
+    if query_props_source:
+        source = lookup_source(query_props_source)
+        if not source:
+            assert 0, 'Unknown source: %s' % query_props_source
+        meta = make_metadata(source)
+    return meta
+
+
 def process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_mapping):
@@ -312,13 +323,7 @@ def process_coord_no_format(
             # This is done in python here to avoid having to update
             # all the queries in the jinja file with redundant
             # information.
-            meta = None
-            query_props_source = query_props.get('source')
-            if query_props_source:
-                source = lookup_source(query_props_source)
-                if not source:
-                    assert 0, 'Unknown source: %s' % query_props_source
-                meta = make_metadata(source)
+            meta = meta_for_properties(query_props)
 
             # set the "tags" key
             # some transforms expect to be able to read it from this location
