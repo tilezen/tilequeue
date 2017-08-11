@@ -73,7 +73,7 @@ class S3(object):
     def delete_tiles(self, coords, format, layer):
         key_names = [
             s3_tile_key(self.date_prefix, self.path, layer, coord,
-                        format.extension)
+                        format.extension).lstrip('/')
             for coord in coords
         ]
 
