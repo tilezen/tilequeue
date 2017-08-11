@@ -20,6 +20,7 @@ from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
+from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
@@ -1519,6 +1520,60 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger.info('Loading tiles of interest ... done')
 
 
+def tilequeue_stuck_tiles(cfg, peripherals):
+    """
+    Check which files exist on s3 but are not in toi.
+    """
+    logger = make_logger(cfg, 'stuck_tiles')
+
+    assert cfg.store_type == 's3', \
+        'Expecting an s3 store type, not %s' % cfg.store_type
+
+    bucket = cfg.s3_bucket
+    date_prefix = str(cfg.s3_date_prefix)
+
+    assert peripherals.toi, 'Missing toi'
+    toi = peripherals.toi.fetch_tiles_of_interest()
+
+    import boto3
+    s3_client = boto3.client('s3', region_name='us-east-1')
+    paginator = s3_client.get_paginator('list_objects')
+
+    stuck_coords = set()
+    response_iterator = paginator.paginate(
+        Bucket=bucket,
+        Prefix=date_prefix,
+        PaginationConfig=dict(
+            PageSize=1000,
+        ),
+    )
+    for results in response_iterator:
+        status_code = results['ResponseMetadata']['HTTPStatusCode']
+        if status_code != 200:
+            logger.error('Invalid status code response: %s' % status_code)
+            break
+        for key_obj in results['Contents']:
+            key = key_obj['Key']
+            if key.endswith('.zip'):
+                fields = key.rsplit('/', 3)
+                if len(fields) == 4:
+                    _, z_str, x_str, y_fmt = fields
+                    y_str = y_fmt.split('.')[0]
+                    try:
+                        z = int(z_str)
+                        x = int(x_str)
+                        y = int(y_str)
+                        coord = Coordinate(zoom=z, column=x, row=y)
+                        coord_int = coord_marshall_int(coord)
+                        if coord_int not in toi:
+                            stuck_coords.add(coord_int)
+                    except ValueError:
+                        pass
+    for coord_int in stuck_coords:
+        coord = coord_unmarshall_int(coord_int)
+        print serialize_coord(coord)
+
+
 def tilequeue_tile_status(cfg, peripherals, args):
     """
     Report the status of the given tiles in the store, queue and TOI.
@@ -1641,6 +1696,7 @@ def tilequeue_main(argv_args=None):
         ('wof-load-initial-neighbourhoods',
             tilequeue_initial_load_wof_neighbourhoods),
         ('consume-tile-traffic', tilequeue_consume_tile_traffic),
+        ('stuck-tiles', tilequeue_stuck_tiles),
     )
 
     def _make_command_fn(func):
