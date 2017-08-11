@@ -1574,6 +1574,31 @@ def tilequeue_stuck_tiles(cfg, peripherals):
         print serialize_coord(coord)
 
 
+def tilequeue_delete_stuck_tiles(cfg, peripherals):
+    logger = make_logger(cfg, 'delete_stuck_tiles')
+
+    format = lookup_format_by_extension('zip')
+    layer = 'all'
+
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+
+    logger.info('Removing tiles from S3 ...')
+    total_removed = 0
+    for coord_strs in grouper(sys.stdin, 1000):
+        coords = []
+        for coord_str in coord_strs:
+            coord = deserialize_coord(coord_str)
+            if coord:
+                coords.append(coord)
+        if coords:
+            n_removed = store.delete_tiles(coords, format, layer)
+            total_removed += n_removed
+            logger.info('Removed %s tiles from S3', n_removed)
+
+    logger.info('Total removed: %d', total_removed)
+    logger.info('Removing tiles from S3 ... DONE')
+
+
 def tilequeue_tile_status(cfg, peripherals, args):
     """
     Report the status of the given tiles in the store, queue and TOI.
@@ -1697,6 +1722,7 @@ def tilequeue_main(argv_args=None):
             tilequeue_initial_load_wof_neighbourhoods),
         ('consume-tile-traffic', tilequeue_consume_tile_traffic),
         ('stuck-tiles', tilequeue_stuck_tiles),
+        ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
     )
 
     def _make_command_fn(func):
