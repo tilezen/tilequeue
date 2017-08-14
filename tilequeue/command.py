@@ -20,6 +20,7 @@ from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
+from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
@@ -1519,6 +1520,48 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger.info('Loading tiles of interest ... done')
 
 
+def tilequeue_stuck_tiles(cfg, peripherals):
+    """
+    Check which files exist on s3 but are not in toi.
+    """
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    format = lookup_format_by_extension('zip')
+    layer = 'all'
+
+    assert peripherals.toi, 'Missing toi'
+    toi = peripherals.toi.fetch_tiles_of_interest()
+
+    for coord in store.list_tiles(format, layer):
+        coord_int = coord_marshall_int(coord)
+        if coord_int not in toi:
+            print serialize_coord(coord)
+
+
+def tilequeue_delete_stuck_tiles(cfg, peripherals):
+    logger = make_logger(cfg, 'delete_stuck_tiles')
+
+    format = lookup_format_by_extension('zip')
+    layer = 'all'
+
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+
+    logger.info('Removing tiles from S3 ...')
+    total_removed = 0
+    for coord_strs in grouper(sys.stdin, 1000):
+        coords = []
+        for coord_str in coord_strs:
+            coord = deserialize_coord(coord_str)
+            if coord:
+                coords.append(coord)
+        if coords:
+            n_removed = store.delete_tiles(coords, format, layer)
+            total_removed += n_removed
+            logger.info('Removed %s tiles from S3', n_removed)
+
+    logger.info('Total removed: %d', total_removed)
+    logger.info('Removing tiles from S3 ... DONE')
+
+
 def tilequeue_tile_status(cfg, peripherals, args):
     """
     Report the status of the given tiles in the store, queue and TOI.
@@ -1641,6 +1684,8 @@ def tilequeue_main(argv_args=None):
         ('wof-load-initial-neighbourhoods',
             tilequeue_initial_load_wof_neighbourhoods),
         ('consume-tile-traffic', tilequeue_consume_tile_traffic),
+        ('stuck-tiles', tilequeue_stuck_tiles),
+        ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
     )
 
     def _make_command_fn(func):

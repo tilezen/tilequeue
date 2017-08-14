@@ -5,6 +5,7 @@ from boto.s3.bucket import Bucket
 from builtins import range
 from future.utils import raise_from
 import md5
+from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
@@ -37,6 +38,25 @@ def s3_tile_key(date, path, layer, coord, extension):
         path_to_hash=path_to_hash,
     )
     return s3_path
+
+
+def parse_coordinate_from_path(path, extension, layer):
+    if path.endswith(extension):
+        fields = path.rsplit('/', 4)
+        if len(fields) == 5:
+            _, tile_layer, z_str, x_str, y_fmt = fields
+            if tile_layer == layer:
+                y_fields = y_fmt.split('.')
+                if y_fields:
+                    y_str = y_fields[0]
+                    try:
+                        z = int(z_str)
+                        x = int(x_str)
+                        y = int(y_str)
+                        coord = Coordinate(zoom=z, column=x, row=y)
+                        return coord
+                    except ValueError:
+                        pass
 
 
 class S3(object):
@@ -73,7 +93,7 @@ class S3(object):
     def delete_tiles(self, coords, format, layer):
         key_names = [
             s3_tile_key(self.date_prefix, self.path, layer, coord,
-                        format.extension)
+                        format.extension).lstrip('/')
             for coord in coords
         ]
 
@@ -101,6 +121,14 @@ class S3(object):
             "Failed to delete some coordinates from S3."
 
         return num_deleted
+
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for key_obj in self.bucket.list(prefix=self.date_prefix):
+            key = key_obj.key
+            coord = parse_coordinate_from_path(key, ext, layer)
+            if coord:
+                yield coord
 
 
 def make_dir_path(base_path, coord, layer):
@@ -246,6 +274,15 @@ class TileDirectory(object):
 
         return delete_count
 
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for root, dirs, files in os.walk(self.base_path):
+            for name in files:
+                tile_path = '%s/%s' % (root, name)
+                coord = parse_coordinate_from_path(tile_path, ext, layer)
+                if coord:
+                    yield coord
+
 
 def make_tile_file_store(base_path=None):
     if base_path is None:
@@ -266,6 +303,12 @@ class Memory(object):
             return None
         tile_data, coord, format, layer = self.data
         return tile_data
+
+    def delete_tiles(self, coords, format, layer):
+        pass
+
+    def list_tiles(self, format, layer):
+        return [self.data] if self.data else []
 
 
 def make_s3_store(bucket_name,
