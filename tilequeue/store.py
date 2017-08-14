@@ -5,6 +5,7 @@ from boto.s3.bucket import Bucket
 from builtins import range
 from future.utils import raise_from
 import md5
+from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
@@ -101,6 +102,27 @@ class S3(object):
             "Failed to delete some coordinates from S3."
 
         return num_deleted
+
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for key_obj in self.bucket.list(prefix=self.date_prefix):
+            key = key_obj.key
+            if key.endswith(ext):
+                fields = key.rsplit('/', 4)
+                if len(fields) == 5:
+                    _, tile_layer, z_str, x_str, y_fmt = fields
+                    if tile_layer == layer:
+                        y_fields = y_fmt.split('.')
+                        if y_fields:
+                            y_str = y_fields[0]
+                            try:
+                                z = int(z_str)
+                                x = int(x_str)
+                                y = int(y_str)
+                                coord = Coordinate(zoom=z, column=x, row=y)
+                                yield coord
+                            except ValueError:
+                                pass
 
 
 def make_dir_path(base_path, coord, layer):
