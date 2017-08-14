@@ -40,6 +40,25 @@ def s3_tile_key(date, path, layer, coord, extension):
     return s3_path
 
 
+def parse_coordinate_from_path(path, extension, layer):
+    if path.endswith(extension):
+        fields = path.rsplit('/', 4)
+        if len(fields) == 5:
+            _, tile_layer, z_str, x_str, y_fmt = fields
+            if tile_layer == layer:
+                y_fields = y_fmt.split('.')
+                if y_fields:
+                    y_str = y_fields[0]
+                    try:
+                        z = int(z_str)
+                        x = int(x_str)
+                        y = int(y_str)
+                        coord = Coordinate(zoom=z, column=x, row=y)
+                        return coord
+                    except ValueError:
+                        pass
+
+
 class S3(object):
 
     def __init__(
@@ -107,22 +126,9 @@ class S3(object):
         ext = '.' + format.extension
         for key_obj in self.bucket.list(prefix=self.date_prefix):
             key = key_obj.key
-            if key.endswith(ext):
-                fields = key.rsplit('/', 4)
-                if len(fields) == 5:
-                    _, tile_layer, z_str, x_str, y_fmt = fields
-                    if tile_layer == layer:
-                        y_fields = y_fmt.split('.')
-                        if y_fields:
-                            y_str = y_fields[0]
-                            try:
-                                z = int(z_str)
-                                x = int(x_str)
-                                y = int(y_str)
-                                coord = Coordinate(zoom=z, column=x, row=y)
-                                yield coord
-                            except ValueError:
-                                pass
+            coord = parse_coordinate_from_path(key, ext, layer)
+            if coord:
+                yield coord
 
 
 def make_dir_path(base_path, coord, layer):
@@ -267,6 +273,15 @@ class TileDirectory(object):
                 delete_count += 1
 
         return delete_count
+
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for root, dirs, files in os.walk(self.base_path):
+            for name in files:
+                tile_path = '%s/%s' % (root, name)
+                coord = parse_coordinate_from_path(tile_path, ext, layer)
+                if coord:
+                    yield coord
 
 
 def make_tile_file_store(base_path=None):
