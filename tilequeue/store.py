@@ -304,6 +304,12 @@ class Memory(object):
         tile_data, coord, format, layer = self.data
         return tile_data
 
+    def delete_tiles(self, coords, format, layer):
+        pass
+
+    def list_tiles(self, format, layer):
+        return [self.data] if self.data else []
+
 
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
