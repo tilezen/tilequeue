@@ -49,6 +49,11 @@ class DataFetcher(object):
 
                 layer_props = props.copy()
                 layer_props['min_zoom'] = min_zoom
+
+                # urgh, hack!
+                if layer_name == 'water' and shape.geom_type == 'Point':
+                    layer_props['label_placement'] = True
+
                 if layer_props:
                     props_name = '__%s_properties__' % layer_name
                     read_row[props_name] = layer_props
