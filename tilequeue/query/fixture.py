@@ -1,9 +1,29 @@
 from collections import namedtuple
 from shapely.geometry import box
 from tilequeue.process import meta_for_properties
+from itertools import izip
 
 
 LayerInfo = namedtuple('LayerInfo', 'min_zoom_fn props_fn')
+
+
+def deassoc(x):
+    """
+    Turns an array consisting of alternating key-value pairs into a
+    dictionary.
+
+    Osm2pgsql stores the tags for ways and relations in the planet_osm_ways and
+    planet_osm_rels tables in this format. Hstore would make more sense now,
+    but this encoding pre-dates the common availability of hstore.
+
+    Example:
+    >>> from raw_tiles.index.util import deassoc
+    >>> deassoc(['a', 1, 'b', 'B', 'c', 3.14])
+    {'a': 1, 'c': 3.14, 'b': 'B'}
+    """
+
+    pairs = [iter(x)] * 2
+    return dict(izip(*pairs))
 
 
 class DataFetcher(object):
@@ -27,6 +47,9 @@ class DataFetcher(object):
             # reject any feature which doesn't intersect the given bounds
             if bbox.disjoint(shape):
                 continue
+
+            # TODO: there must be some better way of doing this?
+            rels = props.pop('__relations__', [])
 
             # place for assembing the read row as if from postgres
             read_row = {}
@@ -53,6 +76,18 @@ class DataFetcher(object):
                 # urgh, hack!
                 if layer_name == 'water' and shape.geom_type == 'Point':
                     layer_props['label_placement'] = True
+
+                if layer_name == 'roads' and \
+                   shape.geom_type in ('LineString', 'MultiLineString'):
+                    mz_networks = []
+                    for rel in rels:
+                        rel_tags = deassoc(rel['tags'])
+                        route, network, ref = [rel_tags.get(k) for k in (
+                            'route', 'network', 'ref')]
+                        if route and (network or ref):
+                            mz_networks.extend([route, network, ref])
+
+                    layer_props['mz_networks'] = mz_networks
 
                 if layer_props:
                     props_name = '__%s_properties__' % layer_name
