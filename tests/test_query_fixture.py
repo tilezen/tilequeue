@@ -4,9 +4,10 @@ import unittest
 class TestQueryFixture(unittest.TestCase):
 
     def _make(self, rows, min_zoom_fn, props_fn):
-        from tilequeue.query.fixture import LayerInfo, DataFetcher
+        from tilequeue.query.fixture import LayerInfo
+        from tilequeue.query.fixture import make_fixture_data_fetcher
         layers = {'testlayer': LayerInfo(min_zoom_fn, props_fn)}
-        return DataFetcher(layers, rows)
+        return make_fixture_data_fetcher(layers, rows)
 
     def test_query_simple(self):
         from shapely.geometry import Point
