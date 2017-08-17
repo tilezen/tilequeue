@@ -1,3 +1,4 @@
+from tilequeue.tile import coord_to_mercator_bounds
 from collections import defaultdict
 from collections import Iterable
 from collections import namedtuple
@@ -9,6 +10,8 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
+from tilequeue.process import convert_source_data_to_feature_layers
+from tilequeue.process import process_coord
 from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_db_data_fetcher
 from tilequeue.queue import make_sqs_queue
@@ -1661,6 +1664,51 @@ class FakeStatsTimer(object):
         pass
 
 
+def tilequeue_process_tile(cfg, peripherals, args):
+    if not args.coord:
+        print >> sys.stderr, 'Missing coord argument'
+        sys.exit(1)
+
+    coord_str = args.coord
+    coord = deserialize_coord(coord_str)
+    if not coord:
+        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        sys.exit(2)
+
+    with open(cfg.query_cfg) as query_cfg_fp:
+        query_cfg = yaml.load(query_cfg_fp)
+
+    all_layer_data, layer_data, post_process_data = (
+        parse_layer_data(
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
+    io_pool = ThreadPool(len(layer_data))
+
+    data_fetcher = make_db_data_fetcher(
+        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
+        query_cfg, io_pool)
+
+    unpadded_bounds = coord_to_mercator_bounds(coord)
+    source_rows = data_fetcher(coord.zoom, unpadded_bounds)
+    feature_layers = convert_source_data_to_feature_layers(
+        source_rows, layer_data, unpadded_bounds, coord.zoom)
+    cut_coords = []
+    formats = lookup_formats(cfg.output_formats)
+    formatted_tiles, extra_data = process_coord(
+        coord, coord.zoom, feature_layers, post_process_data, formats,
+        unpadded_bounds, cut_coords, cfg.buffer_cfg, output_calc_mapping)
+
+    # can think about making this configurable
+    # but this is intended for debugging anyway
+    json_tile = [x for x in formatted_tiles
+                 if x['format'].extension == 'json']
+    assert json_tile
+    json_tile = json_tile[0]
+    tile_data = json_tile['tile']
+    print tile_data
+
+
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -1710,6 +1758,13 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('coords', nargs='*',
                            help='Tile coordinates as "z/x/y".')
     subparser.set_defaults(func=tilequeue_tile_status)
+
+    subparser = subparsers.add_parser('tile')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('coord',
+                           help='Tile coordinate as "z/x/y".')
+    subparser.set_defaults(func=tilequeue_process_tile)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
