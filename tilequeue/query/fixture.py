@@ -1,6 +1,6 @@
 from collections import namedtuple
 from shapely.geometry import box
-from tilequeue.process import meta_for_properties
+from tilequeue.process import lookup_source
 from itertools import izip
 
 
@@ -24,6 +24,12 @@ def deassoc(x):
 
     pairs = [iter(x)] * 2
     return dict(izip(*pairs))
+
+
+# fixtures extend metadata to include ways and relations for the feature.
+# this is unnecessary for SQL, as the ways and relations tables are
+# "ambiently available" and do not need to be passed in arguments.
+Metadata = namedtuple('Metadata', 'source ways relations')
 
 
 class DataFetcher(object):
@@ -50,6 +56,7 @@ class DataFetcher(object):
 
             # TODO: there must be some better way of doing this?
             rels = props.pop('__relations__', [])
+            ways = props.pop('__ways__', [])
 
             # place for assembing the read row as if from postgres
             read_row = {}
@@ -58,7 +65,8 @@ class DataFetcher(object):
             generate_label_placement = False
 
             for layer_name, info in self.layers.items():
-                meta = meta_for_properties(props)
+                source = lookup_source(props.get('source'))
+                meta = Metadata(source, ways, rels)
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
 
                 # reject anything which isn't in the current zoom range
@@ -80,14 +88,29 @@ class DataFetcher(object):
                 if layer_name == 'roads' and \
                    shape.geom_type in ('LineString', 'MultiLineString'):
                     mz_networks = []
+                    mz_cycling_networks = set()
                     for rel in rels:
                         rel_tags = deassoc(rel['tags'])
-                        route, network, ref = [rel_tags.get(k) for k in (
-                            'route', 'network', 'ref')]
+                        typ, route, network, ref = [rel_tags.get(k) for k in (
+                            'type', 'route', 'network', 'ref')]
                         if route and (network or ref):
                             mz_networks.extend([route, network, ref])
+                        if typ == 'route' and \
+                           route in ('hiking', 'foot', 'bicycle') and \
+                           network in ('icn', 'ncn', 'rcn', 'lcn'):
+                            mz_cycling_networks.add(network)
+
+                    mz_cycling_network = None
+                    for cn in ('icn', 'ncn', 'rcn', 'lcn'):
+                        if layer_props.get(cn) == 'yes' or \
+                           ('%s_ref' % cn) in layer_props or \
+                           cn in mz_cycling_networks:
+                            mz_cycling_network = cn
+                            break
 
                     layer_props['mz_networks'] = mz_networks
+                    if mz_cycling_network:
+                        layer_props['mz_cycling_network'] = mz_cycling_network
 
                 if layer_props:
                     props_name = '__%s_properties__' % layer_name
