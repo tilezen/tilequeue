@@ -74,7 +74,9 @@ class DataFetcher(object):
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
 
                 # reject anything which isn't in the current zoom range
-                if min_zoom is None or zoom < min_zoom:
+                # note that this is (zoom+1) because things with a min_zoom of
+                # (e.g) 14.999 should still be in the zoom 14 tile.
+                if min_zoom is None or (zoom + 1) < min_zoom:
                     continue
 
                 # if the feature exists in any label placement layer, then we
@@ -88,6 +90,9 @@ class DataFetcher(object):
                 # urgh, hack!
                 if layer_name == 'water' and shape.geom_type == 'Point':
                     layer_props['label_placement'] = True
+
+                if shape.geom_type in ('Polygon', 'MultiPolygon'):
+                    layer_props['area'] = shape.area
 
                 if layer_name == 'roads' and \
                    shape.geom_type in ('LineString', 'MultiLineString'):
