@@ -2,6 +2,7 @@ from collections import namedtuple
 from shapely.geometry import box
 from tilequeue.process import lookup_source
 from itertools import izip
+from tilequeue.transform import calculate_padded_bounds
 
 
 LayerInfo = namedtuple('LayerInfo', 'min_zoom_fn props_fn')
@@ -64,6 +65,9 @@ class DataFetcher(object):
             # whether to generate a label placement centroid
             generate_label_placement = False
 
+            # whether to clip to a padded box
+            has_water_layer = False
+
             for layer_name, info in self.layers.items():
                 source = lookup_source(props.get('source'))
                 meta = Metadata(source, ways, rels)
@@ -115,11 +119,20 @@ class DataFetcher(object):
                 if layer_props:
                     props_name = '__%s_properties__' % layer_name
                     read_row[props_name] = layer_props
+                    if layer_name == 'water':
+                        has_water_layer = True
 
             # if at least one min_zoom / properties match
             if read_row:
+                clip_box = bbox
+                if has_water_layer:
+                    pad_factor = 1.1
+                    clip_box = calculate_padded_bounds(
+                        pad_factor, unpadded_bounds)
+                clip_shape = clip_box.intersection(shape)
+
                 read_row['__id__'] = fid
-                read_row['__geometry__'] = bytes(shape.wkb)
+                read_row['__geometry__'] = bytes(clip_shape.wkb)
                 if shape.geom_type in ('Polygon', 'MultiPolygon') and \
                    generate_label_placement:
                     read_row['__label__'] = bytes(
