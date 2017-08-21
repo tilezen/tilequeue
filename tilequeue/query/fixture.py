@@ -73,10 +73,17 @@ class DataFetcher(object):
                 meta = Metadata(source, ways, rels)
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
 
+                # reject features which don't match in this layer
+                if min_zoom is None:
+                    continue
+
                 # reject anything which isn't in the current zoom range
                 # note that this is (zoom+1) because things with a min_zoom of
                 # (e.g) 14.999 should still be in the zoom 14 tile.
-                if min_zoom is None or (zoom + 1) < min_zoom:
+                #
+                # also, if zoom >= 16, we should include all features, even
+                # those with min_zoom > zoom.
+                if zoom < 16 and (zoom + 1) <= min_zoom:
                     continue
 
                 # if the feature exists in any label placement layer, then we
