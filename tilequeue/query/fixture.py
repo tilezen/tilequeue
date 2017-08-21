@@ -55,6 +55,10 @@ class DataFetcher(object):
             if bbox.disjoint(shape):
                 continue
 
+            # copy props so that any updates to it don't affect the original
+            # data.
+            props = props.copy()
+
             # TODO: there must be some better way of doing this?
             rels = props.pop('__relations__', [])
             ways = props.pop('__ways__', [])
