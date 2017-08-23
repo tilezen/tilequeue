@@ -33,6 +33,13 @@ def deassoc(x):
 Metadata = namedtuple('Metadata', 'source ways relations')
 
 
+def _shape_type_lookup(shape):
+    typ = shape.geom_type
+    if typ.startswith('Multi'):
+        typ = typ[len('Multi'):]
+    return typ.lower()
+
+
 class DataFetcher(object):
 
     def __init__(self, layers, rows, label_placement_layers):
@@ -91,8 +98,10 @@ class DataFetcher(object):
                     continue
 
                 # if the feature exists in any label placement layer, then we
-                # should consider generating a centroid (if it's a polygon)
-                if layer_name in self.label_placement_layers:
+                # should consider generating a centroid
+                label_layers = self.label_placement_layers.get(
+                    _shape_type_lookup(shape), {})
+                if layer_name in label_layers:
                     generate_label_placement = True
 
                 layer_props = props.copy()
@@ -149,8 +158,7 @@ class DataFetcher(object):
 
                 read_row['__id__'] = fid
                 read_row['__geometry__'] = bytes(clip_shape.wkb)
-                if shape.geom_type in ('Polygon', 'MultiPolygon') and \
-                   generate_label_placement:
+                if generate_label_placement:
                     read_row['__label__'] = bytes(
                         shape.representative_point().wkb)
                 read_rows.append(read_row)
@@ -158,5 +166,5 @@ class DataFetcher(object):
         return read_rows
 
 
-def make_fixture_data_fetcher(layers, rows, label_placement_layers=set()):
+def make_fixture_data_fetcher(layers, rows, label_placement_layers={}):
     return DataFetcher(layers, rows, label_placement_layers)
