@@ -40,6 +40,17 @@ def _shape_type_lookup(shape):
     return typ.lower()
 
 
+# list of road types which are likely to have buses on them. used to cut
+# down the number of queries the SQL used to do for relations. although this
+# isn't necessary for fixtures, we replicate the logic to keep the behaviour
+# the same.
+BUS_ROADS = set([
+    'motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary',
+    'primary_link', 'secondary', 'secondary_link', 'tertiary',
+    'tertiary_link', 'residential', 'unclassified', 'road', 'living_street',
+])
+
+
 class DataFetcher(object):
 
     def __init__(self, layers, rows, label_placement_layers):
@@ -118,6 +129,7 @@ class DataFetcher(object):
                    shape.geom_type in ('LineString', 'MultiLineString'):
                     mz_networks = []
                     mz_cycling_networks = set()
+                    mz_is_bus_route = False
                     for rel in rels:
                         rel_tags = deassoc(rel['tags'])
                         typ, route, network, ref = [rel_tags.get(k) for k in (
@@ -128,6 +140,8 @@ class DataFetcher(object):
                            route in ('hiking', 'foot', 'bicycle') and \
                            network in ('icn', 'ncn', 'rcn', 'lcn'):
                             mz_cycling_networks.add(network)
+                        if typ == 'route' and route in ('bus', 'trolleybus'):
+                            mz_is_bus_route = True
 
                     mz_cycling_network = None
                     for cn in ('icn', 'ncn', 'rcn', 'lcn'):
@@ -136,6 +150,11 @@ class DataFetcher(object):
                            cn in mz_cycling_networks:
                             mz_cycling_network = cn
                             break
+
+                    if mz_is_bus_route and \
+                       zoom >= 12 and \
+                       layer_props.get('highway') in BUS_ROADS:
+                        layer_props['is_bus_route'] = True
 
                     layer_props['mz_networks'] = mz_networks
                     if mz_cycling_network:
