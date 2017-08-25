@@ -5,7 +5,20 @@ from itertools import izip
 from tilequeue.transform import calculate_padded_bounds
 
 
-LayerInfo = namedtuple('LayerInfo', 'min_zoom_fn props_fn')
+def namedtuple_with_defaults(name, props, defaults):
+    t = namedtuple(name, props)
+    t.__new__.__defaults__ = defaults
+    return t
+
+
+class LayerInfo(namedtuple_with_defaults(
+        'LayerInfo', 'min_zoom_fn props_fn shape_types', (None,))):
+
+    def allows_shape_type(self, shape):
+        if self.shape_types is None:
+            return True
+        typ = _shape_type_lookup(shape)
+        return typ in self.shape_types
 
 
 def deassoc(x):
@@ -91,6 +104,9 @@ class DataFetcher(object):
             has_water_layer = False
 
             for layer_name, info in self.layers.items():
+                if not info.allows_shape_type(shape):
+                    continue
+
                 source = lookup_source(props.get('source'))
                 meta = Metadata(source, ways, rels)
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
@@ -117,6 +133,14 @@ class DataFetcher(object):
 
                 layer_props = props.copy()
                 layer_props['min_zoom'] = min_zoom
+
+                # need to make sure that the name is only applied to one of
+                # the pois, landuse or buildings layers - in that order of
+                # priority.
+                #
+                # TODO: do this for all name variants & translations
+                if layer_name in ('pois', 'landuse', 'buildings'):
+                    layer_props.pop('name', None)
 
                 # urgh, hack!
                 if layer_name == 'water' and shape.geom_type == 'Point':
@@ -174,6 +198,16 @@ class DataFetcher(object):
                     clip_box = calculate_padded_bounds(
                         pad_factor, unpadded_bounds)
                 clip_shape = clip_box.intersection(shape)
+
+                # add back name into whichever of the pois, landuse or
+                # buildings layers has claimed this feature.
+                name = props.get('name', None)
+                if name:
+                    for layer_name in ('pois', 'landuse', 'buildings'):
+                        props_name = '__%s_properties__' % layer_name
+                        if props_name in read_row:
+                            read_row[props_name]['name'] = name
+                            break
 
                 read_row['__id__'] = fid
                 read_row['__geometry__'] = bytes(clip_shape.wkb)
