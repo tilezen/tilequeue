@@ -130,9 +130,10 @@ class DataFetcher(object):
                 # in".
                 if props.get('source') == 'naturalearthdata.com':
                     pop_max = int(props.get('pop_max', '0'))
-                    if ((zoom >= 8 and zoom < 10 and pop_max > 50000) or
-                        (zoom >= 10 and zoom < 11 and pop_max > 20000) or
-                        (zoom >= 11 and pop_max > 5000)):
+                    remove = ((zoom >= 8 and zoom < 10 and pop_max > 50000) or
+                              (zoom >= 10 and zoom < 11 and pop_max > 20000) or
+                              (zoom >= 11 and pop_max > 5000))
+                    if remove:
                         continue
 
                 # if the feature exists in any label placement layer, then we
