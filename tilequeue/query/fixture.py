@@ -124,6 +124,17 @@ class DataFetcher(object):
                 if zoom < 16 and (zoom + 1) <= min_zoom:
                     continue
 
+                # UGLY HACK: match the query for "max zoom" for NE places.
+                # this removes larger cities at low zooms, and smaller cities
+                # as the zoom increases and as the OSM cities start to "fade
+                # in".
+                if props.get('source') == 'naturalearthdata.com':
+                    pop_max = int(props.get('pop_max', '0'))
+                    if ((zoom >= 8 and zoom < 10 and pop_max > 50000) or
+                        (zoom >= 10 and zoom < 11 and pop_max > 20000) or
+                        (zoom >= 11 and pop_max > 5000)):
+                        continue
+
                 # if the feature exists in any label placement layer, then we
                 # should consider generating a centroid
                 label_layers = self.label_placement_layers.get(
