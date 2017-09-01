@@ -149,7 +149,15 @@ def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
 
     # TODO: if the station is also a multipolygon relation?
 
-    # TODO:
+    # TODO: the following hasn't been implemented because the way that the
+    # code currently collects the list of relations misses out any relations
+    # which aren't immediate parents of something with physical geometry. this
+    # means that, for example, the "root" relation of London Waterloo station
+    # (type=site, site=stop_area) doesn't get included. (see vector-datasource
+    # integration test 653). possibly this can be fixed by passing the
+    # original list of relations in, rather than having them pre-assigned to
+    # features?
+    #
     # this complex query does two recursive sweeps of the relations
     # table starting from a seed set of relations which are or contain
     # the original station.
