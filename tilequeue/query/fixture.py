@@ -1,4 +1,5 @@
 from collections import namedtuple
+from collections import defaultdict
 from shapely.geometry import box
 from tilequeue.process import lookup_source
 from itertools import izip
@@ -62,6 +63,180 @@ BUS_ROADS = set([
     'primary_link', 'secondary', 'secondary_link', 'tertiary',
     'tertiary_link', 'residential', 'unclassified', 'road', 'living_street',
 ])
+
+
+class Relation(object):
+    def __init__(self, obj):
+        self.id = obj['id']
+        self.tags = deassoc(obj['tags'])
+        way_off = obj['way_off']
+        rel_off = obj['rel_off']
+        self.node_ids = obj['parts'][0:way_off]
+        self.way_ids = obj['parts'][way_off:rel_off]
+        self.rel_ids = obj['parts'][rel_off:]
+
+
+def mz_is_interesting_transit_relation(tags):
+    public_transport = tags.get('public_transport')
+    typ = tags.get('type')
+    return public_transport in ('stop_area', 'stop_area_group') or \
+        typ in ('stop_area', 'stop_area_group', 'site')
+
+
+# extract a name for a transit route relation. this can expand comma
+# separated lists and prefers to use the ref rather than the name.
+def mz_transit_route_name(tags):
+    # prefer ref as it's less likely to contain the destination name
+    name = tags.get('ref')
+    if not name:
+        name = tags.get('name')
+    if name:
+        name = name.strip()
+    return name
+
+
+Transit = namedtuple(
+    'Transit', 'score root_relation_id '
+    'trains subways light_rails trams railways')
+
+
+def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
+    # extract out all relations and index by ID. this is helpful when
+    # looking them up later.
+    relations = {}
+    nodes = {}
+    ways = {}
+    ways_using_node = {}
+
+    for (fid, shape, props) in rows:
+        if fid >= 0:
+            if shape.geom_type in ('Point', 'MultiPoint'):
+                nodes[fid] = (fid, shape, props)
+                features = props.get('__ways__', [])
+                ways_using_node[fid] = [f[0] for f in features]
+            else:
+                ways[fid] = (fid, shape, props)
+
+        rels = props.get('__relations__', [])
+        for rel in rels:
+            r = Relation(rel)
+            if r.id not in relations:
+                relations[r.id] = r
+
+    relations_using_node = defaultdict(list)
+    relations_using_way = defaultdict(list)
+    relations_using_rel = defaultdict(list)
+
+    for rel_id, rel in relations.items():
+        for (ids, index) in ((rel.node_ids, relations_using_node),
+                             (rel.way_ids, relations_using_way),
+                             (rel.rel_ids, relations_using_rel)):
+            for osm_id in ids:
+                index[osm_id].append(rel_id)
+
+    candidate_relations = set()
+    if node_id:
+        candidate_relations.update(relations_using_node.get(node_id, []))
+    if way_id:
+        candidate_relations.update(relations_using_way.get(way_id, []))
+
+    seed_relations = set()
+    for rel_id in candidate_relations:
+        rel = relations[rel_id]
+        if mz_is_interesting_transit_relation(rel.tags):
+            seed_relations.add(rel_id)
+    del candidate_relations
+
+    # TODO: if the station is also a multipolygon relation?
+
+    # TODO:
+    # this complex query does two recursive sweeps of the relations
+    # table starting from a seed set of relations which are or contain
+    # the original station.
+    #
+    # the first sweep goes "upwards" from relations to "parent" relations. if
+    # a relation R1 is a member of relation R2, then R2 will be included in
+    # this sweep as long as it has "interesting" tags, as defined by the
+    # function mz_is_interesting_transit_relation.
+    #
+    # the second sweep goes "downwards" from relations to "child" relations.
+    # if a relation R1 has a member R2 which is also a relation, then R2 will
+    # be included in this sweep as long as it also has "interesting" tags.
+    all_relations = seed_relations
+    del seed_relations
+
+    # TODO: assign root relation ID to "highest" relation recursed to.
+    root_relation_id = None
+
+    # collect all the interesting nodes - this includes the station node (if
+    # any) and any nodes which are members of found relations which have
+    # public transport tags indicating that they're stations or stops.
+    stations_and_stops = set()
+    for rel_id in all_relations:
+        rel = relations[rel_id]
+        for node_id in rel.node_ids:
+            fid, shape, props = nodes[node_id]
+            railway = props.get('railway') in ('station', 'stop', 'tram_stop')
+            public_transport = props.get('public_transport') in \
+                ('stop', 'stop_position', 'tram_stop')
+            if railway or public_transport:
+                stations_and_stops.add(fid)
+
+    if node_id:
+        stations_and_stops.add(node_id)
+
+    # collect any physical railway which includes any of the above
+    # nodes.
+    stations_and_lines = set()
+    for node_id in stations_and_stops:
+        for way_id in ways_using_node[node_id]:
+            fid, shape, props = ways[way_id]
+            railway = props.get('railway')
+            if railway in ('subway', 'light_rail', 'tram', 'rail'):
+                stations_and_lines.add(way_id)
+
+    if way_id:
+        stations_and_lines.add(way_id)
+
+    # collect all IDs together in one array to intersect with the parts arrays
+    # of route relations which may include them.
+    all_routes = set()
+    for lookup, ids in ((relations_using_node, stations_and_stops),
+                        (relations_using_way, stations_and_lines),
+                        (relations_using_rel, all_relations)):
+        for i in ids:
+            for rel_id in lookup.get(i, []):
+                rel = relations[rel_id]
+                if rel.tags.get('type') == 'route' and \
+                   rel.tags.get('route') in ('subway', 'light_rail', 'tram',
+                                             'train', 'railway'):
+                    all_routes.add(rel_id)
+
+    routes_lookup = defaultdict(set)
+    for rel_id in all_routes:
+        rel = relations[rel_id]
+        route = rel.tags.get('route')
+        if route:
+            route_name = mz_transit_route_name(rel.tags)
+            routes_lookup[route].add(route_name)
+    trains = routes_lookup['train']
+    subways = routes_lookup['subway']
+    light_rails = routes_lookup['light_rail']
+    trams = routes_lookup['tram']
+    railways = routes_lookup['railway']
+    del routes_lookup
+
+    # if a station is an interchange between mainline rail and subway or
+    # light rail, then give it a "bonus" boost of importance.
+    bonus = 2 if trains and (subways or light_rails) else 1
+
+    score = (100 * min(9, bonus * len(trains)) +
+             10 * min(9, bonus * (len(subways) + len(light_rails))) +
+             min(9, len(trams) + len(railways)))
+
+    return Transit(score=score, root_relation_id=root_relation_id,
+                   trains=trains, subways=subways, light_rails=light_rails,
+                   railways=railways, trams=trams)
 
 
 class DataFetcher(object):
@@ -195,6 +370,30 @@ class DataFetcher(object):
                     layer_props['mz_networks'] = mz_networks
                     if mz_cycling_network:
                         layer_props['mz_cycling_network'] = mz_cycling_network
+
+                is_poi = layer_name == 'pois'
+                is_railway_station = props.get('railway') == 'station'
+                is_point_or_poly = shape.geom_type in (
+                    'Point', 'MultiPoint', 'Polygon', 'MultiPolygon')
+
+                if is_poi and is_railway_station and \
+                   is_point_or_poly and fid >= 0:
+                    node_id = None
+                    way_id = None
+                    if shape.geom_type in ('Point', 'MultiPoint'):
+                        node_id = fid
+                    else:
+                        way_id = fid
+
+                    transit = mz_calculate_transit_routes_and_score(
+                        self.rows, node_id, way_id)
+                    layer_props['mz_transit_score'] = transit.score
+                    layer_props['mz_transit_root_relation_id'] = (
+                        transit.root_relation_id)
+                    layer_props['train_routes'] = transit.trains
+                    layer_props['subway_routes'] = transit.subways
+                    layer_props['light_rail_routes'] = transit.light_rails
+                    layer_props['tram_routes'] = transit.trams
 
                 if layer_props:
                     props_name = '__%s_properties__' % layer_name
