@@ -237,8 +237,7 @@ def meta_for_properties(query_props):
     query_props_source = query_props.get('source')
     if query_props_source:
         source = lookup_source(query_props_source)
-        if not source:
-            assert 0, 'Unknown source: %s' % query_props_source
+        assert source, 'Unknown source: %s' % query_props_source
         meta = make_metadata(source)
     return meta
 
