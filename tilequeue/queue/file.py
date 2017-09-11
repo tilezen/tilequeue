@@ -15,7 +15,8 @@ class OutputFileQueue(object):
     probably isn't worth the complexity.
     '''
 
-    def __init__(self, fp):
+    def __init__(self, fp, read_size=10):
+        self.read_size = read_size
         self.fp = fp
         self.lock = threading.RLock()
 
@@ -32,10 +33,9 @@ class OutputFileQueue(object):
         return n, 0
 
     def read(self):
-        max_to_read = 10
         with self.lock:
             msg_handles = []
-            for _ in range(max_to_read):
+            for _ in range(self.read_size):
                 coord_str = self.fp.readline() or ''
                 coord = deserialize_coord(coord_str)
                 if coord:

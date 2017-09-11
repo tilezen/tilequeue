@@ -39,11 +39,9 @@ class TestQueue(unittest.TestCase):
             actual_coords, expected, 'Reading multiple records failed')
 
         # Test `.read()` for just 1 record at a time.
-        for expected in self.test_tile_objs[num_to_read:]:
-            [actual_msg] = self.queue.read()
-            self.assertEqual(
-                actual_msg.coord, expected,
-                'Reading 1 record failed')
+        msgs = self.queue.read()
+        for actual_msg, exp_msg in zip(msgs, self.test_tile_objs):
+            self.assertEqual(actual_msg.coord, expected)
 
     def test_enqueue_and_enqueue_batch(self):
         # Test `.enqueue_batch()`.

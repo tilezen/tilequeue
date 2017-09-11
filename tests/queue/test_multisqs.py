@@ -130,10 +130,15 @@ class MultiSqsTest(unittest.TestCase):
             [sqs_queue1, sqs_queue2],
             _test_q1_q2_get_queue_name_for_zoom,
         )
+
         coord_msgs = msq.read()
-        self.assertEqual(2, len(coord_msgs))
+        self.assertEqual(1, len(coord_msgs))
         self.assertEqual(coord1, coord_msgs[0].coord)
-        self.assertEqual(coord2, coord_msgs[1].coord)
+
+        sqs_queue1.get_messages = self._make_get_messages([])
+        coord_msgs = msq.read()
+        self.assertEqual(1, len(coord_msgs))
+        self.assertEqual(coord2, coord_msgs[0].coord)
 
     def test_job_done_single(self):
         from mock import MagicMock
