@@ -1,3 +1,5 @@
+from handle import MessageHandle
+
 from file import OutputFileQueue
 from memory import MemoryQueue
 from multisqs import make_multi_sqs_queue
@@ -10,6 +12,7 @@ __all__ = [
     make_redis_queue,
     make_sqs_queue,
     MemoryQueue,
+    MessageHandle,
     OutputFileQueue,
     SqsQueue,
 ]

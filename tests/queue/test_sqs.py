@@ -1,14 +1,13 @@
 import unittest
 
-from tilequeue.queue import SqsQueue
 from ModestMaps.Core import Coordinate
 from mock import MagicMock
-from boto.sqs.message import RawMessage
-from tilequeue.tile import serialize_coord
 
 
 class TestQueue(unittest.TestCase):
     def setUp(self):
+        from tilequeue.queue import SqsQueue
+
         self.message = None
         self.mockQueue = MagicMock()
         self.mockQueue.write = self.fake_write
@@ -100,13 +99,16 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(exp_values, self.values)
 
     def test_job_done_removes_tile_from_in_flight(self):
-        from tilequeue.tile import CoordMessage
+        from boto.sqs.message import RawMessage
+        from tilequeue.queue import MessageHandle
+        from tilequeue.tile import serialize_coord
+
         coord = Coordinate(row=1, column=1, zoom=1)
         payload = serialize_coord(coord)
         message = RawMessage()
         message.set_body(payload)
-        coord_message = CoordMessage(coord, message)
-        self.sqs.job_done(coord_message)
+        msg_handle = MessageHandle(message, coord)
+        self.sqs.job_done(msg_handle)
         from tilequeue.tile import coord_marshall_int
         exp_value = coord_marshall_int(coord)
         self.mockRedis.srem.assert_called_once_with(self.sqs.inflight_key,

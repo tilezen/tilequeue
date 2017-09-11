@@ -2,8 +2,6 @@
 Unit tests for `tilequeue.queue.file`.
 '''
 
-from tilequeue.queue import OutputFileQueue
-from tilequeue import tile
 from ModestMaps.Core import Coordinate
 import unittest
 import StringIO
@@ -12,6 +10,9 @@ import StringIO
 class TestQueue(unittest.TestCase):
 
     def setUp(self):
+        from tilequeue import tile
+        from tilequeue.queue import OutputFileQueue
+
         self.test_tile_coords = [
             (0, 0, 0),
             (1, 2, 3),
@@ -31,10 +32,9 @@ class TestQueue(unittest.TestCase):
         self._write_str_to_file(self.tile_coords_str)
 
         # Test `.read() for multiple records.`
-        num_to_read = 3
         actual_coords = [
-            msg.coord for msg in self.queue.read(max_to_read=num_to_read)]
-        expected = self.test_tile_objs[:num_to_read]
+            msg.coord for msg in self.queue.read()]
+        expected = self.test_tile_objs
         self.assertEqual(
             actual_coords, expected, 'Reading multiple records failed')
 

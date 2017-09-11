@@ -36,8 +36,8 @@ from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
-from tilequeue.worker import SqsQueueReader
-from tilequeue.worker import SqsQueueWriter
+from tilequeue.worker import TileQueueReader
+from tilequeue.worker import TileQueueWriter
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
@@ -335,7 +335,7 @@ def coord_ints_from_paths(paths):
 def tilequeue_intersect(cfg, peripherals):
     logger = make_logger(cfg, 'intersect')
     logger.info("Intersecting expired tiles with tiles of interest")
-    sqs_queue = peripherals.queue
+    tile_queue = peripherals.queue
 
     assert cfg.intersect_expired_tiles_location, \
         'Missing tiles expired-location configuration'
@@ -381,7 +381,7 @@ def tilequeue_intersect(cfg, peripherals):
 
     # clamp number of threads between 5 and 20
     n_threads = max(min(len(expired_tile_paths), 20), 5)
-    enqueuer = ThreadedEnqueuer(sqs_queue, n_threads, logger)
+    enqueuer = ThreadedEnqueuer(tile_queue, n_threads, logger)
     n_queued, n_in_flight = enqueuer(coords)
 
     # print counts per file
@@ -552,7 +552,7 @@ def tilequeue_process(cfg, peripherals):
 
     formats = lookup_formats(cfg.output_formats)
 
-    sqs_queue = peripherals.queue
+    tile_queue = peripherals.queue
 
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
 
@@ -568,7 +568,6 @@ def tilequeue_process(cfg, peripherals):
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
 
     n_cpu = multiprocessing.cpu_count()
-    sqs_messages_per_batch = 10
     n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
     if not n_simultaneous_query_sets:
         # default to number of databases configured
@@ -604,9 +603,12 @@ def tilequeue_process(cfg, peripherals):
 
     # create all queues used to manage pipeline
 
-    sqs_input_queue_buffer_size = sqs_messages_per_batch
-    # holds coord messages from sqs
-    sqs_input_queue = Queue.Queue(sqs_input_queue_buffer_size)
+    # holds coordinate messages from tile queue reader
+    # TODO can move this hardcoded value to configuration
+    # having a little less than the value is beneficial
+    # ie prefer to read on-demand from queue rather than hold messages
+    # in waiting while others are processed, can become stale faster
+    tile_input_queue = Queue.Queue(10)
 
     # holds raw sql results - no filtering or processing done on them
     sql_data_fetch_queue = multiprocessing.Queue(sql_queue_buffer_size)
@@ -620,13 +622,13 @@ def tilequeue_process(cfg, peripherals):
     s3_store_queue = Queue.Queue(s3_queue_buffer_size)
 
     # create worker threads/processes
-    thread_sqs_queue_reader_stop = threading.Event()
-    sqs_queue_reader = SqsQueueReader(
-        sqs_queue, sqs_input_queue, logger, thread_sqs_queue_reader_stop,
+    thread_tile_queue_reader_stop = threading.Event()
+    tile_queue_reader = TileQueueReader(
+        tile_queue, tile_input_queue, logger, thread_tile_queue_reader_stop,
         cfg.max_zoom)
 
     data_fetch = DataFetch(
-        feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
+        feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
         logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
@@ -636,16 +638,16 @@ def tilequeue_process(cfg, peripherals):
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            logger, cfg.metatile_size)
 
-    thread_sqs_writer_stop = threading.Event()
-    sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
-                                      thread_sqs_writer_stop)
+    thread_tile_writer_stop = threading.Event()
+    tile_queue_writer = TileQueueWriter(tile_queue, s3_store_queue, logger,
+                                      thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
         t.start()
         return t
 
-    thread_sqs_queue_reader = create_and_start_thread(sqs_queue_reader)
+    thread_tile_queue_reader = create_and_start_thread(tile_queue_reader)
 
     threads_data_fetch = []
     threads_data_fetch_stop = []
@@ -677,12 +679,12 @@ def tilequeue_process(cfg, peripherals):
         threads_s3_storage.append(thread_s3_storage)
         threads_s3_storage_stop.append(thread_s3_storage_stop)
 
-    thread_sqs_writer = create_and_start_thread(sqs_queue_writer)
+    thread_tile_writer = create_and_start_thread(tile_queue_writer)
 
     if cfg.log_queue_sizes:
         assert(cfg.log_queue_sizes_interval_seconds > 0)
         queue_data = (
-            (sqs_input_queue, 'sqs'),
+            (tile_input_queue, 'queue'),
             (sql_data_fetch_queue, 'sql'),
             (processor_queue, 'proc'),
             (s3_store_queue, 's3'),
@@ -704,14 +706,14 @@ def tilequeue_process(cfg, peripherals):
         # each worker guards its read loop with an event object
         # ask all these to stop first
 
-        thread_sqs_queue_reader_stop.set()
+        thread_tile_queue_reader_stop.set()
         for thread_data_fetch_stop in threads_data_fetch_stop:
             thread_data_fetch_stop.set()
         for data_processor_stop in data_processors_stop:
             data_processor_stop.set()
         for thread_s3_storage_stop in threads_s3_storage_stop:
             thread_s3_storage_stop.set()
-        thread_sqs_writer_stop.set()
+        thread_tile_writer_stop.set()
 
         if queue_printer_thread_stop:
             queue_printer_thread_stop.set()
@@ -726,12 +728,12 @@ def tilequeue_process(cfg, peripherals):
 
         logger.info('joining all workers ...')
 
-        logger.info('joining sqs queue reader ...')
-        thread_sqs_queue_reader.join()
-        logger.info('joining sqs queue reader ... done')
+        logger.info('joining tile queue reader ...')
+        thread_tile_queue_reader.join()
+        logger.info('joining tile queue reader ... done')
         logger.info('enqueueing sentinels for data fetchers ...')
         for i in range(len(threads_data_fetch)):
-            sqs_input_queue.put(None)
+            tile_input_queue.put(None)
         logger.info('enqueueing sentinels for data fetchers ... done')
         logger.info('joining data fetchers ...')
         for thread_data_fetch in threads_data_fetch:
@@ -753,12 +755,12 @@ def tilequeue_process(cfg, peripherals):
         for thread_s3_storage in threads_s3_storage:
             thread_s3_storage.join()
         logger.info('joining s3 storage ... done')
-        logger.info('enqueueing sentinel for sqs queue writer ...')
+        logger.info('enqueueing sentinel for tile queue writer ...')
         s3_store_queue.put(None)
-        logger.info('enqueueing sentinel for sqs queue writer ... done')
-        logger.info('joining sqs queue writer ...')
-        thread_sqs_writer.join()
-        logger.info('joining sqs queue writer ... done')
+        logger.info('enqueueing sentinel for tile queue writer ... done')
+        logger.info('joining tile queue writer ...')
+        thread_tile_writer.join()
+        logger.info('joining tile queue writer ... done')
         if queue_printer_thread:
             logger.info('joining queue printer ...')
             queue_printer_thread.join()
@@ -799,8 +801,8 @@ def tilequeue_process(cfg, peripherals):
 
 class ThreadedEnqueuer(object):
 
-    def __init__(self, sqs_queue, n_threads, logger=None):
-        self.sqs_queue = sqs_queue
+    def __init__(self, tile_queue, n_threads, logger=None):
+        self.tile_queue = tile_queue
         self.n_threads = n_threads
         self.logger = logger
 
@@ -827,7 +829,7 @@ class ThreadedEnqueuer(object):
                 else:
                     buf.append(coord)
                 if len(buf) >= buf_size or (done and buf):
-                    n_queued, n_in_flight = self.sqs_queue.enqueue_batch(buf)
+                    n_queued, n_in_flight = self.tile_queue.enqueue_batch(buf)
                     total_queued += n_queued
                     total_in_flight += n_in_flight
                     del buf[:]
@@ -894,11 +896,11 @@ def tilequeue_seed(cfg, peripherals):
     queue_buf_size = 1024
     tile_queue_queue = Queue.Queue(queue_buf_size)
 
-    # updating sqs happens in background threads
+    # updating tile queue happens in background threads
     def tile_queue_enqueue():
         enqueuer(tile_queue_queue)
 
-    logger.info('Enqueueing to SQS ... ')
+    logger.info('Enqueueing ... ')
     thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
 
@@ -912,7 +914,7 @@ def tilequeue_seed(cfg, peripherals):
     tile_queue_queue.put(None)
 
     thread_enqueue.join()
-    logger.info('Enqueueing to SQS ... done')
+    logger.info('Enqueueing ... done')
 
     if cfg.seed_should_add_to_tiles_of_interest:
         logger.info('Adding to Tiles of Interest ... ')
@@ -941,7 +943,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'enqueue_tiles_of_interest')
     logger.info('Enqueueing tiles of interest')
 
-    sqs_queue = peripherals.queue
+    tile_queue = peripherals.queue
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     n_toi = len(tiles_of_interest)
@@ -953,7 +955,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
         if coord.zoom <= cfg.max_zoom:
             coords.append(coord)
 
-    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+    enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
     n_queued, n_in_flight = enqueuer(coords)
 
     logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
@@ -1206,17 +1208,15 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Skipping TOI add step because there are '
                     'no tiles to add')
     else:
-        logger.info('Enqueueing %s tiles to SQS ...',
-                    len(toi_to_add))
+        logger.info('Enqueueing %s tiles ...', len(toi_to_add))
 
-        sqs_queue = peripherals.queue
-        enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
+        tile_queue = peripherals.queue
+        enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
         n_queued, n_in_flight = enqueuer(
             coord_unmarshall_int(coord_int) for coord_int in toi_to_add
         )
 
-        logger.info('Enqueueing %s tiles to SQS ... done',
-                    len(toi_to_add))
+        logger.info('Enqueueing %s tiles ... done', len(toi_to_add))
 
     if toi_to_add or toi_to_remove:
         logger.info('Setting new tiles of interest ... ')

@@ -1,4 +1,6 @@
-from tilequeue.tile import serialize_coord, deserialize_coord, CoordMessage
+from tilequeue.queue import MessageHandle
+from tilequeue.tile import deserialize_coord
+from tilequeue.tile import serialize_coord
 import threading
 
 
@@ -29,19 +31,20 @@ class OutputFileQueue(object):
             n += 1
         return n, 0
 
-    def read(self, max_to_read=1, timeout_seconds=20):
+    def read(self):
+        max_to_read = 10
         with self.lock:
-            coords = []
+            msg_handles = []
             for _ in range(max_to_read):
-                coord = self.fp.readline()
+                coord_str = self.fp.readline() or ''
+                coord = deserialize_coord(coord_str)
                 if coord:
-                    coords.append(CoordMessage(deserialize_coord(coord), None))
-                else:
-                    break
+                    msg_handle = MessageHandle(None, coord)
+                    msg_handles.append(msg_handle)
 
-        return coords
+        return msg_handles
 
-    def job_done(self, coord_message):
+    def job_done(self, msg_handle):
         pass
 
     def clear(self):
@@ -53,8 +56,4 @@ class OutputFileQueue(object):
     def close(self):
         with self.lock:
             self.clear()
-
-            # `self.fp` has already been advanced in `self.read()`, so
-            # `fp.read()` will return the remainder of the file.
-            self.fp.write(self.fp.read())
             self.fp.close()

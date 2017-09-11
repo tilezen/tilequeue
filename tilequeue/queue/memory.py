@@ -1,4 +1,4 @@
-from tilequeue.tile import CoordMessage
+from tilequeue.queue import MessageHandle
 
 
 class MemoryQueue(object):
@@ -10,15 +10,13 @@ class MemoryQueue(object):
         self.q.append(coord)
 
     def enqueue_batch(self, coords):
-        n = 0
         for coord in coords:
             self.enqueue(coord)
-            n += 1
-        return n, 0
 
-    def read(self, max_to_read=1, timeout_seconds=None):
+    def read(self):
+        max_to_read = 10
         self.q, coords = self.q[max_to_read:], self.q[:max_to_read]
-        return [CoordMessage(coord, None) for coord in coords]
+        return [MessageHandle(None, coord) for coord in coords]
 
     def job_done(self, coord_message):
         pass

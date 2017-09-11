@@ -28,16 +28,12 @@ class MultiSqsTest(unittest.TestCase):
     def _mock_write_batch(self, msg_tuples):
         self.mock_write_batch = msg_tuples
 
-    def _make_one(self, queues=(), get_queue_name_for_zoom=None,
-                  redis_client=None, is_seeding=True):
-        from mock import MagicMock
+    def _make_one(self, queues=(), get_queue_name_for_zoom=None):
         from tilequeue.queue.multisqs import MultiSqsQueue
         if get_queue_name_for_zoom is None:
             get_queue_name_for_zoom = _make_test_get_queue_name_for_zoom('q1')
-        if redis_client is None:
-            self.redis_client = redis_client = MagicMock()
         result = MultiSqsQueue(
-            queues, get_queue_name_for_zoom, redis_client, is_seeding)
+            queues, get_queue_name_for_zoom)
         return result
 
     def _make_get_messages(self, coord_strs):
@@ -141,22 +137,22 @@ class MultiSqsTest(unittest.TestCase):
 
     def test_job_done_single(self):
         from mock import MagicMock
-        from tilequeue.tile import CoordMessage
+        from tilequeue.queue import MessageHandle
         from tilequeue.tile import deserialize_coord
 
         coord = deserialize_coord('1/1/1')
         sqs_queue = MagicMock()
         sqs_queue.name = 'q1'
         sqs_queue.delete_message = self._mock_delete_message
-        cm = CoordMessage(coord, 'msg_handle', dict(queue_name=sqs_queue.name))
+        mh = MessageHandle('handle', coord, dict(queue_name=sqs_queue.name))
         msq = self._make_one([sqs_queue])
-        msq.job_done(cm)
+        msq.job_done(mh)
         self.assertIsNotNone(self.mock_handle)
-        self.assertEqual(self.mock_handle, 'msg_handle')
+        self.assertEqual(self.mock_handle, 'handle')
 
     def test_job_done_multiple(self):
         from mock import MagicMock
-        from tilequeue.tile import CoordMessage
+        from tilequeue.queue import MessageHandle
         from tilequeue.tile import deserialize_coord
 
         coord1 = deserialize_coord('1/1/1')
@@ -173,15 +169,15 @@ class MultiSqsTest(unittest.TestCase):
             _test_q1_q2_get_queue_name_for_zoom,
         )
 
-        cm1 = CoordMessage(coord1, 'msg_handle1',
-                           metadata=dict(queue_name=sqs_queue1.name))
+        cm1 = MessageHandle('msg_handle1', coord1,
+                            metadata=dict(queue_name=sqs_queue1.name))
         msq.job_done(cm1)
         self.assertIsNotNone(self.mock_handle)
         self.assertEqual(self.mock_handle, 'msg_handle1')
         self.mock_handle = None
 
-        cm2 = CoordMessage(coord2, 'msg_handle2',
-                           metadata=dict(queue_name=sqs_queue2.name))
+        cm2 = MessageHandle('msg_handle2', coord2,
+                            metadata=dict(queue_name=sqs_queue2.name))
         msq.job_done(cm2)
         self.assertIsNotNone(self.mock_handle)
         self.assertEqual(self.mock_handle, 'msg_handle2')
@@ -189,14 +185,14 @@ class MultiSqsTest(unittest.TestCase):
 
     def test_job_done_no_queue_name(self):
         from mock import MagicMock
-        from tilequeue.tile import CoordMessage
+        from tilequeue.queue import MessageHandle
         from tilequeue.tile import deserialize_coord
 
         coord = deserialize_coord('1/1/1')
         sqs_queue = MagicMock()
         sqs_queue.name = 'q1'
         sqs_queue.delete_message = self._mock_delete_message
-        cm = CoordMessage(coord, 'msg_handle')
+        cm = MessageHandle('msg_handle', coord)
         msq = self._make_one([sqs_queue])
         with self.assertRaises(AssertionError):
             msq.job_done(cm)

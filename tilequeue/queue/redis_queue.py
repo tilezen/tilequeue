@@ -1,6 +1,7 @@
+from tilequeue.queue import MessageHandle
 from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import CoordMessage
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.utils import grouper
 import time
 
 
@@ -13,7 +14,7 @@ class RedisQueue(object):
     crashes, they are lost.
     """
 
-    enqueue_batch_size = 1024
+    enqueue_batch_size = 100
     sleep_time_seconds_when_empty = 10
 
     def __init__(self, redis_client, queue_key):
@@ -25,35 +26,27 @@ class RedisQueue(object):
         self.redis_client.rpush(coord_int)
 
     def enqueue_batch(self, coords):
-        n = 0
-        coord_buffer = []
-        for coord in coords:
-            coord_int = coord_marshall_int(coord)
-            coord_buffer.append(coord_int)
-            n += 1
-            if len(coord_buffer) >= self.enqueue_batch_size:
-                self.redis_client.rpush(self.queue_key, *coord_buffer)
-                del coord_buffer[:]
-        if coord_buffer:
-            self.redis_client.rpush(self.queue_key, *coord_buffer)
-        return n, 0
+        for coords_chunk in grouper(coords, self.enqueue_batch_size):
+            coord_ints = map(coord_marshall_int, coords_chunk)
+            self.redis_client.rpush(self.queue_key, *coord_ints)
 
-    def read(self, max_to_read=10):
+    def read(self):
+        read_size = 10
         with self.redis_client.pipeline() as pipe:
-            pipe.lrange(self.queue_key, 0, max_to_read - 1)
-            pipe.ltrim(self.queue_key, max_to_read, -1)
+            pipe.lrange(self.queue_key, 0, read_size - 1)
+            pipe.ltrim(self.queue_key, read_size, -1)
             coord_ints, _ = pipe.execute()
         if not coord_ints:
             time.sleep(self.sleep_time_seconds_when_empty)
             return []
-        coord_msgs = []
+        msg_handles = []
         for coord_int in coord_ints:
             coord = coord_unmarshall_int(coord_int)
-            coord_msg = CoordMessage(coord, None)
-            coord_msgs.append(coord_msg)
-        return coord_msgs
+            msg_handle = MessageHandle(None, coord)
+            msg_handles.append(msg_handle)
+        return msg_handles
 
-    def job_done(self, coord_message):
+    def job_done(self, msg_handle):
         pass
 
     def clear(self):

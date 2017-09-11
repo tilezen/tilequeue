@@ -90,14 +90,11 @@ class OutputQueue(object):
 # stop event has been received in the interim.
 
 
-class SqsQueueReader(object):
+class TileQueueReader(object):
 
-    def __init__(
-            self, sqs_queue, output_queue, logger, stop, max_zoom,
-            sqs_msgs_to_read_size=10):
-        self.sqs_queue = sqs_queue
+    def __init__(self, tile_queue, output_queue, logger, stop, max_zoom):
+        self.tile_queue = tile_queue
         self.output = OutputQueue(output_queue, stop)
-        self.sqs_msgs_to_read_size = sqs_msgs_to_read_size
         self.logger = logger
         self.stop = stop
         self.max_zoom = max_zoom
@@ -105,34 +102,33 @@ class SqsQueueReader(object):
     def __call__(self):
         while not self.stop.is_set():
             try:
-                msgs = self.sqs_queue.read(
-                    max_to_read=self.sqs_msgs_to_read_size)
+                msg_handles = self.tile_queue.read()
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error(stacktrace)
                 continue
 
-            for msg in msgs:
+            for msg_handle in msg_handles:
                 # if asked to stop, break as soon as possible
                 if self.stop.is_set():
                     break
 
-                if msg.coord.zoom > self.max_zoom:
+                if msg_handle.coord.zoom > self.max_zoom:
                     self.logger.log(
                         logging.WARNING,
                         'Job coordinates above max zoom are not supported, '
-                        'skipping %r > %d' % (msg.coord, self.max_zoom))
+                        'skipping %r > %d' % (msg_handle.coord, self.max_zoom))
 
                     # delete jobs that we can't handle from the queue,
                     # otherwise we'll get stuck in a cycle of timed-out jobs
                     # being re-added to the queue until they overflow
                     # max-retries.
                     try:
-                        self.sqs_queue.job_done(msg)
+                        self.tile_queue.job_done(msg_handle)
                     except:
                         stacktrace = format_stacktrace_one_line()
                         self.logger.error('Error acknowledging: %s - %s' % (
-                            serialize_coord(msg.coord), stacktrace))
+                            serialize_coord(msg_handle.coord), stacktrace))
                     continue
 
                 metadata = dict(
@@ -142,17 +138,17 @@ class SqsQueueReader(object):
                         s3_seconds=None,
                         ack_seconds=None,
                     ),
-                    coord_message=msg,
+                    msg_handle=msg_handle,
                 )
                 data = dict(
                     metadata=metadata,
-                    coord=msg.coord,
+                    coord=msg_handle.coord,
                 )
-                if self.output(msg.coord, data):
+                if self.output(msg_handle.coord, data):
                     break
 
-        self.sqs_queue.close()
-        self.logger.debug('sqs queue reader stopped')
+        self.tile_queue.close()
+        self.logger.debug('tile queue reader stopped')
 
 
 class DataFetch(object):
@@ -407,10 +403,10 @@ class S3Storage(object):
         return async_jobs
 
 
-class SqsQueueWriter(object):
+class TileQueueWriter(object):
 
-    def __init__(self, sqs_queue, input_queue, logger, stop):
-        self.sqs_queue = sqs_queue
+    def __init__(self, tile_queue, input_queue, logger, stop):
+        self.tile_queue = tile_queue
         self.input_queue = input_queue
         self.logger = logger
         self.stop = stop
@@ -427,12 +423,12 @@ class SqsQueueWriter(object):
                 break
 
             metadata = data['metadata']
-            coord_message = metadata['coord_message']
+            msg_handle = metadata['msg_handle']
             coord = data['coord']
 
             start = time.time()
             try:
-                self.sqs_queue.job_done(coord_message)
+                self.tile_queue.job_done(msg_handle)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (
@@ -443,14 +439,14 @@ class SqsQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            coord_message = metadata['coord_message']
-            msg_metadata = coord_message.metadata
+            msg_handle = metadata['msg_handle']
+            msg_metadata = msg_handle.metadata
             time_in_queue = 0
             if msg_metadata:
-                sqs_timestamp_millis = msg_metadata.get('timestamp')
-                if sqs_timestamp_millis is not None:
-                    sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-                    time_in_queue = now - sqs_timestamp_seconds
+                tile_timestamp_millis = msg_metadata.get('timestamp')
+                if tile_timestamp_millis is not None:
+                    tile_timestamp_seconds = tile_timestamp_millis / 1000.0
+                    time_in_queue = now - tile_timestamp_seconds
 
             layers = metadata['layers']
             size = layers['size']
@@ -464,7 +460,7 @@ class SqsQueueWriter(object):
                 'proc(%.2fs) '
                 's3(%.2fs) '
                 'ack(%.2fs) '
-                'sqs(%.2fs) '
+                'time(%.2fs) '
                 'size(%s) '
                 'stored(%s) '
                 'not_stored(%s)' % (
@@ -481,7 +477,7 @@ class SqsQueueWriter(object):
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('sqs queue writer stopped')
+        self.logger.debug('tile queue writer stopped')
 
 
 class QueuePrint(object):
