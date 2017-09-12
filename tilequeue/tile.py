@@ -101,6 +101,10 @@ def reproject_lnglat_to_mercator(x, y, *unused_coords):
     return pyproj.transform(latlng_proj, merc_proj, x, y)
 
 
+def reproject_mercator_to_lnglat(x, y, *unused_coords):
+    return pyproj.transform(merc_proj, latlng_proj, x, y)
+
+
 # mercator <-> point conversions ported from tilestache
 earth_radius = 6378137
 earth_circum = 2 * math.pi * earth_radius
