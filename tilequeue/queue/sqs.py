@@ -36,11 +36,7 @@ class SqsQueue(object):
         sqs_messages = self.sqs_queue.get_messages(
             num_messages=read_size, attributes=["SentTimestamp"])
         for sqs_message in sqs_messages:
-            data = sqs_message.get_body()
-            coord = deserialize_coord(data)
-            if coord is None:
-                # TODO log?
-                continue
+            payload = sqs_message.get_body()
             try:
                 timestamp = float(sqs_message.attributes.get('SentTimestamp'))
             except (TypeError, ValueError):
@@ -50,7 +46,7 @@ class SqsQueue(object):
                 queue_name=self.sqs_queue.name,
                 timestamp=timestamp,
             )
-            msg_handle = MessageHandle(sqs_message, coord, metadata)
+            msg_handle = MessageHandle(sqs_message, payload, metadata)
             msg_handles.append(msg_handle)
         return msg_handles
 

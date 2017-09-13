@@ -37,9 +37,10 @@ class OutputFileQueue(object):
             msg_handles = []
             for _ in range(self.read_size):
                 coord_str = self.fp.readline() or ''
+                coord_str = coord_str.strip()
                 coord = deserialize_coord(coord_str)
                 if coord:
-                    msg_handle = MessageHandle(None, coord)
+                    msg_handle = MessageHandle(None, coord_str)
                     msg_handles.append(msg_handle)
 
         return msg_handles

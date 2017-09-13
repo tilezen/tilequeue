@@ -1,6 +1,7 @@
 from tilequeue.queue import MessageHandle
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import serialize_coord
 from tilequeue.utils import grouper
 import time
 
@@ -42,7 +43,8 @@ class RedisQueue(object):
         msg_handles = []
         for coord_int in coord_ints:
             coord = coord_unmarshall_int(coord_int)
-            msg_handle = MessageHandle(None, coord)
+            coord_str = serialize_coord(coord)
+            msg_handle = MessageHandle(None, coord_str)
             msg_handles.append(msg_handle)
         return msg_handles
 

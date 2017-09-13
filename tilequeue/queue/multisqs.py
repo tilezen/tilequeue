@@ -66,11 +66,7 @@ class MultiSqsQueue(object):
 
             for qm in queue_messages:
 
-                data = qm.get_body()
-                coord = deserialize_coord(data)
-                if coord is None:
-                    # TODO log?
-                    continue
+                payload = qm.get_body()
 
                 try:
                     timestamp = float(qm.attributes.get('SentTimestamp'))
@@ -81,7 +77,7 @@ class MultiSqsQueue(object):
                     queue_name=sqs_queue.name,
                     timestamp=timestamp,
                 )
-                msg_handle = MessageHandle(qm, coord, metadata)
+                msg_handle = MessageHandle(qm, payload, metadata)
                 msg_handles.append(msg_handle)
 
             if msg_handles:
@@ -94,8 +90,7 @@ class MultiSqsQueue(object):
         if msg_handle.metadata:
             queue_name = msg_handle.metadata.get('queue_name')
         assert queue_name, \
-            'Missing queue name metadata for coord: %s' % serialize_coord(
-                msg_handle.coord)
+            'Missing queue name metadata for payload: %s' % msg_handle.payload
 
         sqs_queue = self.sqs_queue_for_name.get(queue_name)
         assert sqs_queue, 'Missing queue for: %s' % queue_name

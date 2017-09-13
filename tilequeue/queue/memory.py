@@ -1,4 +1,5 @@
 from tilequeue.queue import MessageHandle
+from tilequeue.tile import serialize_coord
 
 
 class MemoryQueue(object):
@@ -16,7 +17,7 @@ class MemoryQueue(object):
     def read(self):
         max_to_read = 10
         self.q, coords = self.q[max_to_read:], self.q[:max_to_read]
-        return [MessageHandle(None, coord) for coord in coords]
+        return [MessageHandle(None, serialize_coord(coord)) for coord in coords]
 
     def job_done(self, coord_message):
         pass

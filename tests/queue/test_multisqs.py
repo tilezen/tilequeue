@@ -97,17 +97,13 @@ class MultiSqsTest(unittest.TestCase):
 
     def test_read_single(self):
         from mock import MagicMock
-        from tilequeue.tile import deserialize_coord
-        from tilequeue.tile import serialize_coord
 
         sqs_queue = MagicMock()
-        coord = deserialize_coord('1/1/1')
-        sqs_queue.get_messages = self._make_get_messages(
-            [serialize_coord(coord)])
+        sqs_queue.get_messages = self._make_get_messages(['1/1/1'])
         msq = self._make_one([sqs_queue])
-        coord_msgs = msq.read()
-        self.assertEqual(1, len(coord_msgs))
-        self.assertEqual(coord, coord_msgs[0].coord)
+        msg_handles = msq.read()
+        self.assertEqual(1, len(msg_handles))
+        self.assertEqual('1/1/1', msg_handles[0].payload)
 
     def test_read_multiple(self):
         from mock import MagicMock
@@ -131,14 +127,14 @@ class MultiSqsTest(unittest.TestCase):
             _test_q1_q2_get_queue_name_for_zoom,
         )
 
-        coord_msgs = msq.read()
-        self.assertEqual(1, len(coord_msgs))
-        self.assertEqual(coord1, coord_msgs[0].coord)
+        msg_handles = msq.read()
+        self.assertEqual(1, len(msg_handles))
+        self.assertEqual(serialize_coord(coord1), msg_handles[0].payload)
 
         sqs_queue1.get_messages = self._make_get_messages([])
         coord_msgs = msq.read()
         self.assertEqual(1, len(coord_msgs))
-        self.assertEqual(coord2, coord_msgs[0].coord)
+        self.assertEqual(serialize_coord(coord2), coord_msgs[0].payload)
 
     def test_job_done_single(self):
         from mock import MagicMock
@@ -191,13 +187,11 @@ class MultiSqsTest(unittest.TestCase):
     def test_job_done_no_queue_name(self):
         from mock import MagicMock
         from tilequeue.queue import MessageHandle
-        from tilequeue.tile import deserialize_coord
 
-        coord = deserialize_coord('1/1/1')
         sqs_queue = MagicMock()
         sqs_queue.name = 'q1'
         sqs_queue.delete_message = self._mock_delete_message
-        cm = MessageHandle('msg_handle', coord)
+        mh = MessageHandle('msg_handle', '1/1/1')
         msq = self._make_one([sqs_queue])
         with self.assertRaises(AssertionError):
-            msq.job_done(cm)
+            msq.job_done(mh)

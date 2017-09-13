@@ -29,19 +29,15 @@ class TestQueue(unittest.TestCase):
         self.queue = OutputFileQueue(self.tiles_fp)
 
     def test_read(self):
+        from tilequeue.tile import serialize_coord
         self._write_str_to_file(self.tile_coords_str)
 
         # Test `.read() for multiple records.`
-        actual_coords = [
-            msg.coord for msg in self.queue.read()]
-        expected = self.test_tile_objs
+        actual_coord_strs = [
+            msg.payload for msg in self.queue.read()]
+        expected = map(serialize_coord, self.test_tile_objs)
         self.assertEqual(
-            actual_coords, expected, 'Reading multiple records failed')
-
-        # Test `.read()` for just 1 record at a time.
-        msgs = self.queue.read()
-        for actual_msg, exp_msg in zip(msgs, self.test_tile_objs):
-            self.assertEqual(actual_msg.coord, expected)
+            actual_coord_strs, expected, 'Reading multiple records failed')
 
     def test_enqueue_and_enqueue_batch(self):
         # Test `.enqueue_batch()`.
