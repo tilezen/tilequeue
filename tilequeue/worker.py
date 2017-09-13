@@ -1,3 +1,4 @@
+from itertools import izip
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import convert_source_data_to_feature_layers
@@ -92,8 +93,12 @@ class OutputQueue(object):
 
 class TileQueueReader(object):
 
-    def __init__(self, tile_queue, output_queue, logger, stop, max_zoom):
+    def __init__(
+            self, tile_queue, msg_marshaller, msg_tracker, output_queue,
+            logger, stop, max_zoom):
         self.tile_queue = tile_queue
+        self.msg_marshaller = msg_marshaller
+        self.msg_tracker = msg_tracker
         self.output = OutputQueue(output_queue, stop)
         self.logger = logger
         self.stop = stop
@@ -113,39 +118,43 @@ class TileQueueReader(object):
                 if self.stop.is_set():
                     break
 
-                if msg_handle.coord.zoom > self.max_zoom:
-                    self.logger.log(
-                        logging.WARNING,
-                        'Job coordinates above max zoom are not supported, '
-                        'skipping %r > %d' % (msg_handle.coord, self.max_zoom))
+                coords = self.msg_marshaller.unmarshall(msg_handle.payload)
+                coord_handles = self.msg_tracker.track(msg_handle, coords)
+                for coord, coord_handle in izip(coords, coord_handles):
+                    if coord.zoom > self.max_zoom:
+                        self.logger.log(
+                            logging.WARNING,
+                            'Job coordinates above max zoom are not supported, '
+                            'skipping %r > %d' %
+                            (msg_handle.coord, self.max_zoom))
 
-                    # delete jobs that we can't handle from the queue,
-                    # otherwise we'll get stuck in a cycle of timed-out jobs
-                    # being re-added to the queue until they overflow
-                    # max-retries.
-                    try:
-                        self.tile_queue.job_done(msg_handle)
-                    except:
-                        stacktrace = format_stacktrace_one_line()
-                        self.logger.error('Error acknowledging: %s - %s' % (
-                            serialize_coord(msg_handle.coord), stacktrace))
-                    continue
+                        # delete jobs that we can't handle from the
+                        # queue, otherwise we'll get stuck in a cycle
+                        # of timed-out jobs being re-added to the
+                        # queue until they overflow max-retries.
+                        try:
+                            self.msg_tracker.done(coord_handle)
+                        except:
+                            stacktrace = format_stacktrace_one_line()
+                            self.logger.error('Error acknowledging: %s - %s' % (
+                                serialize_coord(msg_handle.coord), stacktrace))
+                        continue
 
-                metadata = dict(
-                    timing=dict(
-                        fetch_seconds=None,
-                        process_seconds=None,
-                        s3_seconds=None,
-                        ack_seconds=None,
-                    ),
-                    msg_handle=msg_handle,
-                )
-                data = dict(
-                    metadata=metadata,
-                    coord=msg_handle.coord,
-                )
-                if self.output(msg_handle.coord, data):
-                    break
+                    metadata = dict(
+                        timing=dict(
+                            fetch_seconds=None,
+                            process_seconds=None,
+                            s3_seconds=None,
+                            ack_seconds=None,
+                        ),
+                        coord_handle=coord_handle,
+                    )
+                    data = dict(
+                        metadata=metadata,
+                        coord=coord,
+                    )
+                    if self.output(coord, data):
+                        break
 
         self.tile_queue.close()
         self.logger.debug('tile queue reader stopped')
@@ -423,12 +432,12 @@ class TileQueueWriter(object):
                 break
 
             metadata = data['metadata']
-            msg_handle = metadata['msg_handle']
+            coord_handle = metadata['coord_handle']
             coord = data['coord']
 
             start = time.time()
             try:
-                self.tile_queue.job_done(msg_handle)
+                msg_handle = self.msg_tracker.done(coord_handle)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (
@@ -439,7 +448,6 @@ class TileQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            msg_handle = metadata['msg_handle']
             msg_metadata = msg_handle.metadata
             time_in_queue = 0
             if msg_metadata:

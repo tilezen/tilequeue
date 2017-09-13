@@ -1,4 +1,4 @@
-from handle import MessageHandle
+from message import MessageHandle
 
 from file import OutputFileQueue
 from memory import MemoryQueue
