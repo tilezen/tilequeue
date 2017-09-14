@@ -115,12 +115,9 @@ class MultiSqsQueue(object):
         pass
 
 
-def make_multi_sqs_queue(queue_names, get_queue_name_for_zoom, redis_client,
+def make_multi_sqs_queue(queue_names, get_queue_name_for_zoom,
                          aws_access_key_id=None, aws_secret_access_key=None):
 
-    # TODO can consider taking the queue objects themselves here
-    # instead of creating them each
-    # the creation can be handled separately
     conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
 
     sqs_queues = []
@@ -131,6 +128,5 @@ def make_multi_sqs_queue(queue_names, get_queue_name_for_zoom, redis_client,
         aws_queue.set_message_class(RawMessage)
         sqs_queues.append(aws_queue)
 
-    result = MultiSqsQueue(
-        sqs_queues, get_queue_name_for_zoom, redis_client, is_seeding)
+    result = MultiSqsQueue(sqs_queues, get_queue_name_for_zoom)
     return result

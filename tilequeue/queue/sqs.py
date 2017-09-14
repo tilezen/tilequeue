@@ -68,13 +68,11 @@ class SqsQueue(object):
         pass
 
 
-def make_sqs_queue(queue_name, redis_client,
-                   aws_access_key_id=None, aws_secret_access_key=None):
-    # TODO should this just take the queue directly instead? we can
-    # offer another function to create the queue separately
+def make_sqs_queue(
+        queue_name, aws_access_key_id=None, aws_secret_access_key=None):
     conn = connect_sqs(aws_access_key_id, aws_secret_access_key)
     queue = conn.get_queue(queue_name)
     assert queue is not None, \
         'Could not get sqs queue with name: %s' % queue_name
     queue.set_message_class(RawMessage)
-    return SqsQueue(queue, redis_client)
+    return SqsQueue(queue)

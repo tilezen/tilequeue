@@ -2,12 +2,15 @@ queue:
   # type can be `sqs`, `multisqs`, `file`, `mem`, or `redis`
   type: mem
   name: <sqs queue/list of queue names/queue file name/redis key/>
-  # for multisqs
-  zoom-queue-map:
-    # keys are <start-zoom>-<end-zoom> (inclusive) ranges
-    # values are the queue name to use for zooms in that range
-    0-10: queue-1
-    11-20: queue-2
+  multisqs:
+    # for multisqs specifically
+    zoom-queue-map:
+      # keys are <start-zoom>-<end-zoom> (inclusive) ranges
+      # values are the queue name to use for zooms in that range
+      0-10: queue-1
+      11-20: queue-2
+  # whether to use redis to guard queue puts with an inflight check
+  inflight: false
 # Uncomment this section to activate statsd
 #statsd:
 #  host: 127.0.0.1

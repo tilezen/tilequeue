@@ -128,14 +128,17 @@ def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
     return result
 
 
-def make_queue(queue_type, queue_name, queue_cfg, redis_client,
-               aws_access_key_id=None, aws_secret_access_key=None):
+def make_queue(
+        queue_type, queue_name, queue_impl_cfg, queue_cfg, redis_client,
+        aws_access_key_id=None, aws_secret_access_key=None):
+
+    tile_queue = None
     if queue_type == 'multisqs':
         from tilequeue.queue import make_multi_sqs_queue
         assert isinstance(queue_name, list)
         queue_names = queue_name
 
-        zoom_queue_map_cfg = queue_cfg.get('zoom-queue-map')
+        zoom_queue_map_cfg = queue_impl_cfg.get('zoom-queue-map')
         assert zoom_queue_map_cfg, \
             'Missing zoom-queue-map config for multiqueue'
         assert isinstance(zoom_queue_map_cfg, dict), \
@@ -143,13 +146,11 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
 
         get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
             zoom_queue_map_cfg, queue_names)
-        result = make_multi_sqs_queue(
-            queue_names, get_queue_idx_for_zoom, redis_client)
-        return result
+        tile_queue = make_multi_sqs_queue(queue_names, get_queue_idx_for_zoom)
 
     elif queue_type == 'sqs':
-        return make_sqs_queue(queue_name, redis_client,
-                              aws_access_key_id, aws_secret_access_key)
+        tile_queue = make_sqs_queue(
+            queue_name, redis_client, aws_access_key_id, aws_secret_access_key)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -166,16 +167,22 @@ def make_queue(queue_type, queue_name, queue_cfg, redis_client,
         # coordinates will be read from the beginning of the file thanks to the
         # `+`.
         fp = open(queue_name, 'a+')
-        return OutputFileQueue(fp)
+        tile_queue = OutputFileQueue(fp)
     elif queue_type == 'stdout':
         # only support writing
         from tilequeue.queue import OutputFileQueue
-        return OutputFileQueue(sys.stdout)
+        tile_queue = OutputFileQueue(sys.stdout)
     elif queue_type == 'redis':
         from tilequeue.queue import make_redis_queue
-        return make_redis_queue(redis_client, queue_name)
+        tile_queue = make_redis_queue(redis_client, queue_name)
     else:
         raise ValueError('Unknown queue type: %s' % queue_type)
+
+    if queue_cfg.get('inflight'):
+        from tilequeue.queue import make_inflight_queue
+        tile_queue = make_inflight_queue(tile_queue, redis_client)
+
+    return tile_queue
 
 
 def make_toi_helper(cfg):
@@ -1777,9 +1784,11 @@ def tilequeue_main(argv_args=None):
     toi_helper = make_toi_helper(cfg)
 
     queue = make_queue(
-        cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
+        cfg.queue_type, cfg.queue_name, cfg.queue_impl_cfg, cfg.queue_cfg,
+        redis_client,
         aws_access_key_id=cfg.aws_access_key_id,
-        aws_secret_access_key=cfg.aws_secret_access_key)
+        aws_secret_access_key=cfg.aws_secret_access_key
+    )
 
     if cfg.statsd_host:
         import statsd
