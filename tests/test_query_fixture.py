@@ -102,7 +102,6 @@ class TestQueryFixture(unittest.TestCase):
                 }),
             ]
 
-
             fetch = self._make(rows, min_zoom_fn, None, relations=rels,
                                layer_name='pois')
 
@@ -140,5 +139,5 @@ class TestQueryFixture(unittest.TestCase):
             _rel(2, nodes=[1]),
             _rel(3, nodes=[1]),
             _rel(4, rels=[3]),
-            _rel(5, rels=[2,4]),
+            _rel(5, rels=[2, 4]),
         ], 5)
