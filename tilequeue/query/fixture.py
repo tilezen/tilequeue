@@ -83,6 +83,49 @@ def mz_is_interesting_transit_relation(tags):
         typ in ('stop_area', 'stop_area_group', 'site')
 
 
+# starting with the IDs in seed_relations, recurse up the transit relations
+# of which they are members. returns the set of all the relation IDs seen
+# and the "root" relation ID, which was the "furthest" relation from any
+# leaf relation.
+def mz_recurse_up_transit_relations(seed_relations, relations):
+    transit_relations = defaultdict(set)
+    for rel_id, rel in relations.items():
+        if mz_is_interesting_transit_relation(rel.tags):
+            for member in rel.rel_ids:
+                transit_relations[member].add(rel_id)
+
+    root_relation_ids = set()
+    root_relation_level = 0
+    all_relations = set()
+
+    for rel_id in seed_relations:
+        front = set([rel_id])
+        seen = set([rel_id])
+        level = 0
+
+        if root_relation_level == 0:
+            root_relation_ids.add(rel_id)
+
+        while front:
+            new_rels = set()
+            for r in front:
+                new_rels |= transit_relations[r]
+            new_rels -= seen
+            level += 1
+            if new_rels and level > root_relation_level:
+                root_relation_ids = new_rels
+                root_relation_level = level
+            elif new_rels and level == root_relation_level:
+                root_relation_ids |= new_rels
+            front = new_rels
+            seen |= front
+
+        all_relations |= seen
+
+    root_relation_id = min(root_relation_ids) if root_relation_ids else None
+    return all_relations, root_relation_id
+
+
 # extract a name for a transit route relation. this can expand comma
 # separated lists and prefers to use the ref rather than the name.
 def mz_transit_route_name(tags):
@@ -100,7 +143,7 @@ Transit = namedtuple(
     'trains subways light_rails trams railways')
 
 
-def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
+def mz_calculate_transit_routes_and_score(rows, rels, node_id, way_id):
     # extract out all relations and index by ID. this is helpful when
     # looking them up later.
     relations = {}
@@ -117,11 +160,10 @@ def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
             else:
                 ways[fid] = (fid, shape, props)
 
-        rels = props.get('__relations__', [])
-        for rel in rels:
-            r = Relation(rel)
-            if r.id not in relations:
-                relations[r.id] = r
+    for r in rels:
+        r = Relation(r)
+        assert r.id not in relations
+        relations[r.id] = r
 
     relations_using_node = defaultdict(list)
     relations_using_way = defaultdict(list)
@@ -149,15 +191,6 @@ def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
 
     # TODO: if the station is also a multipolygon relation?
 
-    # TODO: the following hasn't been implemented because the way that the
-    # code currently collects the list of relations misses out any relations
-    # which aren't immediate parents of something with physical geometry. this
-    # means that, for example, the "root" relation of London Waterloo station
-    # (type=site, site=stop_area) doesn't get included. (see vector-datasource
-    # integration test 653). possibly this can be fixed by passing the
-    # original list of relations in, rather than having them pre-assigned to
-    # features?
-    #
     # this complex query does two recursive sweeps of the relations
     # table starting from a seed set of relations which are or contain
     # the original station.
@@ -170,11 +203,9 @@ def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
     # the second sweep goes "downwards" from relations to "child" relations.
     # if a relation R1 has a member R2 which is also a relation, then R2 will
     # be included in this sweep as long as it also has "interesting" tags.
-    all_relations = seed_relations
+    all_relations, root_relation_id = mz_recurse_up_transit_relations(
+        seed_relations, relations)
     del seed_relations
-
-    # TODO: assign root relation ID to "highest" relation recursed to.
-    root_relation_id = None
 
     # collect all the interesting nodes - this includes the station node (if
     # any) and any nodes which are members of found relations which have
@@ -249,7 +280,7 @@ def mz_calculate_transit_routes_and_score(rows, node_id, way_id):
 
 class DataFetcher(object):
 
-    def __init__(self, layers, rows, label_placement_layers):
+    def __init__(self, layers, rows, rels, label_placement_layers):
         """
         Expect layers to be a dict of layer name to LayerInfo. Expect rows to
         be a list of (fid, shape, properties). Label placement layers should
@@ -258,6 +289,7 @@ class DataFetcher(object):
 
         self.layers = layers
         self.rows = rows
+        self.rels = rels
         self.label_placement_layers = label_placement_layers
 
     def __call__(self, zoom, unpadded_bounds):
@@ -394,7 +426,7 @@ class DataFetcher(object):
                         way_id = fid
 
                     transit = mz_calculate_transit_routes_and_score(
-                        self.rows, node_id, way_id)
+                        self.rows, self.rels, node_id, way_id)
                     layer_props['mz_transit_score'] = transit.score
                     layer_props['mz_transit_root_relation_id'] = (
                         transit.root_relation_id)
@@ -438,5 +470,6 @@ class DataFetcher(object):
         return read_rows
 
 
-def make_fixture_data_fetcher(layers, rows, label_placement_layers={}):
-    return DataFetcher(layers, rows, label_placement_layers)
+def make_fixture_data_fetcher(
+        layers, rows, label_placement_layers={}, relations=[]):
+    return DataFetcher(layers, rows, relations, label_placement_layers)
