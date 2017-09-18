@@ -34,8 +34,9 @@ class OutputFileQueue(object):
             msg_handles = []
             for _ in range(self.read_size):
                 payload = self.fp.readline().strip()
-                msg_handle = MessageHandle(None, payload)
-                msg_handles.append(msg_handle)
+                if payload:
+                    msg_handle = MessageHandle(None, payload)
+                    msg_handles.append(msg_handle)
 
         return msg_handles
 

@@ -40,17 +40,19 @@ class TestQueue(unittest.TestCase):
             actual_coord_strs, expected, 'Reading multiple records failed')
 
     def test_enqueue_and_enqueue_batch(self):
+        from tilequeue.tile import serialize_coord
         # Test `.enqueue_batch()`.
         num_to_enqueue = 3
         self.assertEqual(
-            self.queue.enqueue_batch(self.test_tile_objs[:num_to_enqueue]),
+            self.queue.enqueue_batch(
+                map(serialize_coord, self.test_tile_objs[:num_to_enqueue])),
             (num_to_enqueue, 0),
             'Return value of `enqueue_batch()` does not match expected'
         )
 
         # Test `.enqueue()`.
-        for coords in self.test_tile_objs[num_to_enqueue:]:
-            self.queue.enqueue(coords)
+        for coord in self.test_tile_objs[num_to_enqueue:]:
+            self.queue.enqueue(serialize_coord(coord))
 
         self.assertEqual(
             self.tiles_fp.getvalue(),

@@ -62,18 +62,16 @@ class MultiSqsTest(unittest.TestCase):
 
     def test_enqueue(self):
         from mock import MagicMock
-        from tilequeue.tile import deserialize_coord
         sqs_queue = MagicMock()
         sqs_queue.name = 'q1'
         msq = self._make_one([sqs_queue])
         sqs_queue.write = self._mock_write
-        msq.enqueue(deserialize_coord('1/1/1'))
+        msq.enqueue('1/1/1', metadata=dict(zoom=1))
         self.assertIsNotNone(self.mock_written)
         self.assertEqual(self.mock_written.get_body(), '1/1/1')
 
     def test_enqueue_batch(self):
         from mock import MagicMock
-        from tilequeue.tile import deserialize_coord
 
         sqs_queue1 = MagicMock()
         sqs_queue1.name = 'q1'
@@ -84,10 +82,7 @@ class MultiSqsTest(unittest.TestCase):
         sqs_queue2.write_batch = self._mock_write_batch
 
         msq = self._make_one([sqs_queue1, sqs_queue2])
-        msq.enqueue_batch([
-            deserialize_coord('1/1/1'),
-            deserialize_coord('1/0/0')
-        ])
+        msq.enqueue_batch(['1/1/1', '1/0/0'], metadata=dict(zooms=[1, 1]))
 
         self.assertIsNotNone(self.mock_write_batch)
         self.assertEqual(2, len(self.mock_write_batch))
