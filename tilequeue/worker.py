@@ -124,8 +124,8 @@ class TileQueueReader(object):
                     if coord.zoom > self.max_zoom:
                         self.logger.log(
                             logging.WARNING,
-                            'Job coordinates above max zoom are not supported, '
-                            'skipping %r > %d' %
+                            'Job coordinates above max zoom are not '
+                            'supported, skipping %r > %d' %
                             (msg_handle.coord, self.max_zoom))
 
                         # delete jobs that we can't handle from the
@@ -136,8 +136,10 @@ class TileQueueReader(object):
                             self.msg_tracker.done(coord_handle)
                         except:
                             stacktrace = format_stacktrace_one_line()
-                            self.logger.error('Error acknowledging: %s - %s' % (
-                                serialize_coord(msg_handle.coord), stacktrace))
+                            self.logger.error(
+                                'Error acknowledging: %s - %s' % (
+                                    serialize_coord(msg_handle.coord),
+                                    stacktrace))
                         continue
 
                     metadata = dict(
