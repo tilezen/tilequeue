@@ -146,11 +146,13 @@ def make_queue(
 
         get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
             zoom_queue_map_cfg, queue_names)
-        tile_queue = make_multi_sqs_queue(queue_names, get_queue_idx_for_zoom)
+        tile_queue = make_multi_sqs_queue(
+            queue_names, get_queue_idx_for_zoom,
+            aws_access_key_id, aws_secret_access_key)
 
     elif queue_type == 'sqs':
         tile_queue = make_sqs_queue(
-            queue_name, redis_client, aws_access_key_id, aws_secret_access_key)
+            queue_name, aws_access_key_id, aws_secret_access_key)
     elif queue_type == 'mem':
         from tilequeue.queue import MemoryQueue
         return MemoryQueue()
@@ -630,9 +632,16 @@ def tilequeue_process(cfg, peripherals):
 
     # create worker threads/processes
     thread_tile_queue_reader_stop = threading.Event()
+
+    # TODO wire up configuration
+    from tilequeue.queue.message import CommaSeparatedMarshaller
+    from tilequeue.queue.message import MultipleMessagesPerCoordTracker
+    msg_marshaller = CommaSeparatedMarshaller()
+    msg_tracker = MultipleMessagesPerCoordTracker(tile_queue)
     tile_queue_reader = TileQueueReader(
-        tile_queue, tile_input_queue, logger, thread_tile_queue_reader_stop,
-        cfg.max_zoom)
+        tile_queue, msg_marshaller, msg_tracker, tile_input_queue, logger,
+        thread_tile_queue_reader_stop, cfg.max_zoom
+    )
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
@@ -646,8 +655,8 @@ def tilequeue_process(cfg, peripherals):
                            logger, cfg.metatile_size)
 
     thread_tile_writer_stop = threading.Event()
-    tile_queue_writer = TileQueueWriter(tile_queue, s3_store_queue, logger,
-                                      thread_tile_writer_stop)
+    tile_queue_writer = TileQueueWriter(
+        tile_queue, s3_store_queue, logger, thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)

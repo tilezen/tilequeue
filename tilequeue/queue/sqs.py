@@ -1,8 +1,6 @@
 from boto import connect_sqs
 from boto.sqs.message import RawMessage
 from tilequeue.queue import MessageHandle
-from tilequeue.tile import deserialize_coord
-from tilequeue.tile import serialize_coord
 from tilequeue.utils import grouper
 
 
@@ -11,28 +9,27 @@ class SqsQueue(object):
     def __init__(self, sqs_queue):
         self.sqs_queue = sqs_queue
 
-    def enqueue(self, coord):
-        payload = serialize_coord(coord)
+    def enqueue(self, payload):
         message = RawMessage()
         message.set_body(payload)
         self.sqs_queue.write(message)
 
-    def _write_batch(self, coords):
-        assert len(coords) <= 10
-
-    def enqueue_batch(self, coords):
+    def enqueue_batch(self, payloads):
         # sqs can only send 10 messages at once
-        for coord_chunk in grouper(coords, 10):
+        for payloads_chunk in grouper(payloads, 10):
             msg_tuples = []
-
-            for i, coord in enumerate(coords):
-                msg_tuples.append((str(i), serialize_coord(coord), 0))
-
+            for i, payload in enumerate(payloads_chunk):
+                msg_tuples.append((str(i), payload, 0))
             self.sqs_queue.write_batch(msg_tuples)
 
-    def read(self):
-        msg_handles = []
+    def read(self, metadata=None):
         read_size = 10
+        if metadata is not None:
+            metadata_read_size = metadata.get('size')
+            if metadata_read_size:
+                read_size = metadata_read_size
+
+        msg_handles = []
         sqs_messages = self.sqs_queue.get_messages(
             num_messages=read_size, attributes=["SentTimestamp"])
         for sqs_message in sqs_messages:

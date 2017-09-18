@@ -1,6 +1,4 @@
 from tilequeue.queue import MessageHandle
-from tilequeue.tile import deserialize_coord
-from tilequeue.tile import serialize_coord
 import threading
 
 
@@ -20,15 +18,14 @@ class OutputFileQueue(object):
         self.fp = fp
         self.lock = threading.RLock()
 
-    def enqueue(self, coord):
+    def enqueue(self, payload):
         with self.lock:
-            payload = serialize_coord(coord)
             self.fp.write(payload + '\n')
 
-    def enqueue_batch(self, coords):
+    def enqueue_batch(self, payloads):
         n = 0
-        for coord in coords:
-            self.enqueue(coord)
+        for payload in payloads:
+            self.enqueue(payload)
             n += 1
         return n, 0
 
@@ -36,12 +33,9 @@ class OutputFileQueue(object):
         with self.lock:
             msg_handles = []
             for _ in range(self.read_size):
-                coord_str = self.fp.readline() or ''
-                coord_str = coord_str.strip()
-                coord = deserialize_coord(coord_str)
-                if coord:
-                    msg_handle = MessageHandle(None, coord_str)
-                    msg_handles.append(msg_handle)
+                payload = self.fp.readline().strip()
+                msg_handle = MessageHandle(None, payload)
+                msg_handles.append(msg_handle)
 
         return msg_handles
 
