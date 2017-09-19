@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections import namedtuple
 from tilequeue.tile import coord_marshall_int
 
@@ -19,16 +20,13 @@ class StartZoomGrouper(object):
         self.start_zoom_to_group = start_zoom_to_group
 
     def __call__(self, coords):
-        grouped = {}
+        grouped = defaultdict(list)
         for coord in coords:
             if coord.zoom >= self.start_zoom_to_group:
-                if coord.zoom > self.start_zoom_to_group:
-                    coord_at_group_zoom = coord.zoomTo(
-                        self.start_zoom_to_group).container()
-                    group_key = coord_marshall_int(coord_at_group_zoom)
-                else:
-                    group_key = coord_marshall_int(coord)
-                grouped.setdefault(group_key, []).append(coord)
+                coord_at_group_zoom = (
+                    coord.zoomTo(self.start_zoom_to_group).container())
+                group_key = coord_marshall_int(coord_at_group_zoom)
+                grouped[group_key].append(coord)
             else:
                 metadata = dict(
                     grouped=False,
