@@ -655,8 +655,12 @@ def tilequeue_process(cfg, peripherals):
                            logger, cfg.metatile_size)
 
     thread_tile_writer_stop = threading.Event()
+    from tilequeue.queue.inflight import InFlightManager
+    inflight_manager = InFlightManager(
+        peripherals.redis_client, 'tilequeue.in-flight')
     tile_queue_writer = TileQueueWriter(
-        tile_queue, s3_store_queue, logger, thread_tile_writer_stop)
+        tile_queue, s3_store_queue, inflight_manager, logger,
+        thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
@@ -1788,7 +1792,7 @@ def tilequeue_main(argv_args=None):
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh)
     redis_client = make_redis_client(cfg)
-    Peripherals = namedtuple('Peripherals', 'toi queue stats')
+    Peripherals = namedtuple('Peripherals', 'toi queue stats redis_client')
 
     toi_helper = make_toi_helper(cfg)
 
@@ -1806,5 +1810,5 @@ def tilequeue_main(argv_args=None):
     else:
         stats = FakeStatsd()
 
-    peripherals = Peripherals(toi_helper, queue, stats)
+    peripherals = Peripherals(toi_helper, queue, stats, redis_client)
     args.func(cfg, peripherals, args)

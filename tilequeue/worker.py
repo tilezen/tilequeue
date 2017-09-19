@@ -416,9 +416,11 @@ class S3Storage(object):
 
 class TileQueueWriter(object):
 
-    def __init__(self, tile_queue, input_queue, logger, stop):
+    def __init__(
+            self, tile_queue, input_queue, inflight_manager, logger, stop):
         self.tile_queue = tile_queue
         self.input_queue = input_queue
+        self.inflight_manager = inflight_manager
         self.logger = logger
         self.stop = stop
 
@@ -443,6 +445,14 @@ class TileQueueWriter(object):
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
+                continue
+
+            try:
+                self.inflight_manager.unmark_inflight(coord)
+            except:
+                stacktrace = format_stacktrace_one_line()
+                self.logger.error('Error unmarking in flight: %s - %s' % (
                     serialize_coord(coord), stacktrace))
                 continue
 

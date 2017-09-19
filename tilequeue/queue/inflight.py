@@ -26,4 +26,9 @@ class InFlightManager(object):
 
     def mark_inflight(self, coords):
         for coords_chunk in grouper(coords, self.chunk_size):
-            self.redis_client.sadd(self.inflight_key, *coords_chunk)
+            coord_ints = map(coord_marshall_int, coords_chunk)
+            self.redis_client.sadd(self.inflight_key, *coord_ints)
+
+    def unmark_inflight(self, coord):
+        coord_int = coord_marshall_int(coord)
+        self.redis_client.srem(self.inflight_key, coord_int)
