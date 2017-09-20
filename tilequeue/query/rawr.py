@@ -66,6 +66,14 @@ class DataFetcher(object):
         bottomright = mercator_point_to_coord(zoom, maxx, maxy)
         index = self.layer_indexes[layer_name]
 
+        # make sure that the bottom right coordinate is below and to the right
+        # of the top left coordinate. it can happen that the coordinates are
+        # mixed up due to small numerical precision artefacts being enlarged
+        # by the conversion to integer and y-coordinate flip.
+        assert topleft.zoom == bottomright.zoom
+        bottomright.column = max(bottomright.column, topleft.column)
+        bottomright.row = max(bottomright.row, topleft.row)
+
         features = []
         for x in range(int(topleft.column), int(bottomright.column) + 1):
             for y in range(int(topleft.row), int(bottomright.row) + 1):
