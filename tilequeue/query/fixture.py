@@ -278,6 +278,92 @@ def mz_calculate_transit_routes_and_score(rows, rels, node_id, way_id):
                    railways=railways, trams=trams)
 
 
+# properties for a feature (fid, shape, props) in layer `layer_name` at zoom
+# level `zoom` where that feature is used in `rels` relations directly. also
+# needs `all_rows`, a list of all the features, and `all_rels` a list of all
+# the relations in the tile, even those which do not use this feature
+# directly.
+def layer_properties(fid, shape, props, layer_name, zoom, rels,
+                     all_rows, all_rels):
+    layer_props = props.copy()
+
+    # need to make sure that the name is only applied to one of
+    # the pois, landuse or buildings layers - in that order of
+    # priority.
+    #
+    # TODO: do this for all name variants & translations
+    if layer_name in ('pois', 'landuse', 'buildings'):
+        layer_props.pop('name', None)
+
+    # urgh, hack!
+    if layer_name == 'water' and shape.geom_type == 'Point':
+        layer_props['label_placement'] = True
+
+    if shape.geom_type in ('Polygon', 'MultiPolygon'):
+        layer_props['area'] = shape.area
+
+    if layer_name == 'roads' and \
+       shape.geom_type in ('LineString', 'MultiLineString'):
+        mz_networks = []
+        mz_cycling_networks = set()
+        mz_is_bus_route = False
+        for rel in rels:
+            rel_tags = deassoc(rel['tags'])
+            typ, route, network, ref = [rel_tags.get(k) for k in (
+                'type', 'route', 'network', 'ref')]
+            if route and (network or ref):
+                mz_networks.extend([route, network, ref])
+            if typ == 'route' and \
+               route in ('hiking', 'foot', 'bicycle') and \
+               network in ('icn', 'ncn', 'rcn', 'lcn'):
+                mz_cycling_networks.add(network)
+            if typ == 'route' and route in ('bus', 'trolleybus'):
+                mz_is_bus_route = True
+
+        mz_cycling_network = None
+        for cn in ('icn', 'ncn', 'rcn', 'lcn'):
+            if layer_props.get(cn) == 'yes' or \
+               ('%s_ref' % cn) in layer_props or \
+               cn in mz_cycling_networks:
+                mz_cycling_network = cn
+                break
+
+        if mz_is_bus_route and \
+           zoom >= 12 and \
+           layer_props.get('highway') in BUS_ROADS:
+            layer_props['is_bus_route'] = True
+
+        layer_props['mz_networks'] = mz_networks
+        if mz_cycling_network:
+            layer_props['mz_cycling_network'] = mz_cycling_network
+
+    is_poi = layer_name == 'pois'
+    is_railway_station = props.get('railway') == 'station'
+    is_point_or_poly = shape.geom_type in (
+        'Point', 'MultiPoint', 'Polygon', 'MultiPolygon')
+
+    if is_poi and is_railway_station and \
+       is_point_or_poly and fid >= 0:
+        node_id = None
+        way_id = None
+        if shape.geom_type in ('Point', 'MultiPoint'):
+            node_id = fid
+        else:
+            way_id = fid
+
+        transit = mz_calculate_transit_routes_and_score(
+            all_rows, all_rels, node_id, way_id)
+        layer_props['mz_transit_score'] = transit.score
+        layer_props['mz_transit_root_relation_id'] = (
+            transit.root_relation_id)
+        layer_props['train_routes'] = transit.trains
+        layer_props['subway_routes'] = transit.subways
+        layer_props['light_rail_routes'] = transit.light_rails
+        layer_props['tram_routes'] = transit.trams
+
+    return layer_props
+
+
 class DataFetcher(object):
 
     def __init__(self, layers, rows, rels, label_placement_layers):
@@ -358,88 +444,15 @@ class DataFetcher(object):
                 if layer_name in label_layers:
                     generate_label_placement = True
 
-                layer_props = props.copy()
+                layer_props = layer_properties(
+                    fid, shape, props, layer_name, zoom, rels,
+                    self.rows, self.rels)
+
                 layer_props['min_zoom'] = min_zoom
-
-                # need to make sure that the name is only applied to one of
-                # the pois, landuse or buildings layers - in that order of
-                # priority.
-                #
-                # TODO: do this for all name variants & translations
-                if layer_name in ('pois', 'landuse', 'buildings'):
-                    layer_props.pop('name', None)
-
-                # urgh, hack!
-                if layer_name == 'water' and shape.geom_type == 'Point':
-                    layer_props['label_placement'] = True
-
-                if shape.geom_type in ('Polygon', 'MultiPolygon'):
-                    layer_props['area'] = shape.area
-
-                if layer_name == 'roads' and \
-                   shape.geom_type in ('LineString', 'MultiLineString'):
-                    mz_networks = []
-                    mz_cycling_networks = set()
-                    mz_is_bus_route = False
-                    for rel in rels:
-                        rel_tags = deassoc(rel['tags'])
-                        typ, route, network, ref = [rel_tags.get(k) for k in (
-                            'type', 'route', 'network', 'ref')]
-                        if route and (network or ref):
-                            mz_networks.extend([route, network, ref])
-                        if typ == 'route' and \
-                           route in ('hiking', 'foot', 'bicycle') and \
-                           network in ('icn', 'ncn', 'rcn', 'lcn'):
-                            mz_cycling_networks.add(network)
-                        if typ == 'route' and route in ('bus', 'trolleybus'):
-                            mz_is_bus_route = True
-
-                    mz_cycling_network = None
-                    for cn in ('icn', 'ncn', 'rcn', 'lcn'):
-                        if layer_props.get(cn) == 'yes' or \
-                           ('%s_ref' % cn) in layer_props or \
-                           cn in mz_cycling_networks:
-                            mz_cycling_network = cn
-                            break
-
-                    if mz_is_bus_route and \
-                       zoom >= 12 and \
-                       layer_props.get('highway') in BUS_ROADS:
-                        layer_props['is_bus_route'] = True
-
-                    layer_props['mz_networks'] = mz_networks
-                    if mz_cycling_network:
-                        layer_props['mz_cycling_network'] = mz_cycling_network
-
-                is_poi = layer_name == 'pois'
-                is_railway_station = props.get('railway') == 'station'
-                is_point_or_poly = shape.geom_type in (
-                    'Point', 'MultiPoint', 'Polygon', 'MultiPolygon')
-
-                if is_poi and is_railway_station and \
-                   is_point_or_poly and fid >= 0:
-                    node_id = None
-                    way_id = None
-                    if shape.geom_type in ('Point', 'MultiPoint'):
-                        node_id = fid
-                    else:
-                        way_id = fid
-
-                    transit = mz_calculate_transit_routes_and_score(
-                        self.rows, self.rels, node_id, way_id)
-                    layer_props['mz_transit_score'] = transit.score
-                    layer_props['mz_transit_root_relation_id'] = (
-                        transit.root_relation_id)
-                    layer_props['train_routes'] = transit.trains
-                    layer_props['subway_routes'] = transit.subways
-                    layer_props['light_rail_routes'] = transit.light_rails
-                    layer_props['tram_routes'] = transit.trams
-
-                if layer_props:
-                    props_name = '__%s_properties__' % layer_name
-                    read_row[props_name] = layer_props
-                    if layer_name == 'water':
-                        has_water_layer = True
+                props_name = '__%s_properties__' % layer_name
+                read_row[props_name] = layer_props
+                if layer_name == 'water':
+                    has_water_layer = True
 
             # if at least one min_zoom / properties match
             if read_row:
