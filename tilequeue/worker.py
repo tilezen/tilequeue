@@ -94,9 +94,9 @@ class OutputQueue(object):
 class TileQueueReader(object):
 
     def __init__(
-            self, tile_queue, msg_marshaller, msg_tracker, output_queue,
+            self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
             logger, stop, max_zoom):
-        self.tile_queue = tile_queue
+        self.queue_mapper = queue_mapper
         self.msg_marshaller = msg_marshaller
         self.msg_tracker = msg_tracker
         self.output = OutputQueue(output_queue, stop)
@@ -106,12 +106,15 @@ class TileQueueReader(object):
 
     def __call__(self):
         while not self.stop.is_set():
-            try:
-                msg_handles = self.tile_queue.read()
-            except:
-                stacktrace = format_stacktrace_one_line()
-                self.logger.error(stacktrace)
-                continue
+            for tile_queue in self.queue_mapper.queues_in_priority_order():
+                try:
+                    msg_handles = tile_queue.read()
+                except:
+                    stacktrace = format_stacktrace_one_line()
+                    self.logger.error(stacktrace)
+                    continue
+                if msg_handles:
+                    break
 
             for msg_handle in msg_handles:
                 # if asked to stop, break as soon as possible
@@ -140,7 +143,7 @@ class TileQueueReader(object):
                                 'Error acknowledging: %s - %s' % (
                                     serialize_coord(msg_handle.coord),
                                     stacktrace))
-                        continue
+                            continue
 
                     metadata = dict(
                         timing=dict(
@@ -158,7 +161,8 @@ class TileQueueReader(object):
                     if self.output(coord, data):
                         break
 
-        self.tile_queue.close()
+        for tile_queue in self.queue_mapper.queues_in_priority_order():
+            tile_queue.close()
         self.logger.debug('tile queue reader stopped')
 
 
