@@ -3,6 +3,7 @@ from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
+from tilequeue.queue.message import QueueMessageHandle
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
@@ -106,7 +107,8 @@ class TileQueueReader(object):
 
     def __call__(self):
         while not self.stop.is_set():
-            for tile_queue in self.queue_mapper.queues_in_priority_order():
+            for queue_id, tile_queue in (
+                    self.queue_mapper.queues_in_priority_order()):
                 try:
                     msg_handles = tile_queue.read()
                 except:
@@ -122,14 +124,16 @@ class TileQueueReader(object):
                     break
 
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-                coord_handles = self.msg_tracker.track(msg_handle, coords)
+                queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
+                coord_handles = self.msg_tracker.track(
+                    queue_msg_handle, coords)
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
                         self.logger.log(
                             logging.WARNING,
                             'Job coordinates above max zoom are not '
                             'supported, skipping %r > %d' %
-                            (msg_handle.coord, self.max_zoom))
+                            (coord, self.max_zoom))
 
                         # delete jobs that we can't handle from the
                         # queue, otherwise we'll get stuck in a cycle
@@ -141,7 +145,7 @@ class TileQueueReader(object):
                             stacktrace = format_stacktrace_one_line()
                             self.logger.error(
                                 'Error acknowledging: %s - %s' % (
-                                    serialize_coord(msg_handle.coord),
+                                    serialize_coord(coord),
                                     stacktrace))
                             continue
 
@@ -445,7 +449,14 @@ class TileQueueWriter(object):
 
             start = time.time()
             try:
-                msg_handle = self.msg_tracker.done(coord_handle)
+                queue_msg_handle, done = self.msg_tracker.done(coord_handle)
+                msg_handle = queue_msg_handle.msg_handle
+                if done:
+                    tile_queue = (
+                        self.queue_mapper.get_queue(queue_msg_handle.queue_id))
+                    assert tile_queue, \
+                        'Missing tile_queue: %s' % queue_msg_handle.queue_id
+                    tile_queue.job_done(msg_handle)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (

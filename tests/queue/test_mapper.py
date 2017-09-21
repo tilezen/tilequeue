@@ -91,11 +91,17 @@ class QueueMapperTest(unittest.TestCase):
         self.assertIs(q2, qm.get_queue(q2_id))
         self.assertIs(q3, qm.get_queue(q3_id))
 
-        ordered_queues = qm.queues_in_priority_order()
-        self.assertEquals(3, len(ordered_queues))
-        self.assertIs(q1, ordered_queues[0])
-        self.assertIs(q2, ordered_queues[1])
-        self.assertIs(q3, ordered_queues[2])
+        ordered_queue_result = list(qm.queues_in_priority_order())
+        self.assertEquals(3, len(ordered_queue_result))
+        r1_id, r1_q = ordered_queue_result[0]
+        r2_id, r2_q = ordered_queue_result[1]
+        r3_id, r3_q = ordered_queue_result[2]
+        self.assertIs(q1, r1_q)
+        self.assertEquals(q1_id, r1_id)
+        self.assertIs(q2, r2_q)
+        self.assertEquals(q2_id, r2_id)
+        self.assertIs(q3, r3_q)
+        self.assertEquals(q3_id, r3_id)
 
         from tilequeue.tile import deserialize_coord
 

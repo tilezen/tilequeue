@@ -21,6 +21,16 @@ class MessageHandle(object):
         self.metadata = metadata
 
 
+class QueueMessageHandle(object):
+    """
+    message handle combined with a queue id
+    """
+
+    def __init__(self, queue_id, msg_handle):
+        self.queue_id = queue_id
+        self.msg_handle = msg_handle
+
+
 class SingleMessageMarshaller(object):
 
     """marshall/unmarshall a single coordinate from a queue message"""
@@ -63,22 +73,17 @@ class SingleMessagePerCoordTracker(object):
 
     """
     one-to-one mapping between message handles and coordinates
-
-    Delegate to the queue directly and don't track any message mappings
     """
 
-    def __init__(self, tile_queue):
-        self.tile_queue = tile_queue
-
-    def track(self, msg_handle, coords):
+    def track(self, queue_msg_handle, coords):
         assert len(coords) == 1
         # treat the message handle itself as the coordinate handle
-        return [msg_handle]
+        return [queue_msg_handle]
 
     def done(self, coord_handle):
-        msg_handle = coord_handle
-        self.tile_queue.job_done(msg_handle)
-        return msg_handle
+        queue_msg_handle = coord_handle
+        all_done = True
+        return queue_msg_handle, all_done
 
 
 class MultipleMessagesPerCoordTracker(object):
@@ -87,14 +92,10 @@ class MultipleMessagesPerCoordTracker(object):
     track a mapping for multiple coordinates
 
     Support tracking a mapping for multiple coordinates to a single
-    queue message handle. When all coordinates for a particular
-    message have been completed, ask the queue to mark the message
-    complete.
+    queue message handle.
     """
 
-    def __init__(self, tile_queue):
-        self.tile_queue = tile_queue
-
+    def __init__(self):
         # use an opaque id for indirect reference to message handles
         self.handle_id_to_msg_handle = {}
         # lookup the opaque handle id for a coordinate id
@@ -104,10 +105,10 @@ class MultipleMessagesPerCoordTracker(object):
         # running out of memory if a coordinate never completes
         self.handle_id_to_coords = {}
 
-    def track(self, msg_handle, coords):
+    def track(self, queue_msg_handle, coords):
 
-        handle_id = id(msg_handle)
-        self.handle_id_to_msg_handle.setdefault(handle_id, msg_handle)
+        handle_id = id(queue_msg_handle)
+        self.handle_id_to_msg_handle.setdefault(handle_id, queue_msg_handle)
 
         coord_id_set = set()
         coord_handles = []
@@ -127,8 +128,9 @@ class MultipleMessagesPerCoordTracker(object):
         coord_id_set = self.handle_id_to_coords.get(handle_id)
         assert coord_id_set is not None
         coord_id_set.remove(coord_handle)
-        msg_handle = self.handle_id_to_msg_handle.get(handle_id, None)
-        assert msg_handle
+        queue_msg_handle = self.handle_id_to_msg_handle.get(handle_id, None)
+        assert queue_msg_handle
+        all_done = False
         if not coord_id_set:
             # we're done with all coordinates in this set, and can ask
             # the queue to complete the message
@@ -136,5 +138,5 @@ class MultipleMessagesPerCoordTracker(object):
             # leak them
             del self.handle_id_to_msg_handle[handle_id]
             del self.handle_id_to_coords[handle_id]
-            self.tile_queue.job_done(msg_handle)
-        return msg_handle
+            all_done = True
+        return queue_msg_handle, all_done

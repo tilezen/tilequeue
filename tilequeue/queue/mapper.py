@@ -13,10 +13,9 @@ CoordGroup = namedtuple('CoordGroup', 'coords queue_id')
 
 class SingleQueueMapper(object):
 
-    def __init__(self, tile_queue, queue_name, group_size):
+    def __init__(self, tile_queue, queue_name):
         self.tile_queue = tile_queue
         self.queue_name = queue_name
-        self.group_size = group_size
 
     def group(self, coords):
         for coord in coords:
@@ -27,7 +26,7 @@ class SingleQueueMapper(object):
         return self.tile_queue
 
     def queues_in_priority_order(self):
-        return (self.tile_queue,)
+        return ((self.queue_name, self.tile_queue),)
 
 
 # what gets passed into the zoom range mapper
@@ -107,4 +106,4 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
         return self.queue_mapping[queue_id]
 
     def queues_in_priority_order(self):
-        return self.queue_mapping
+        return enumerate(self.queue_mapping)

@@ -2,7 +2,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.utils import grouper
 
 
-class InFlightManager(object):
+class RedisInFlightManager(object):
 
     """
     manage in flight list
@@ -18,10 +18,13 @@ class InFlightManager(object):
         self.inflight_key = inflight_key
         self.chunk_size = chunk_size
 
+    def is_inflight(self, coord):
+        coord_int = coord_marshall_int(coord)
+        return self.redis_client.sismember(self.inflight_key, coord_int)
+
     def filter(self, coords):
         for coord in coords:
-            coord_int = coord_marshall_int(coord)
-            if not self.redis_client.sismember(self.inflight_key, coord_int):
+            if not self.is_inflight(coord):
                 yield coord
 
     def mark_inflight(self, coords):
@@ -32,3 +35,18 @@ class InFlightManager(object):
     def unmark_inflight(self, coord):
         coord_int = coord_marshall_int(coord)
         self.redis_client.srem(self.inflight_key, coord_int)
+
+
+class NoopInFlightManager(object):
+
+    def filter(self, coords):
+        return coords
+
+    def is_inflight(self, coord_int):
+        return False
+
+    def mark_inflight(self, coords):
+        pass
+
+    def unmark_inflight(self, coord):
+        pass

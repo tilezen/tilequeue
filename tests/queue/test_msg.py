@@ -84,63 +84,49 @@ class SingleMessageTrackerTest(unittest.TestCase):
 
     def setUp(self):
         from tilequeue.queue.message import SingleMessagePerCoordTracker
-
-        class MockQueue(object):
-            def __init__(self):
-                self.done_called = None
-
-            def job_done(self, msg_handle):
-                self.done_called = msg_handle
-
-        self.tile_queue = MockQueue()
-        self.tracker = SingleMessagePerCoordTracker(self.tile_queue)
+        self.tracker = SingleMessagePerCoordTracker()
 
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord
         from tilequeue.queue import MessageHandle
+        from tilequeue.queue.message import QueueMessageHandle
         msg_handle = MessageHandle('handle', 'payload')
+        queue_id = 1
+        queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
         coords = [deserialize_coord('1/1/1')]
-        coord_handles = self.tracker.track(msg_handle, coords)
+        coord_handles = self.tracker.track(queue_msg_handle, coords)
         self.assertEqual(1, len(coord_handles))
         coord_handle = coord_handles[0]
-        self.assertEqual(msg_handle, coord_handle)
-        self.assertIsNone(self.tile_queue.done_called)
+        self.assertIs(queue_msg_handle, coord_handle)
 
-        returned_msg_handle = self.tracker.done(coord_handle)
-        self.assertEqual(msg_handle, returned_msg_handle)
-        self.assertEqual(msg_handle, self.tile_queue.done_called)
+        returned_msg_handle, all_done = self.tracker.done(coord_handle)
+        self.assertIs(queue_msg_handle, returned_msg_handle)
+        self.assertTrue(all_done)
 
 
 class MultipleMessageTrackerTest(unittest.TestCase):
 
     def setUp(self):
         from tilequeue.queue.message import MultipleMessagesPerCoordTracker
-
-        class MockQueue(object):
-            def __init__(self):
-                self.done_called = None
-
-            def job_done(self, msg_handle):
-                self.done_called = msg_handle
-
-        self.tile_queue = MockQueue()
-        self.tracker = MultipleMessagesPerCoordTracker(self.tile_queue)
+        self.tracker = MultipleMessagesPerCoordTracker()
 
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord
         from tilequeue.queue import MessageHandle
+        from tilequeue.queue.message import QueueMessageHandle
         msg_handle = MessageHandle('handle', 'payload')
+        queue_id = 1
+        queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
         coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
-        coord_handles = self.tracker.track(msg_handle, coords)
+        coord_handles = self.tracker.track(queue_msg_handle, coords)
         self.assertEqual(2, len(coord_handles))
-
-        self.assertIsNone(self.tile_queue.done_called)
 
         with self.assertRaises(AssertionError):
             self.tracker.done('bogus-coord-handle')
 
-        self.tracker.done(coord_handles[0])
-        self.assertIsNone(self.tile_queue.done_called)
+        msg_handle_result, all_done = self.tracker.done(coord_handles[0])
+        self.assertFalse(all_done)
 
-        self.tracker.done(coord_handles[1])
-        self.assertEqual(msg_handle, self.tile_queue.done_called)
+        msg_handle_result, all_done = self.tracker.done(coord_handles[1])
+        self.assertTrue(all_done)
+        self.assertIs(queue_msg_handle, msg_handle_result)
