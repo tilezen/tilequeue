@@ -14,7 +14,7 @@ class TestQueryRawr(unittest.TestCase):
 
     def _make(self, min_zoom_fn, props_fn, tables, tile_pyramid,
               layer_name='testlayer'):
-        from tilequeue.query.fixture import LayerInfo
+        from tilequeue.query.common import LayerInfo
         from tilequeue.query.rawr import make_rawr_data_fetcher
 
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
@@ -131,3 +131,72 @@ class TestQueryRawr(unittest.TestCase):
         feature_coord = feature_coord.zoomBy(-1).container()
         read_rows = fetch(10, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(0, len(read_rows))
+
+    # TODO!
+    # this isn't ready yet! need to implement OsmRawrLookup to use the RAWR
+    # tile indexes.
+    def _test_root_relation_id(self):
+        from shapely.geometry import Point
+        from tilequeue.query.rawr import TilePyramid
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 10
+
+        def _test(rels, expected_root_id):
+            shape = Point(0, 0)
+            props = {
+                'railway': 'station',
+                'name': 'Foo Station',
+            }
+            tables = TestGetTable({
+                'planet_osm_point': [(1, shape.wkb, props)],
+                'planet_osm_rels': rels,
+            })
+
+            zoom = 10
+            max_zoom = zoom + 6
+            coord = mercator_point_to_coord(zoom, shape.x, shape.y)
+            tile_pyramid = TilePyramid(zoom, coord.column, coord.row, max_zoom)
+
+            fetch = self._make(min_zoom_fn, None, tables, tile_pyramid,
+                               layer_name='pois')
+
+            feature_coord = mercator_point_to_coord(16, shape.x, shape.y)
+            read_rows = fetch(16, coord_to_mercator_bounds(feature_coord))
+            self.assertEquals(1, len(read_rows))
+
+            props = read_rows[0]['__pois_properties__']
+            self.assertEquals(expected_root_id,
+                              props.get('mz_transit_root_relation_id'))
+
+        # the fixture code expects "raw" relations as if they come straight
+        # from osm2pgsql. the structure is a little cumbersome, so this
+        # utility function constructs it from a more readable function call.
+        def _rel(id, nodes=None, ways=None, rels=None):
+            way_off = len(nodes) if nodes else 0
+            rel_off = way_off + (len(ways) if ways else 0)
+            return {
+                'id': id,
+                'tags': ['type', 'site'],
+                'way_off': way_off,
+                'rel_off': rel_off,
+                'parts': (nodes or []) + (ways or []) + (rels or []),
+            }
+
+        # one level of relations - this one directly contains the station
+        # node.
+        _test([_rel(2, nodes=[1])], 2)
+
+        # two levels of relations r3 contains r2 contains n1.
+        _test([_rel(2, nodes=[1]), _rel(3, rels=[2])], 3)
+
+        # asymmetric diamond pattern. r2 and r3 both contain n1, r4 contains
+        # r3 and r5 contains both r4 and r2, making it the "top" relation.
+        _test([
+            _rel(2, nodes=[1]),
+            _rel(3, nodes=[1]),
+            _rel(4, rels=[3]),
+            _rel(5, rels=[2, 4]),
+        ], 5)

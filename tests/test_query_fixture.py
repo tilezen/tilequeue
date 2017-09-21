@@ -5,7 +5,7 @@ class TestQueryFixture(unittest.TestCase):
 
     def _make(self, rows, min_zoom_fn, props_fn, relations=[],
               layer_name='testlayer'):
-        from tilequeue.query.fixture import LayerInfo
+        from tilequeue.query.common import LayerInfo
         from tilequeue.query.fixture import make_fixture_data_fetcher
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
         return make_fixture_data_fetcher(layers, rows, relations=relations)

@@ -1,5 +1,6 @@
 from collections import namedtuple
 from shapely.geometry import box
+from tilequeue.query.common import layer_properties
 
 
 class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
@@ -19,6 +20,58 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
 
     def bbox(self):
         return box(*self.bounds())
+
+
+class OsmRawrLookup(object):
+
+    def relations_using_node(self, node_id):
+        "Returns a list of relation IDs which contain the node with that ID."
+
+        return []
+
+    def relations_using_way(self, way_id):
+        "Returns a list of relation IDs which contain the way with that ID."
+
+        return []
+
+    def relations_using_rel(self, rel_id):
+        """
+        Returns a list of relation IDs which contain the relation with that
+        ID.
+        """
+
+        return []
+
+    def ways_using_node(self, node_id):
+        "Returns a list of way IDs which contain the node with that ID."
+
+        return []
+
+    def relation(self, rel_id):
+        "Returns the Relation object with the given ID."
+
+        return None
+
+    def way(self, way_id):
+        """
+        Returns the feature (fid, shape, props) which was generated from the
+        given way.
+        """
+
+        return None
+
+    def node(self, node_id):
+        """
+        Returns the feature (fid, shape, props) which was generated from the
+        given node.
+        """
+
+        return None
+
+    def transit_relations(self, rel_id):
+        "Return transit relations containing the relation with the given ID."
+
+        return set()
 
 
 class DataFetcher(object):
@@ -56,6 +109,8 @@ class DataFetcher(object):
                 index_table(source, 'add_feature', layer_index)
 
             self.layer_indexes[layer_name] = layer_index
+
+        self.osm = OsmRawrLookup()
 
     def _lookup(self, zoom, unpadded_bounds, layer_name):
         from tilequeue.tile import mercator_point_to_coord
@@ -105,7 +160,10 @@ class DataFetcher(object):
                 # place for assembing the read row as if from postgres
                 read_row = {}
 
-                read_row['__' + layer_name + '_properties__'] = props.copy()
+                layer_props = layer_properties(
+                    fid, shape, props, layer_name, zoom, self.osm)
+
+                read_row['__' + layer_name + '_properties__'] = layer_props
                 read_row['__id__'] = fid
                 read_row['__geometry__'] = bytes(shape.wkb)
                 read_rows.append(read_row)
