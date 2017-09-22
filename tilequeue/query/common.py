@@ -129,6 +129,24 @@ def mz_transit_route_name(tags):
     return name
 
 
+def is_station_or_stop(fid, shape, props):
+    "Returns true if the given (point) feature is a station or stop."
+    return (
+        props.get('railway') in ('station', 'stop', 'tram_stop') or
+        props.get('public_transport') in ('stop', 'stop_position', 'tram_stop')
+    )
+
+
+def is_station_or_line(fid, shape, props):
+    """
+    Returns true if the given (line or polygon from way) feature is a station
+    or transit line.
+    """
+
+    railway = props.get('railway')
+    return railway in ('subway', 'light_rail', 'tram', 'rail')
+
+
 Transit = namedtuple(
     'Transit', 'score root_relation_id '
     'trains subways light_rails trams railways')
@@ -173,12 +191,8 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
     for rel_id in all_relations:
         rel = osm.relation(rel_id)
         for node_id in rel.node_ids:
-            fid, shape, props = osm.node(node_id)
-            railway = props.get('railway') in ('station', 'stop', 'tram_stop')
-            public_transport = props.get('public_transport') in \
-                ('stop', 'stop_position', 'tram_stop')
-            if railway or public_transport:
-                stations_and_stops.add(fid)
+            if is_station_or_stop(*osm.node(node_id)):
+                stations_and_stops.add(node_id)
 
     if node_id:
         stations_and_stops.add(node_id)
@@ -188,9 +202,7 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
     stations_and_lines = set()
     for node_id in stations_and_stops:
         for way_id in osm.ways_using_node(node_id):
-            fid, shape, props = osm.way(way_id)
-            railway = props.get('railway')
-            if railway in ('subway', 'light_rail', 'tram', 'rail'):
+            if is_station_or_line(*osm.way(way_id)):
                 stations_and_lines.add(way_id)
 
     if way_id:
@@ -212,7 +224,7 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
 
     routes_lookup = defaultdict(set)
     for rel_id in all_routes:
-        rel = osm.relations(rel_id)
+        rel = osm.relation(rel_id)
         route = rel.tags.get('route')
         if route:
             route_name = mz_transit_route_name(rel.tags)
@@ -265,7 +277,8 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
         mz_networks = []
         mz_cycling_networks = set()
         mz_is_bus_route = False
-        for rel in osm.relations_using_way(fid):
+        for rel_id in osm.relations_using_way(fid):
+            rel = osm.relation(rel_id)
             typ, route, network, ref = [rel.tags.get(k) for k in (
                 'type', 'route', 'network', 'ref')]
             if route and (network or ref):

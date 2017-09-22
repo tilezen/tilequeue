@@ -132,10 +132,7 @@ class TestQueryRawr(unittest.TestCase):
         read_rows = fetch(10, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(0, len(read_rows))
 
-    # TODO!
-    # this isn't ready yet! need to implement OsmRawrLookup to use the RAWR
-    # tile indexes.
-    def _test_root_relation_id(self):
+    def test_root_relation_id(self):
         from shapely.geometry import Point
         from tilequeue.query.rawr import TilePyramid
         from tilequeue.tile import coord_to_mercator_bounds
@@ -177,13 +174,10 @@ class TestQueryRawr(unittest.TestCase):
         def _rel(id, nodes=None, ways=None, rels=None):
             way_off = len(nodes) if nodes else 0
             rel_off = way_off + (len(ways) if ways else 0)
-            return {
-                'id': id,
-                'tags': ['type', 'site'],
-                'way_off': way_off,
-                'rel_off': rel_off,
-                'parts': (nodes or []) + (ways or []) + (rels or []),
-            }
+            parts = (nodes or []) + (ways or []) + (rels or [])
+            members = [""] * len(parts)
+            tags = ['type', 'site']
+            return (id, way_off, rel_off, parts, members, tags)
 
         # one level of relations - this one directly contains the station
         # node.

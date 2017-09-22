@@ -1,6 +1,19 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from shapely.geometry import box
 from tilequeue.query.common import layer_properties
+from tilequeue.query.common import is_station_or_stop
+from tilequeue.query.common import is_station_or_line
+from tilequeue.query.common import deassoc
+from tilequeue.query.common import mz_is_interesting_transit_relation
+
+
+class Relation(object):
+    def __init__(self, rel_id, way_off, rel_off, parts, members, tags):
+        self.id = rel_id
+        self.tags = deassoc(tags)
+        self.node_ids = parts[0:way_off]
+        self.way_ids = parts[way_off:rel_off]
+        self.rel_ids = parts[rel_off:]
 
 
 class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
@@ -22,17 +35,84 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
         return box(*self.bounds())
 
 
+# weak type of enum type
+class ShapeType(object):
+    point = 1
+    line = 2
+    polygon = 3
+
+
+def _wkb_shape(wkb):
+    reverse = ord(wkb[0]) == 1
+    type_bytes = map(ord, wkb[1:5])
+    if reverse:
+        type_bytes.reverse()
+    typ = type_bytes[3]
+    if typ == 1 or typ == 4:
+        return ShapeType.point
+    elif typ == 2 or typ == 5:
+        return ShapeType.line
+    elif typ == 3 or typ == 6:
+        return ShapeType.polygon
+    else:
+        assert False, "WKB shape type %d not understood." % (typ,)
+
+
 class OsmRawrLookup(object):
+
+    def __init__(self):
+        self.nodes = {}
+        self.ways = {}
+        self.relations = {}
+
+        self._ways_using_node = defaultdict(list)
+        self._relations_using_node = defaultdict(list)
+        self._relations_using_way = defaultdict(list)
+        self._relations_using_rel = defaultdict(list)
+
+    def add_feature(self, fid, shape_wkb, props):
+        if fid < 0:
+            return
+
+        shape_type = _wkb_shape(shape_wkb)
+        if is_station_or_stop(fid, None, props) and \
+           shape_type == ShapeType.point:
+            # must be a station or stop node
+            self.nodes[fid] = (fid, shape_wkb, props)
+
+        elif (is_station_or_line(fid, None, props) and
+              shape_type != ShapeType.point):
+            # must be a station polygon or stop line
+            self.ways[fid] = (fid, shape_wkb, props)
+
+    def add_way(self, way_id, nodes, tags):
+        for node_id in nodes:
+            if node_id in self.nodes:
+                self._ways_using_node[node_id] = way_id
+                assert way_id in self.ways
+
+    def add_relation(self, rel_id, way_off, rel_off, parts, members, tags):
+        r = Relation(rel_id, way_off, rel_off, parts, members, tags)
+        if mz_is_interesting_transit_relation(r.tags):
+            self.relations[r.id] = r
+            for node_id in r.node_ids:
+                if node_id in self.nodes:
+                    self._relations_using_node[node_id].append(rel_id)
+            for way_id in r.way_ids:
+                if way_id in self.ways:
+                    self._relations_using_way[way_id].append(rel_id)
+            for member_rel_id in r.rel_ids:
+                self._relations_using_rel[member_rel_id].append(rel_id)
 
     def relations_using_node(self, node_id):
         "Returns a list of relation IDs which contain the node with that ID."
 
-        return []
+        return self._relations_using_node.get(node_id, [])
 
     def relations_using_way(self, way_id):
         "Returns a list of relation IDs which contain the way with that ID."
 
-        return []
+        return self._relations_using_way.get(way_id, [])
 
     def relations_using_rel(self, rel_id):
         """
@@ -40,17 +120,17 @@ class OsmRawrLookup(object):
         ID.
         """
 
-        return []
+        return self._relations_using_rel.get(rel_id, [])
 
     def ways_using_node(self, node_id):
         "Returns a list of way IDs which contain the node with that ID."
 
-        return []
+        return self._ways_using_node.get(node_id, [])
 
     def relation(self, rel_id):
         "Returns the Relation object with the given ID."
 
-        return None
+        return self.relations[rel_id]
 
     def way(self, way_id):
         """
@@ -58,7 +138,7 @@ class OsmRawrLookup(object):
         given way.
         """
 
-        return None
+        return self.ways[way_id]
 
     def node(self, node_id):
         """
@@ -66,12 +146,12 @@ class OsmRawrLookup(object):
         given node.
         """
 
-        return None
+        return self.nodes[node_id]
 
     def transit_relations(self, rel_id):
         "Return transit relations containing the relation with the given ID."
 
-        return set()
+        return set(self.relations_using_rel(rel_id))
 
 
 class DataFetcher(object):
@@ -93,6 +173,8 @@ class DataFetcher(object):
         tile = self.tile_pyramid.tile()
         max_zoom = self.tile_pyramid.max_z
 
+        table_indexes = defaultdict(list)
+
         for layer_name, info in self.layers.items():
             meta = None
 
@@ -102,15 +184,22 @@ class DataFetcher(object):
             layer_index = FeatureTileIndex(tile, max_zoom, min_zoom)
 
             for shape_type in ('point', 'line', 'polygon'):
-                if not info.allows_shape_type(shape_type):
-                    continue
-
-                source = tables('planet_osm_' + shape_type)
-                index_table(source, 'add_feature', layer_index)
+                if info.allows_shape_type(shape_type):
+                    table_name = 'planet_osm_' + shape_type
+                    table_indexes[table_name].append(layer_index)
 
             self.layer_indexes[layer_name] = layer_index
 
         self.osm = OsmRawrLookup()
+        for fn, typ in (('add_feature', 'point'),
+                        ('add_feature', 'line'),
+                        ('add_feature', 'polygon'),
+                        ('add_way', 'ways'),
+                        ('add_relation', 'rels')):
+            table_name = 'planet_osm_' + typ
+            source = tables(table_name)
+            extra_indexes = table_indexes[table_name]
+            index_table(source, fn, self.osm, *extra_indexes)
 
     def _lookup(self, zoom, unpadded_bounds, layer_name):
         from tilequeue.tile import mercator_point_to_coord
