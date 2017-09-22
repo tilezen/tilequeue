@@ -481,7 +481,7 @@ def tilequeue_intersect(cfg, peripherals):
 
     # clamp number of threads between 5 and 20
     queue_writer = peripherals.queue_writer
-    n_queued, n_in_flight = queue_writer.write_batch(coords)
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
 
     # print counts per file
     for path, count in coord_ints_path_result['path_counts']:
@@ -930,7 +930,7 @@ def tilequeue_seed(cfg, peripherals):
     # updating tile queue happens in background threads
     def tile_queue_enqueue():
         coords = coords_generator_from_queue(tile_queue_queue)
-        queue_writer.write_batch(coords)
+        queue_writer.enqueue_batch(coords)
 
     logger.info('Enqueueing ... ')
     thread_enqueue = threading.Thread(target=tile_queue_enqueue)
@@ -987,7 +987,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
             coords.append(coord)
 
     queue_writer = peripherals.queue_writer
-    n_queued, n_in_flight = queue_writer.write_batch(coords)
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
 
     logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
     logger.info('%d tiles of interest processed' % n_toi)
@@ -1242,7 +1242,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Enqueueing %s tiles ...', len(toi_to_add))
 
         queue_writer = peripherals.queue_writer
-        n_queued, n_in_flight = queue_writer.write_batch(
+        n_queued, n_in_flight = queue_writer.enqueue_batch(
             coord_unmarshall_int(coord_int) for coord_int in toi_to_add
         )
 
