@@ -1,16 +1,34 @@
 queue:
-  # type can be `sqs`, `multisqs`, `file`, `mem`, or `redis`
+  # type can be `sqs`, `file`, `mem`, or `redis`
+  # can also be a list of queues to configure multiple
   type: mem
   name: <sqs queue/list of queue names/queue file name/redis key/>
-  multisqs:
-    # for multisqs specifically
-    zoom-queue-map:
-      # keys are <start-zoom>-<end-zoom> (inclusive) ranges
-      # values are the queue name to use for zooms in that range
-      0-10: queue-1
-      11-20: queue-2
-  # whether to use redis to guard queue puts with an inflight check
-  inflight: false
+queue-mapping:
+  type: <single/multiple>
+  # for multiple configuration
+  multiple:
+    - start-zoom: 10
+      # end_zoom is exclusive
+      end-zoom: 16
+      queue-name: <name of configured queue>
+      # if set, the group-by-zoom tells the mapper to group
+      # coordinates by common tile parents
+      group-by-zoom: 10
+      # NOTE: start_zoom and end_zoom can be None if queue is only used for
+      # priority purposes
+      # the order here in queue-mapping is important, and is in
+      # priority order that the queues will be checking when reading
+      # messages during processing
+message-marshall:
+  # controls how queue messages get marshalled/unmarshalled
+  # this should correspond to the appropriate queue-mapping implementation
+  type: <single/multiple>
+# can omit the in-inflight configuration completely
+in-flight:
+  type: <redis>
+message-tracker:
+  # should correspond with the marshall and queue implementations
+  type: <single/multiple>
 # Uncomment this section to activate statsd
 #statsd:
 #  host: 127.0.0.1
@@ -146,13 +164,9 @@ logging:
   # https://docs.python.org/2/howto/logging.html#logging-basic-tutorial
   config: logging.conf.sample
 redis:
-  # stub or redis_client. The stub type can be useful for mocking out
-  # tiles of interest and in flight enqueueing operations.
-  type: stub
   host: localhost
   port: 6379
   db: 0
-  cache-set-key: tilequeue.tiles-of-interest
 # expected data source is postgresql
 postgresql:
   host: localhost

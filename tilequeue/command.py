@@ -154,8 +154,8 @@ def make_multi_queue_group_mapper_from_cfg(
     from tilequeue.queue.mapper import ZoomRangeQueueSpec
     zoom_range_specs = []
     for zoom_range_spec_yaml in multi_queue_map_yaml:
-        start_zoom = zoom_range_spec_yaml.get('start_zoom')
-        end_zoom = zoom_range_spec_yaml.get('end_zoom')
+        start_zoom = zoom_range_spec_yaml.get('start-zoom')
+        end_zoom = zoom_range_spec_yaml.get('end-zoom')
         if start_zoom is not None and end_zoom is not None:
             assert isinstance(start_zoom, int)
             assert isinstance(end_zoom, int)
@@ -163,9 +163,9 @@ def make_multi_queue_group_mapper_from_cfg(
         else:
             start_zoom = None
             end_zoom = None
-        queue_name = zoom_range_spec_yaml['queue_name']
+        queue_name = zoom_range_spec_yaml['queue-name']
         queue = tile_queue_name_map[queue_name]
-        group_by_zoom = zoom_range_spec_yaml.get('group_by_zoom')
+        group_by_zoom = zoom_range_spec_yaml.get('group-by-zoom')
         assert group_by_zoom is None or isinstance(group_by_zoom, int)
         zrs = ZoomRangeQueueSpec(start_zoom, end_zoom, queue_name, queue)
         zoom_range_specs.append(zrs)
@@ -1819,13 +1819,13 @@ def tilequeue_main(argv_args=None):
 
     queue_mapper_yaml = cfg.yml.get('queue-mapping')
     assert queue_mapper_yaml, 'Missing queue-mapping configuration'
-    queue_mapper = make_queue_mapper(cfg.yml, tile_queue_name_map)
+    queue_mapper = make_queue_mapper(queue_mapper_yaml, tile_queue_name_map)
 
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    inflight_yaml = cfg.yml.get('inflight')
+    inflight_yaml = cfg.yml.get('in-flight')
     inflight_mgr = make_inflight_manager(inflight_yaml, redis_client)
 
     enqueue_batch_size = 10
