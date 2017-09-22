@@ -1,7 +1,4 @@
 from tilequeue.queue import MessageHandle
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import coord_unmarshall_int
-from tilequeue.tile import serialize_coord
 from tilequeue.utils import grouper
 import time
 
@@ -22,29 +19,25 @@ class RedisQueue(object):
         self.redis_client = redis_client
         self.queue_key = queue_key
 
-    def enqueue(self, coord):
-        coord_int = coord_marshall_int(coord)
-        self.redis_client.rpush(coord_int)
+    def enqueue(self, payload):
+        self.redis_client.rpush(payload)
 
-    def enqueue_batch(self, coords):
-        for coords_chunk in grouper(coords, self.enqueue_batch_size):
-            coord_ints = map(coord_marshall_int, coords_chunk)
-            self.redis_client.rpush(self.queue_key, *coord_ints)
+    def enqueue_batch(self, payloads):
+        for payloads_chunk in grouper(payloads, self.enqueue_batch_size):
+            self.redis_client.rpush(self.queue_key, *payloads_chunk)
 
     def read(self):
         read_size = 10
         with self.redis_client.pipeline() as pipe:
             pipe.lrange(self.queue_key, 0, read_size - 1)
             pipe.ltrim(self.queue_key, read_size, -1)
-            coord_ints, _ = pipe.execute()
-        if not coord_ints:
+            payloads, _ = pipe.execute()
+        if not payloads:
             time.sleep(self.sleep_time_seconds_when_empty)
             return []
         msg_handles = []
-        for coord_int in coord_ints:
-            coord = coord_unmarshall_int(coord_int)
-            coord_str = serialize_coord(coord)
-            msg_handle = MessageHandle(None, coord_str)
+        for payload in payloads:
+            msg_handle = MessageHandle(None, payload)
             msg_handles.append(msg_handle)
         return msg_handles
 
