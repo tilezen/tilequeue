@@ -13,13 +13,13 @@ CoordGroup = namedtuple('CoordGroup', 'coords queue_id')
 
 class SingleQueueMapper(object):
 
-    def __init__(self, tile_queue, queue_name):
-        self.tile_queue = tile_queue
+    def __init__(self, queue_name, tile_queue):
         self.queue_name = queue_name
+        self.tile_queue = tile_queue
 
     def group(self, coords):
         for coord in coords:
-            return CoordGroup([coord], self.queue_name)
+            yield CoordGroup([coord], self.queue_name)
 
     def get_queue(self, queue_id):
         assert queue_id == self.queue_name, 'Unknown queue_id: %s' % queue_id

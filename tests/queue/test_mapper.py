@@ -1,7 +1,38 @@
 import unittest
 
 
-class QueueMapperTest(unittest.TestCase):
+class SingleQueueMapperTest(unittest.TestCase):
+
+    def make_queue_mapper(self, queue_name, tile_queue):
+        from tilequeue.queue.mapper import SingleQueueMapper
+        return SingleQueueMapper(queue_name, tile_queue)
+
+    def test_single_queue_mapper(self):
+        from mock import MagicMock
+        from tilequeue.tile import deserialize_coord
+        tile_queue_mock = MagicMock()
+        queue_mapper = self.make_queue_mapper('queue_name', tile_queue_mock)
+        coords = [deserialize_coord('1/1/1'), deserialize_coord('15/1/1')]
+        coord_groups = list(queue_mapper.group(coords))
+        self.assertEquals(2, len(coord_groups))
+        cg1, cg2 = coord_groups
+        self.assertEquals('queue_name', cg1.queue_id)
+        self.assertEquals('queue_name', cg2.queue_id)
+        self.assertEquals(1, len(cg1.coords))
+        self.assertEquals(coords[0], cg1.coords[0])
+        self.assertEquals(1, len(cg2.coords))
+        self.assertEquals(coords[1], cg2.coords[0])
+
+        self.assertIs(tile_queue_mock, queue_mapper.get_queue('queue_name'))
+
+        qs = queue_mapper.queues_in_priority_order()
+        self.assertEquals(1, len(qs))
+        qn, q = qs[0]
+        self.assertEquals('queue_name', qn)
+        self.assertIs(tile_queue_mock, q)
+
+
+class MultipleQueueMapperTest(unittest.TestCase):
 
     def make_queue_mapper(self, specs):
         from tilequeue.queue.mapper import ZoomRangeAndZoomGroupQueueMapper
