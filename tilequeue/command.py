@@ -180,7 +180,7 @@ def make_single_queue_mapper(queue_name, tile_queue):
 
 
 def make_message_marshaller(msg_marshall_yaml_cfg):
-    msg_mar_type =  msg_marshall_yaml_cfg.get('type')
+    msg_mar_type = msg_marshall_yaml_cfg.get('type')
     assert msg_mar_type, 'Missing message marshall type in config'
     if msg_mar_type == 'single':
         from tilequeue.queue.message import SingleMessageMarshaller
@@ -745,7 +745,7 @@ def tilequeue_process(cfg, peripherals):
     inflight_manager = InFlightManager(
         peripherals.redis_client, 'tilequeue.in-flight')
     tile_queue_writer = TileQueueWriter(
-        tile_queue, s3_store_queue, inflight_manager, logger,
+        queue_mapper, s3_store_queue, inflight_manager, logger,
         thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
@@ -917,8 +917,6 @@ def coords_generator_from_queue(queue):
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
-    # suppresses checking the in flight list while seeding
-    tile_queue.is_seeding = True
     queue_writer = peripherals.queue_writer
 
     # based on cfg, create tile generator
