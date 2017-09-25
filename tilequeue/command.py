@@ -167,7 +167,8 @@ def make_multi_queue_group_mapper_from_cfg(
         queue = tile_queue_name_map[queue_name]
         group_by_zoom = zoom_range_spec_yaml.get('group-by-zoom')
         assert group_by_zoom is None or isinstance(group_by_zoom, int)
-        zrs = ZoomRangeQueueSpec(start_zoom, end_zoom, queue_name, queue)
+        zrs = ZoomRangeQueueSpec(
+                start_zoom, end_zoom, queue_name, queue, group_by_zoom)
         zoom_range_specs.append(zrs)
     queue_mapper = ZoomRangeAndZoomGroupQueueMapper(zoom_range_specs)
     return queue_mapper
@@ -217,7 +218,8 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
     if isinstance(queue_yaml_cfg, list):
         result = []
         for queue_item_cfg in queue_yaml_cfg:
-            tile_queue, name = make_tile_queue(queue_item_cfg)
+            tile_queue, name = make_tile_queue(
+                    queue_item_cfg, all_cfg, redis_client)
             result.append((tile_queue, name))
         return result
     else:
@@ -741,12 +743,9 @@ def tilequeue_process(cfg, peripherals):
                            logger, cfg.metatile_size)
 
     thread_tile_writer_stop = threading.Event()
-    from tilequeue.queue.inflight import InFlightManager
-    inflight_manager = InFlightManager(
-        peripherals.redis_client, 'tilequeue.in-flight')
     tile_queue_writer = TileQueueWriter(
-        queue_mapper, s3_store_queue, inflight_manager, logger,
-        thread_tile_writer_stop)
+        queue_mapper, s3_store_queue, peripherals.inflight_mgr,
+        peripherals.msg_tracker, logger, thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)

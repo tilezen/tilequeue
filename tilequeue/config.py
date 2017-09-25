@@ -15,11 +15,7 @@ class Configuration(object):
         self.aws_secret_access_key = self._cfg('aws credentials '
                                                'aws_secret_access_key')
 
-        self.queue_cfg = qc = self.yml['queue']
-        self.queue_name = qc['name']
-        self.queue_type = qc['type']
-        self.queue_impl_cfg = qc.get(self.queue_type)
-        self.queue_inflight = qc.get('inflight')
+        self.queue_cfg = self.yml['queue']
 
         self.store_type = self._cfg('store type')
         self.s3_bucket = self._cfg('store name')

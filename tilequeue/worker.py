@@ -165,7 +165,7 @@ class TileQueueReader(object):
                     if self.output(coord, data):
                         break
 
-        for tile_queue in self.queue_mapper.queues_in_priority_order():
+        for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
         self.logger.debug('tile queue reader stopped')
 
@@ -425,10 +425,12 @@ class S3Storage(object):
 class TileQueueWriter(object):
 
     def __init__(
-            self, tile_queue, input_queue, inflight_manager, logger, stop):
-        self.tile_queue = tile_queue
+            self, queue_mapper, input_queue, inflight_mgr, msg_tracker, logger,
+            stop):
+        self.queue_mapper = queue_mapper
         self.input_queue = input_queue
-        self.inflight_manager = inflight_manager
+        self.inflight_mgr = inflight_mgr
+        self.msg_tracker = msg_tracker
         self.logger = logger
         self.stop = stop
 
@@ -464,7 +466,7 @@ class TileQueueWriter(object):
                 continue
 
             try:
-                self.inflight_manager.unmark_inflight(coord)
+                self.inflight_mgr.unmark_inflight(coord)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error unmarking in flight: %s - %s' % (
