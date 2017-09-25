@@ -188,3 +188,72 @@ class TestLabelPlacement(FixtureTestCase):
         self.assertTrue(label_prop in read_rows[0])
         point = wkb.loads(read_rows[0][label_prop])
         self.assertEqual(point.geom_type, 'Point')
+
+
+class TestGeometryClipping(FixtureTestCase):
+
+    def _test(self, layer_name, bounds, factor):
+        from shapely.geometry import box
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 0
+
+        boxwidth = bounds[2] - bounds[0]
+        boxheight = bounds[3] - bounds[1]
+        # make shape overlap the edges of the bounds. that way we can check to
+        # see if the shape gets clipped.
+        shape = box(bounds[0] - factor * boxwidth,
+                    bounds[1] - factor * boxheight,
+                    bounds[2] + factor * boxwidth,
+                    bounds[3] + factor * boxheight)
+
+        props = {'name': 'Foo'}
+
+        rows = [
+            (1, shape, props),
+        ]
+
+        fetch = self._make(
+            rows, min_zoom_fn, None, relations=[], layer_name=layer_name)
+
+        read_rows = fetch(16, bounds)
+        self.assertEqual(1, len(read_rows))
+        return read_rows[0]
+
+    def test_normal_layer(self):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.tile import coord_to_mercator_bounds
+        from shapely import wkb
+
+        tile = Coordinate(zoom=15, column=10, row=10)
+        bounds = coord_to_mercator_bounds(tile)
+
+        read_row = self._test('testlayer', bounds, 1.0)
+        clipped_shape = wkb.loads(read_row['__geometry__'])
+        # for normal layers, clipped shape is inside the bounds of the tile.
+        x_factor = ((clipped_shape.bounds[2] - clipped_shape.bounds[0]) /
+                    (bounds[2] - bounds[0]))
+        y_factor = ((clipped_shape.bounds[2] - clipped_shape.bounds[0]) /
+                    (bounds[2] - bounds[0]))
+        self.assertAlmostEqual(1.0, x_factor)
+        self.assertAlmostEqual(1.0, y_factor)
+
+    def test_water_layer(self):
+        # water layer should be expanded by 10% on each side.
+        from ModestMaps.Core import Coordinate
+        from tilequeue.tile import coord_to_mercator_bounds
+        from shapely import wkb
+
+        tile = Coordinate(zoom=15, column=10, row=10)
+        bounds = coord_to_mercator_bounds(tile)
+
+        read_row = self._test('water', bounds, 1.0)
+        clipped_shape = wkb.loads(read_row['__geometry__'])
+        # for water layer, the geometry should be 10% larger than the tile
+        # bounds.
+        x_factor = ((clipped_shape.bounds[2] - clipped_shape.bounds[0]) /
+                    (bounds[2] - bounds[0]))
+        y_factor = ((clipped_shape.bounds[2] - clipped_shape.bounds[0]) /
+                    (bounds[2] - bounds[0]))
+        self.assertAlmostEqual(1.1, x_factor)
+        self.assertAlmostEqual(1.1, y_factor)
