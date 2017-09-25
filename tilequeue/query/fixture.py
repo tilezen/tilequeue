@@ -121,7 +121,9 @@ class DataFetcher(object):
         """
         Expect layers to be a dict of layer name to LayerInfo. Expect rows to
         be a list of (fid, shape, properties). Label placement layers should
-        be a set of layer names for which to generate label placement points.
+        be a dict of geometry type ('point', 'linestring', 'polygon') to set
+        of layer names, meaning that each feature of the given type in any of
+        the named layers should additionally get a generated label point.
         """
 
         self.layers = layers

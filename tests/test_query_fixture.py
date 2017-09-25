@@ -1,14 +1,19 @@
 import unittest
 
 
-class TestQueryFixture(unittest.TestCase):
+class FixtureTestCase(unittest.TestCase):
 
     def _make(self, rows, min_zoom_fn, props_fn, relations=[],
-              layer_name='testlayer'):
+              layer_name='testlayer', label_placement_layers={}):
         from tilequeue.query.common import LayerInfo
         from tilequeue.query.fixture import make_fixture_data_fetcher
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
-        return make_fixture_data_fetcher(layers, rows, relations=relations)
+        return make_fixture_data_fetcher(
+            layers, rows, label_placement_layers=label_placement_layers,
+            relations=relations)
+
+
+class TestQueryFixture(FixtureTestCase):
 
     def test_query_simple(self):
         from shapely.geometry import Point
@@ -141,3 +146,45 @@ class TestQueryFixture(unittest.TestCase):
             _rel(4, rels=[3]),
             _rel(5, rels=[2, 4]),
         ], 5)
+
+
+class TestLabelPlacement(FixtureTestCase):
+
+    def _test(self, layer_name, props):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.tile import coord_to_mercator_bounds
+        from shapely.geometry import box
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 0
+
+        tile = Coordinate(zoom=15, column=0, row=0)
+        bounds = coord_to_mercator_bounds(tile)
+        shape = box(*bounds)
+
+        rows = [
+            (1, shape, props),
+        ]
+
+        label_placement_layers = {
+            'polygon': set([layer_name]),
+        }
+        fetch = self._make(
+            rows, min_zoom_fn, None, relations=[], layer_name=layer_name,
+            label_placement_layers=label_placement_layers)
+
+        read_rows = fetch(16, bounds)
+        return read_rows
+
+    def test_named_item(self):
+        from shapely import wkb
+
+        layer_name = 'testlayer'
+        read_rows = self._test(layer_name, {'name': 'Foo'})
+
+        self.assertEquals(1, len(read_rows))
+
+        label_prop = '__label__'
+        self.assertTrue(label_prop in read_rows[0])
+        point = wkb.loads(read_rows[0][label_prop])
+        self.assertEqual(point.geom_type, 'Point')
