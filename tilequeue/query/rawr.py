@@ -6,6 +6,7 @@ from tilequeue.query.common import is_station_or_line
 from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
+from tilequeue.transform import calculate_padded_bounds
 
 
 class Relation(object):
@@ -221,10 +222,16 @@ class DataFetcher(object):
         bottomright.row = max(bottomright.row, topleft.row)
 
         features = []
+        seen_ids = set()
         for x in range(int(topleft.column), int(bottomright.column) + 1):
             for y in range(int(topleft.row), int(bottomright.row) + 1):
                 tile = Tile(zoom, x, y)
-                features.extend(index(tile))
+                tile_features = index(tile)
+                for feature in tile_features:
+                    feature_id = id(feature)
+                    if feature_id not in seen_ids:
+                        seen_ids.add(feature_id)
+                        features.append(feature)
         return features
 
     def __call__(self, zoom, unpadded_bounds):
@@ -256,7 +263,16 @@ class DataFetcher(object):
 
                 read_row['__' + layer_name + '_properties__'] = layer_props
                 read_row['__id__'] = fid
-                read_row['__geometry__'] = bytes(shape.wkb)
+
+                # if this is a water layer feature, then clip to an expanded
+                # bounding box to avoid tile-edge artefacts.
+                clip_box = bbox
+                if layer_name == 'water':
+                    pad_factor = 1.1
+                    clip_box = calculate_padded_bounds(
+                        pad_factor, unpadded_bounds)
+                clip_shape = clip_box.intersection(shape)
+                read_row['__geometry__'] = bytes(clip_shape.wkb)
 
                 # if the feature exists in any label placement layer, then we
                 # should consider generating a centroid
