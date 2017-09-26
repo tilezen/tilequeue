@@ -1,6 +1,5 @@
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import CoordMessage
-from tilequeue.tile import coord_unmarshall_int
+from tilequeue.queue import MessageHandle
+from tilequeue.utils import grouper
 import time
 
 
@@ -13,47 +12,36 @@ class RedisQueue(object):
     crashes, they are lost.
     """
 
-    enqueue_batch_size = 1024
+    enqueue_batch_size = 100
     sleep_time_seconds_when_empty = 10
 
     def __init__(self, redis_client, queue_key):
         self.redis_client = redis_client
         self.queue_key = queue_key
 
-    def enqueue(self, coord):
-        coord_int = coord_marshall_int(coord)
-        self.redis_client.rpush(coord_int)
+    def enqueue(self, payload):
+        self.redis_client.rpush(payload)
 
-    def enqueue_batch(self, coords):
-        n = 0
-        coord_buffer = []
-        for coord in coords:
-            coord_int = coord_marshall_int(coord)
-            coord_buffer.append(coord_int)
-            n += 1
-            if len(coord_buffer) >= self.enqueue_batch_size:
-                self.redis_client.rpush(self.queue_key, *coord_buffer)
-                del coord_buffer[:]
-        if coord_buffer:
-            self.redis_client.rpush(self.queue_key, *coord_buffer)
-        return n, 0
+    def enqueue_batch(self, payloads):
+        for payloads_chunk in grouper(payloads, self.enqueue_batch_size):
+            self.redis_client.rpush(self.queue_key, *payloads_chunk)
 
-    def read(self, max_to_read=10):
+    def read(self):
+        read_size = 10
         with self.redis_client.pipeline() as pipe:
-            pipe.lrange(self.queue_key, 0, max_to_read - 1)
-            pipe.ltrim(self.queue_key, max_to_read, -1)
-            coord_ints, _ = pipe.execute()
-        if not coord_ints:
+            pipe.lrange(self.queue_key, 0, read_size - 1)
+            pipe.ltrim(self.queue_key, read_size, -1)
+            payloads, _ = pipe.execute()
+        if not payloads:
             time.sleep(self.sleep_time_seconds_when_empty)
             return []
-        coord_msgs = []
-        for coord_int in coord_ints:
-            coord = coord_unmarshall_int(coord_int)
-            coord_msg = CoordMessage(coord, None)
-            coord_msgs.append(coord_msg)
-        return coord_msgs
+        msg_handles = []
+        for payload in payloads:
+            msg_handle = MessageHandle(None, payload)
+            msg_handles.append(msg_handle)
+        return msg_handles
 
-    def job_done(self, coord_message):
+    def job_done(self, msg_handle):
         pass
 
     def clear(self):

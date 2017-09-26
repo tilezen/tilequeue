@@ -8,14 +8,6 @@ merc_proj = pyproj.Proj(init='epsg:3857')
 latlng_proj = pyproj.Proj(proj='latlong')
 
 
-class CoordMessage(object):
-
-    def __init__(self, coord, message_handle, metadata=None):
-        self.coord = coord
-        self.message_handle = message_handle
-        self.metadata = metadata
-
-
 def serialize_coord(coord):
     return '%d/%d/%d' % (coord.zoom, coord.column, coord.row)
 

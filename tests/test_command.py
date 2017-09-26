@@ -44,10 +44,9 @@ class TestUniquifyGenerator(unittest.TestCase):
         cfg_mock = MagicMock()
         cfg_mock.queue_type = 'sqs'
         periperals_mock = MagicMock()
-        queue_mock = MagicMock()
-        periperals_mock.queue = queue_mock
-        queue_mock.enqueue = self.fake_enqueue
-        queue_mock.enqueue_batch = self.fake_enqueue_batch
+        writer_mock = MagicMock()
+        periperals_mock.queue_writer = writer_mock
+        writer_mock.enqueue_batch = self.fake_enqueue_batch
         sample_file = os.getcwd() + \
             "/tests/fixtures/sample_expire_list"
         import os
@@ -73,10 +72,9 @@ class TestUniquifyGenerator(unittest.TestCase):
         c1 = Coordinate(row=1, column=1, zoom=1)
         periperals_mock.toi = MagicMock(
             intersect=lambda x, y: ([]))
-        queue_mock = MagicMock()
-        periperals_mock.queue = queue_mock
-        queue_mock.enqueue = self.fake_enqueue
-        queue_mock.enqueue_batch = self.fake_enqueue_batch
+        writer_mock = MagicMock()
+        writer_mock.enqueue_batch = self.fake_enqueue_batch
+        periperals_mock.queue_writer = writer_mock
         import os
         with tempdir() as expired_tiles_location:
             expected_file = os.path.join(expired_tiles_location,
@@ -104,10 +102,9 @@ class TestUniquifyGenerator(unittest.TestCase):
         periperals_mock.toi = MagicMock(
             fetch_tiles_of_interest=lambda: set(
                 map(coord_marshall_int, coords)))
-        queue_mock = MagicMock()
-        periperals_mock.queue = queue_mock
-        queue_mock.enqueue = self.fake_enqueue
-        queue_mock.enqueue_batch = self.fake_enqueue_batch
+        writer_mock = MagicMock()
+        writer_mock.enqueue_batch = self.fake_enqueue_batch
+        periperals_mock.queue_writer = writer_mock
         import os
         with tempdir() as expired_tiles_location:
             expected_file = os.path.join(expired_tiles_location,

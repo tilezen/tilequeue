@@ -2,8 +2,6 @@
 Unit tests for `tilequeue.queue.file`.
 '''
 
-from tilequeue.queue import OutputFileQueue
-from tilequeue import tile
 from ModestMaps.Core import Coordinate
 import unittest
 import StringIO
@@ -12,6 +10,9 @@ import StringIO
 class TestQueue(unittest.TestCase):
 
     def setUp(self):
+        from tilequeue import tile
+        from tilequeue.queue import OutputFileQueue
+
         self.test_tile_coords = [
             (0, 0, 0),
             (1, 2, 3),
@@ -28,35 +29,30 @@ class TestQueue(unittest.TestCase):
         self.queue = OutputFileQueue(self.tiles_fp)
 
     def test_read(self):
+        from tilequeue.tile import serialize_coord
         self._write_str_to_file(self.tile_coords_str)
 
         # Test `.read() for multiple records.`
-        num_to_read = 3
-        actual_coords = [
-            msg.coord for msg in self.queue.read(max_to_read=num_to_read)]
-        expected = self.test_tile_objs[:num_to_read]
+        actual_coord_strs = [
+            msg.payload for msg in self.queue.read()]
+        expected = map(serialize_coord, self.test_tile_objs)
         self.assertEqual(
-            actual_coords, expected, 'Reading multiple records failed')
-
-        # Test `.read()` for just 1 record at a time.
-        for expected in self.test_tile_objs[num_to_read:]:
-            [actual_msg] = self.queue.read()
-            self.assertEqual(
-                actual_msg.coord, expected,
-                'Reading 1 record failed')
+            actual_coord_strs, expected, 'Reading multiple records failed')
 
     def test_enqueue_and_enqueue_batch(self):
+        from tilequeue.tile import serialize_coord
         # Test `.enqueue_batch()`.
         num_to_enqueue = 3
         self.assertEqual(
-            self.queue.enqueue_batch(self.test_tile_objs[:num_to_enqueue]),
+            self.queue.enqueue_batch(
+                map(serialize_coord, self.test_tile_objs[:num_to_enqueue])),
             (num_to_enqueue, 0),
             'Return value of `enqueue_batch()` does not match expected'
         )
 
         # Test `.enqueue()`.
-        for coords in self.test_tile_objs[num_to_enqueue:]:
-            self.queue.enqueue(coords)
+        for coord in self.test_tile_objs[num_to_enqueue:]:
+            self.queue.enqueue(serialize_coord(coord))
 
         self.assertEqual(
             self.tiles_fp.getvalue(),

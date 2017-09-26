@@ -15,8 +15,6 @@ class Configuration(object):
         self.aws_secret_access_key = self._cfg('aws credentials '
                                                'aws_secret_access_key')
 
-        self.queue_name = self._cfg('queue name')
-        self.queue_type = self._cfg('queue type')
         self.queue_cfg = self.yml['queue']
 
         self.store_type = self._cfg('store type')
