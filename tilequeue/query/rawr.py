@@ -5,6 +5,7 @@ from tilequeue.query.common import is_station_or_stop
 from tilequeue.query.common import is_station_or_line
 from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
+from tilequeue.query.common import shape_type_lookup
 
 
 class Relation(object):
@@ -156,7 +157,7 @@ class OsmRawrLookup(object):
 
 class DataFetcher(object):
 
-    def __init__(self, layers, tables, tile_pyramid):
+    def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
         """
         Expect layers to be a dict of layer name to LayerInfo (see fixture.py).
         Tables should be a callable which returns a generator over the rows in
@@ -168,6 +169,7 @@ class DataFetcher(object):
 
         self.layers = layers
         self.tile_pyramid = tile_pyramid
+        self.label_placement_layers = label_placement_layers
         self.layer_indexes = {}
 
         tile = self.tile_pyramid.tile()
@@ -255,6 +257,15 @@ class DataFetcher(object):
                 read_row['__' + layer_name + '_properties__'] = layer_props
                 read_row['__id__'] = fid
                 read_row['__geometry__'] = bytes(shape.wkb)
+
+                # if the feature exists in any label placement layer, then we
+                # should consider generating a centroid
+                label_layers = self.label_placement_layers.get(
+                    shape_type_lookup(shape), {})
+                if layer_name in label_layers:
+                    read_row['__label__'] = bytes(
+                        shape.representative_point().wkb)
+
                 read_rows.append(read_row)
 
         return read_rows
@@ -262,5 +273,6 @@ class DataFetcher(object):
 
 # tables is a callable which should return a generator over the rows of the
 # table when called with the table name.
-def make_rawr_data_fetcher(layers, tables, tile_pyramid):
-    return DataFetcher(layers, tables, tile_pyramid)
+def make_rawr_data_fetcher(layers, tables, tile_pyramid,
+                           label_placement_layers={}):
+    return DataFetcher(layers, tables, tile_pyramid, label_placement_layers)

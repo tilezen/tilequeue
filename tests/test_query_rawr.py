@@ -10,15 +10,20 @@ class TestGetTable(object):
         return self.tables.get(table_name, [])
 
 
-class TestQueryRawr(unittest.TestCase):
+class RawrTestCase(unittest.TestCase):
 
     def _make(self, min_zoom_fn, props_fn, tables, tile_pyramid,
-              layer_name='testlayer'):
+              layer_name='testlayer', label_placement_layers={}):
         from tilequeue.query.common import LayerInfo
         from tilequeue.query.rawr import make_rawr_data_fetcher
 
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
-        return make_rawr_data_fetcher(layers, tables, tile_pyramid)
+        return make_rawr_data_fetcher(
+            layers, tables, tile_pyramid,
+            label_placement_layers=label_placement_layers)
+
+
+class TestQueryRawr(RawrTestCase):
 
     def test_query_simple(self):
         from shapely.geometry import Point
@@ -194,3 +199,54 @@ class TestQueryRawr(unittest.TestCase):
             _rel(4, rels=[3]),
             _rel(5, rels=[2, 4]),
         ], 5)
+
+
+class TestLabelPlacement(RawrTestCase):
+
+    def _test(self, layer_name, props):
+        from ModestMaps.Core import Coordinate
+        from tilequeue.tile import coord_to_mercator_bounds
+        from shapely.geometry import box
+        from tilequeue.query.rawr import TilePyramid
+
+        top_zoom = 10
+        max_zoom = top_zoom + 6
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return top_zoom
+
+        tile = Coordinate(zoom=15, column=0, row=0)
+        top_tile = tile.zoomTo(top_zoom).container()
+        tile_pyramid = TilePyramid(
+            top_zoom, top_tile.column, top_tile.row, max_zoom)
+
+        bounds = coord_to_mercator_bounds(tile)
+        shape = box(*bounds)
+        tables = TestGetTable({
+            'planet_osm_polygon': [
+                (1, shape.wkb, props),
+            ]
+        })
+
+        label_placement_layers = {
+            'polygon': set([layer_name]),
+        }
+        fetch = self._make(
+            min_zoom_fn, None, tables, tile_pyramid, layer_name=layer_name,
+            label_placement_layers=label_placement_layers)
+
+        read_rows = fetch(tile.zoom, bounds)
+        return read_rows
+
+    def test_named_item(self):
+        from shapely import wkb
+
+        layer_name = 'testlayer'
+        read_rows = self._test(layer_name, {'name': 'Foo'})
+
+        self.assertEquals(1, len(read_rows))
+
+        label_prop = '__label__'
+        self.assertTrue(label_prop in read_rows[0])
+        point = wkb.loads(read_rows[0][label_prop])
+        self.assertEqual(point.geom_type, 'Point')
