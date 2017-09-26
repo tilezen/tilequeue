@@ -257,3 +257,62 @@ class TestGeometryClipping(FixtureTestCase):
                     (bounds[2] - bounds[0]))
         self.assertAlmostEqual(1.1, x_factor)
         self.assertAlmostEqual(1.1, y_factor)
+
+
+class TestNameHandling(FixtureTestCase):
+
+    def _test(self, input_layer_names, expected_layer_names):
+        from shapely.geometry import Point
+        from tilequeue.query.common import LayerInfo
+        from tilequeue.query.fixture import make_fixture_data_fetcher
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 0
+
+        def props_fn(shape, props, fid, meta):
+            return {}
+
+        shape = Point(0, 0)
+        props = {'name': 'Foo'}
+
+        rows = [
+            (1, shape, props),
+        ]
+
+        layers = {}
+        for name in input_layer_names:
+            layers[name] = LayerInfo(min_zoom_fn, props_fn)
+        fetch = make_fixture_data_fetcher(layers, rows)
+
+        feature_coord = mercator_point_to_coord(16, shape.x, shape.y)
+        read_rows = fetch(16, coord_to_mercator_bounds(feature_coord))
+        self.assertEqual(1, len(read_rows))
+
+        all_names = set(expected_layer_names) | set(input_layer_names)
+        for name in all_names:
+            properties_name = '__%s_properties__' % name
+            self.assertTrue(properties_name in read_rows[0])
+            actual_name = read_rows[0][properties_name].get('name')
+            if name in expected_layer_names:
+                expected_name = props.get('name')
+                self.assertEquals(expected_name, actual_name)
+            else:
+                # check the name doesn't appear anywhere else
+                self.assertEquals(None, actual_name)
+
+    def test_name_single_layer(self):
+        # in any oone of the pois, landuse or buildings layers, a name
+        # by itself will be output in the same layer.
+        for layer_name in ('pois', 'landuse', 'buildings'):
+            self._test([layer_name], [layer_name])
+
+    def test_precedence(self):
+        # if the feature is in the pois layer, then that should get the name
+        # and the other layers should not.
+        self._test(['pois', 'landuse'], ['pois'])
+        self._test(['pois', 'buildings'], ['pois'])
+        self._test(['pois', 'landuse', 'buildings'], ['pois'])
+        # otherwise, landuse should take precedence over buildings.
+        self._test(['landuse', 'buildings'], ['landuse'])
