@@ -34,6 +34,7 @@ setup(name='tilequeue',
       zip_safe=False,
       install_requires=[
           'boto',
+          'boto3',
           'edtf',
           'enum34',
           'hiredis',

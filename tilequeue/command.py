@@ -1732,6 +1732,100 @@ def tilequeue_process_tile(cfg, peripherals, args):
     print tile_data
 
 
+def make_rawr_queue(rawr_queue_name):
+    import boto3
+    sqs_client = boto3.client('sqs')
+    resp = sqs_client.get_queue_url(QueueName=rawr_queue_name)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+    queue_url = resp['QueueUrl']
+    from tilequeue.rawr import SqsQueue
+    rawr_queue = SqsQueue(sqs_client, queue_url)
+    return rawr_queue
+
+
+def tilequeue_rawr_enqueue(cfg, args):
+    """command to take tile expiry path and enqueue for rawr tile generation"""
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    from tilequeue.rawr import process_expiry
+    with open(args.expiry_path) as fh:
+        coords = create_coords_generator_from_tiles_file(fh)
+        process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords)
+
+
+def tilequeue_rawr_process(cfg, peripherals):
+    """command to read from rawr queue and generate rawr tiles"""
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    rawr_postgresql_yaml = rawr_yaml.get('postgresql')
+    assert rawr_postgresql_yaml, 'Missing rawr postgresql config'
+
+    from raw_tiles.formatter.gzip import Gzip
+    from raw_tiles.formatter.msgpack import Msgpack
+    from raw_tiles.gen import RawrGenerator
+    from raw_tiles.source.conn import ConnectionContextManager
+    from raw_tiles.source.osm import OsmSource
+    from tilequeue.rawr import RawrS3Sink
+    from tilequeue.rawr import RawrTileGenerationPipeline
+    from tilequeue.rawr import RawrToiIntersector
+    import boto3
+    # pass through the postgresql yaml config directly
+    conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
+
+    rawr_sink_yaml = rawr_yaml.get('sink')
+    assert rawr_sink_yaml, 'Missing rawr sink config'
+    bucket = rawr_sink_yaml.get('bucket')
+    assert bucket, 'Missing rawr sink bucket'
+    prefix = rawr_sink_yaml.get('prefix')
+    assert prefix, 'Missing rawr sink prefix'
+
+    s3_client = boto3.client('s3')
+    rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix)
+
+    toi_yaml = cfg.yml.get('toi-store')
+    assert toi_yaml.get('type') == 's3', 'Only s3 toi store supported'
+    toi_s3_yaml = toi_yaml.get('s3')
+    assert toi_s3_yaml, 'Missing toi-store s3 config'
+    toi_bucket = toi_s3_yaml.get('bucket')
+    toi_key = toi_s3_yaml.get('key')
+    assert toi_bucket, 'Missing toi-store s3 bucket'
+    assert toi_key, 'Missing toi-store s3 key'
+
+    rawr_toi_intersector = RawrToiIntersector(s3_client, toi_bucket, toi_key)
+
+    rawr_osm_source = OsmSource(conn_ctx)
+    rawr_formatter = Gzip(Msgpack())
+    rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
+    rawr_pipeline = RawrTileGenerationPipeline(
+            rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
+            peripherals.queue_writer, rawr_toi_intersector)
+    rawr_pipeline()
+
+
 Peripherals = namedtuple(
     'Peripherals',
     'toi stats redis_client '
@@ -1748,7 +1842,7 @@ def tilequeue_main(argv_args=None):
 
     # these are all the "standard" parsers which just take a config argument
     # that is already included at the top level.
-    parser_config = (
+    cfg_commands = (
         ('process', tilequeue_process),
         ('seed', tilequeue_seed),
         ('drain', tilequeue_drain),
@@ -1764,21 +1858,79 @@ def tilequeue_main(argv_args=None):
         ('consume-tile-traffic', tilequeue_consume_tile_traffic),
         ('stuck-tiles', tilequeue_stuck_tiles),
         ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
+        ('rawr-process', tilequeue_rawr_process),
     )
 
-    def _make_command_fn(func):
-        def command_fn(cfg, peripherals, args):
+    def _make_peripherals(cfg):
+        redis_client = make_redis_client(cfg)
+
+        toi_helper = make_toi_helper(cfg)
+
+        tile_queue_result = make_tile_queue(
+                cfg.queue_cfg, cfg.yml, redis_client)
+        tile_queue_name_map = {}
+        if isinstance(tile_queue_result, tuple):
+            tile_queue, queue_name = tile_queue_result
+            tile_queue_name_map[queue_name] = tile_queue
+        else:
+            assert isinstance(tile_queue_result, list), \
+                'Unknown tile_queue result: %s' % tile_queue_result
+            for tile_queue, queue_name in tile_queue_result:
+                tile_queue_name_map[queue_name] = tile_queue
+
+        queue_mapper_yaml = cfg.yml.get('queue-mapping')
+        assert queue_mapper_yaml, 'Missing queue-mapping configuration'
+        queue_mapper = make_queue_mapper(
+                queue_mapper_yaml, tile_queue_name_map)
+
+        msg_marshall_yaml = cfg.yml.get('message-marshall')
+        assert msg_marshall_yaml, 'Missing message-marshall config'
+        msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+        inflight_yaml = cfg.yml.get('in-flight')
+        inflight_mgr = make_inflight_manager(inflight_yaml, redis_client)
+
+        enqueue_batch_size = 10
+        from tilequeue.queue.writer import QueueWriter
+        queue_writer = QueueWriter(
+            queue_mapper, msg_marshaller, inflight_mgr, enqueue_batch_size)
+
+        msg_tracker_yaml = cfg.yml.get('message-tracker')
+        msg_tracker = make_msg_tracker(msg_tracker_yaml)
+
+        if cfg.statsd_host:
+            import statsd
+            stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
+                                       prefix=cfg.statsd_prefix)
+        else:
+            stats = FakeStatsd()
+
+        peripherals = Peripherals(
+            toi_helper, stats, redis_client, queue_mapper, msg_tracker,
+            msg_marshaller, inflight_mgr, queue_writer
+        )
+        return peripherals
+
+    def _make_peripherals_command(func):
+        def command_fn(cfg, args):
+            peripherals = _make_peripherals(cfg)
             return func(cfg, peripherals)
         return command_fn
 
-    for parser_name, func in parser_config:
+    def _make_peripherals_with_args_command(func):
+        def command_fn(cfg, args):
+            peripherals = _make_peripherals(cfg)
+            return func(cfg, peripherals, args)
+        return command_fn
+
+    for parser_name, func in cfg_commands:
         subparser = subparsers.add_parser(parser_name)
 
         # config parameter is shared amongst all parsers, but appears here so
         # that it can be given _after_ the name of the command.
         subparser.add_argument('--config', required=True,
                                help='The path to the tilequeue config file.')
-        command_fn = _make_command_fn(func)
+        command_fn = _make_peripherals_command(func)
         subparser.set_defaults(func=command_fn)
 
     # add "special" commands which take arguments
@@ -1787,63 +1939,28 @@ def tilequeue_main(argv_args=None):
                            help='The path to the tilequeue config file.')
     subparser.add_argument('coords', nargs='*',
                            help='Tile coordinates as "z/x/y".')
-    subparser.set_defaults(func=tilequeue_tile_status)
+    subparser.set_defaults(
+            func=_make_peripherals_with_args_command(tilequeue_tile_status))
 
     subparser = subparsers.add_parser('tile')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
     subparser.add_argument('coord',
                            help='Tile coordinate as "z/x/y".')
-    subparser.set_defaults(func=tilequeue_process_tile)
+    subparser.set_defaults(
+            func=_make_peripherals_with_args_command(tilequeue_process_tile))
+
+    subparser = subparsers.add_parser('rawr-enqueue')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--expiry-path', required=True,
+                           help='path to tile expiry file')
+    subparser.set_defaults(func=tilequeue_rawr_enqueue)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh)
-    redis_client = make_redis_client(cfg)
 
-    toi_helper = make_toi_helper(cfg)
-
-    tile_queue_result = make_tile_queue(cfg.queue_cfg, cfg.yml, redis_client)
-    tile_queue_name_map = {}
-    if isinstance(tile_queue_result, tuple):
-        tile_queue, queue_name = tile_queue_result
-        tile_queue_name_map[queue_name] = tile_queue
-    else:
-        assert isinstance(tile_queue_result, list), \
-            'Unknown tile_queue result: %s' % tile_queue_result
-        for tile_queue, queue_name in tile_queue_result:
-            tile_queue_name_map[queue_name] = tile_queue
-
-    queue_mapper_yaml = cfg.yml.get('queue-mapping')
-    assert queue_mapper_yaml, 'Missing queue-mapping configuration'
-    queue_mapper = make_queue_mapper(queue_mapper_yaml, tile_queue_name_map)
-
-    msg_marshall_yaml = cfg.yml.get('message-marshall')
-    assert msg_marshall_yaml, 'Missing message-marshall config'
-    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
-
-    inflight_yaml = cfg.yml.get('in-flight')
-    inflight_mgr = make_inflight_manager(inflight_yaml, redis_client)
-
-    enqueue_batch_size = 10
-    from tilequeue.queue.writer import QueueWriter
-    queue_writer = QueueWriter(
-        queue_mapper, msg_marshaller, inflight_mgr, enqueue_batch_size)
-
-    msg_tracker_yaml = cfg.yml.get('message-tracker')
-    msg_tracker = make_msg_tracker(msg_tracker_yaml)
-
-    if cfg.statsd_host:
-        import statsd
-        stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
-                                   prefix=cfg.statsd_prefix)
-    else:
-        stats = FakeStatsd()
-
-    peripherals = Peripherals(
-        toi_helper, stats, redis_client, queue_mapper, msg_tracker,
-        msg_marshaller, inflight_mgr, queue_writer
-    )
-    args.func(cfg, peripherals, args)
+    args.func(cfg, args)
