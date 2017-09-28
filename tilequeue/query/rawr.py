@@ -210,6 +210,7 @@ class DataFetcher(object):
         table_indexes = defaultdict(list)
 
         for layer_name, info in self.layers.items():
+            # TODO! this shouldn't be none!
             meta = None
 
             def min_zoom(fid, shape, props):
@@ -233,6 +234,20 @@ class DataFetcher(object):
             source = tables(table_name)
             extra_indexes = table_indexes[table_name]
             index_table(source, self.osm, *extra_indexes)
+
+    def _named_layer(self, fid, shape, props):
+        # we want only one layer from ('pois', 'landuse', 'buildings') for
+        # each feature to be assigned a name. therefore, we use the presence
+        # or absence of a min zoom to check whether these features as in these
+        # layers, and therefore which should be assigned the name.
+        for layer_name in ('pois', 'landuse', 'buildings'):
+            info = self.layers.get(layer_name)
+            if info and info.min_zoom_fn:
+                # TODO! meta should not be None!
+                min_zoom = info.min_zoom_fn(shape, props, fid, None)
+                if min_zoom is not None:
+                    return layer_name
+        return None
 
     def _lookup(self, zoom, unpadded_bounds, layer_name):
         from tilequeue.tile import mercator_point_to_coord
@@ -290,6 +305,12 @@ class DataFetcher(object):
 
                 layer_props = layer_properties(
                     fid, shape, props, layer_name, zoom, self.osm)
+
+                # add name into whichever of the pois, landuse or buildings
+                # layers has claimed this feature.
+                name = props.get('name', None)
+                if name and self._named_layer(fid, shape, props) == layer_name:
+                    layer_props['name'] = name
 
                 read_row['__' + layer_name + '_properties__'] = layer_props
                 read_row['__id__'] = fid

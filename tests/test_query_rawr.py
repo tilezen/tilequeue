@@ -331,3 +331,84 @@ class TestGeometryClipping(RawrTestCase):
                     (bounds[2] - bounds[0]))
         self.assertAlmostEqual(1.1, x_factor)
         self.assertAlmostEqual(1.1, y_factor)
+
+
+class TestNameHandling(RawrTestCase):
+
+    def _test(self, input_layer_names, expected_layer_names):
+        from shapely.geometry import Point
+        from tilequeue.query.common import LayerInfo
+        from tilequeue.query.rawr import TilePyramid
+        from tilequeue.query.rawr import make_rawr_data_fetcher
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+
+        top_zoom = 10
+        max_zoom = top_zoom + 6
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return top_zoom
+
+        def props_fn(shape, props, fid, meta):
+            return {}
+
+        shape = Point(0, 0)
+        props = {'name': 'Foo'}
+
+        tables = TestGetTable({
+            'planet_osm_point': [
+                (1, shape.wkb, props),
+            ],
+        })
+
+        tile = mercator_point_to_coord(16, shape.x, shape.y)
+        top_tile = tile.zoomTo(top_zoom).container()
+        tile_pyramid = TilePyramid(
+            top_zoom, top_tile.column, top_tile.row, max_zoom)
+
+        layers = {}
+        for name in input_layer_names:
+            layers[name] = LayerInfo(min_zoom_fn, props_fn)
+        fetch = make_rawr_data_fetcher(layers, tables, tile_pyramid)
+
+        read_rows = fetch(tile.zoom, coord_to_mercator_bounds(tile))
+        # the RAWR query goes over features multiple times because of the
+        # indexing, so we can't rely on all the properties for one feature to
+        # be all together in the same place. this loops over all the features,
+        # checking that there's only really one of them and gathering together
+        # all the __%s_properties__ from all the rows for further testing.
+        all_props = {}
+        for row in read_rows:
+            self.assertEquals(1, row['__id__'])
+            self.assertEquals(shape.wkb, row['__geometry__'])
+            for key, val in row.items():
+                if key.endswith('_properties__'):
+                    self.assertFalse(key in all_props)
+                    all_props[key] = val
+
+        all_names = set(expected_layer_names) | set(input_layer_names)
+        for name in all_names:
+            properties_name = '__%s_properties__' % name
+            self.assertTrue(properties_name in all_props)
+            actual_name = all_props[properties_name].get('name')
+            if name in expected_layer_names:
+                expected_name = props.get('name')
+                self.assertEquals(expected_name, actual_name)
+            else:
+                # check the name doesn't appear anywhere else
+                self.assertEquals(None, actual_name)
+
+    def test_name_single_layer(self):
+        # in any oone of the pois, landuse or buildings layers, a name
+        # by itself will be output in the same layer.
+        for layer_name in ('pois', 'landuse', 'buildings'):
+            self._test([layer_name], [layer_name])
+
+    def test_precedence(self):
+        # if the feature is in the pois layer, then that should get the name
+        # and the other layers should not.
+        self._test(['pois', 'landuse'], ['pois'])
+        self._test(['pois', 'buildings'], ['pois'])
+        self._test(['pois', 'landuse', 'buildings'], ['pois'])
+        # otherwise, landuse should take precedence over buildings.
+        self._test(['landuse', 'buildings'], ['landuse'])
