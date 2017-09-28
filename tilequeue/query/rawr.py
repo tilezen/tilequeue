@@ -60,6 +60,15 @@ def _wkb_shape(wkb):
         assert False, "WKB shape type %d not understood." % (typ,)
 
 
+def _match_type(values, types):
+    if len(values) != len(types):
+        return False
+    for val, typ in zip(values, types):
+        if not isinstance(val, typ):
+            return False
+    return True
+
+
 class OsmRawrLookup(object):
 
     def __init__(self):
@@ -71,6 +80,28 @@ class OsmRawrLookup(object):
         self._relations_using_node = defaultdict(list)
         self._relations_using_way = defaultdict(list)
         self._relations_using_rel = defaultdict(list)
+
+    def add_row(self, *args):
+        # there's only a single dispatch from the indexing function, which
+        # passes row data from the table. we have to figure out here what
+        # kind of row it was, and send the data on to the right function.
+
+        # IDs can be either ints or longs, and generally we don't care which,
+        # so we accept either as the type for that position in the function.
+        num = (int, long)
+
+        if _match_type(args, (num, (str, bytes), dict)):
+            self.add_feature(*args)
+
+        elif _match_type(args, (num, list, dict)):
+            self.add_way(*args)
+
+        elif _match_type(args, (num, num, num, list, list, list)):
+            self.add_relation(*args)
+
+        else:
+            raise Exception("Unknown row shape for OsmRawrLookup.add_row: %s" %
+                            (repr(map(type, args)),))
 
     def add_feature(self, fid, shape_wkb, props):
         if fid < 0:
@@ -194,15 +225,14 @@ class DataFetcher(object):
             self.layer_indexes[layer_name] = layer_index
 
         self.osm = OsmRawrLookup()
-        for fn, typ in (('add_feature', 'point'),
-                        ('add_feature', 'line'),
-                        ('add_feature', 'polygon'),
-                        ('add_way', 'ways'),
-                        ('add_relation', 'rels')):
+        # NOTE: order here is different from that in raw_tiles index()
+        # function. this is because here we want to gather up some
+        # "interesting" feature IDs before we look at the ways/rels tables.
+        for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
             table_name = 'planet_osm_' + typ
             source = tables(table_name)
             extra_indexes = table_indexes[table_name]
-            index_table(source, fn, self.osm, *extra_indexes)
+            index_table(source, self.osm, *extra_indexes)
 
     def _lookup(self, zoom, unpadded_bounds, layer_name):
         from tilequeue.tile import mercator_point_to_coord
