@@ -1,5 +1,6 @@
 from collections import namedtuple, defaultdict
 from shapely.geometry import box
+from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
 from tilequeue.query.common import is_station_or_stop
 from tilequeue.query.common import is_station_or_line
@@ -7,6 +8,8 @@ from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.transform import calculate_padded_bounds
+from raw_tiles.tile import shape_tile_coverage
+from math import floor
 
 
 class Relation(object):
@@ -42,6 +45,12 @@ class ShapeType(object):
     point = 1
     line = 2
     polygon = 3
+
+    _LOOKUP = ['point', 'line', 'polygon']
+
+    @staticmethod
+    def lookup(typ):
+        return ShapeType._LOOKUP[typ-1]
 
 
 def _wkb_shape(wkb):
@@ -187,6 +196,117 @@ class OsmRawrLookup(object):
         return set(self.relations_using_rel(rel_id))
 
 
+def _tiles(zoom, unpadded_bounds):
+    from tilequeue.tile import mercator_point_to_coord
+    from raw_tiles.tile import Tile
+
+    minx, miny, maxx, maxy = unpadded_bounds
+    topleft = mercator_point_to_coord(zoom, minx, miny)
+    bottomright = mercator_point_to_coord(zoom, maxx, maxy)
+
+    # make sure that the bottom right coordinate is below and to the right
+    # of the top left coordinate. it can happen that the coordinates are
+    # mixed up due to small numerical precision artefacts being enlarged
+    # by the conversion to integer and y-coordinate flip.
+    assert topleft.zoom == bottomright.zoom
+    bottomright.column = max(bottomright.column, topleft.column)
+    bottomright.row = max(bottomright.row, topleft.row)
+
+    for x in range(int(topleft.column), int(bottomright.column) + 1):
+        for y in range(int(topleft.row), int(bottomright.row) + 1):
+            tile = Tile(zoom, x, y)
+            yield tile
+
+
+_Feature = namedtuple('_Feature', 'fid shape properties layer_min_zooms')
+
+
+class _LazyShape(object):
+    """
+    This proxy exists so that we can avoid parsing the WKB for a shape unless
+    it is actually needed. Parsing WKB is pretty fast, but multiplied over
+    many thousands of objects, it can become the slowest part of the indexing
+    process. Given that we reject many features on the basis of their
+    properties alone, lazily parsing the WKB can provide a significant saving.
+    """
+
+    def __init__(self, wkb):
+        self.wkb = wkb
+        self.obj = None
+
+    def __getattr__(self, name):
+        if self.obj is None:
+            self.obj = wkb_loads(self.wkb)
+        return getattr(self.obj, name)
+
+
+class _LayersIndex(object):
+
+    def __init__(self, layers, tile_pyramid):
+        self.layers = layers
+        self.tile_pyramid = tile_pyramid
+        self.tile_index = defaultdict(list)
+
+    def add_row(self, fid, shape_wkb, props):
+        shape = _LazyShape(shape_wkb)
+        # TODO! meta is not None!
+        meta = None
+
+        layer_min_zooms = {}
+        for layer_name, info in self.layers.items():
+            shape_type = _wkb_shape(shape_wkb)
+            shape_type_str = ShapeType.lookup(shape_type)
+            if info.shape_types and shape_type_str not in info.shape_types:
+                continue
+            min_zoom = info.min_zoom_fn(fid, shape, props, meta)
+            if min_zoom is not None:
+                layer_min_zooms[layer_name] = min_zoom
+
+        # quick exit if the feature didn't have a min zoom in any layer.
+        if not layer_min_zooms:
+            return
+
+        # lowest zoom that this feature appears in any layer. note that this
+        # is clamped to the max zoom, so that all features that appear at some
+        # zoom level appear at the max zoom. this is different from the min
+        # zoom in layer_min_zooms, which is a property that will be injected
+        # for each layer and is used by the _client_ to determine feature
+        # visibility.
+        min_zoom = min(self.tile_pyramid.max_z, min(layer_min_zooms.values()))
+
+        # single object (hence single id()) will be shared amongst all layers.
+        # this allows us to easily and quickly de-duplicate at later layers in
+        # the stack.
+        feature = _Feature(fid, shape, props, layer_min_zooms)
+
+        # take the minimum integer zoom - this is the min zoom tile that the
+        # feature should appear in, and a feature with min_zoom = 1.9 should
+        # appear in a tile at z=1, not 2, since the tile at z=N is used for
+        # the zoom range N to N+1.
+        #
+        # we cut this off at this index's min zoom, as we aren't interested
+        # in any tiles outside of that.
+        floor_zoom = max(self.tile_pyramid.z, int(floor(min_zoom)))
+
+        # seed initial set of tiles at maximum zoom. all features appear at
+        # least at the max zoom, even if the min_zoom function returns a
+        # value larger than the max zoom.
+        zoom = self.tile_pyramid.max_z
+        tiles = shape_tile_coverage(shape, zoom, self.tile_pyramid.tile())
+
+        while zoom >= floor_zoom:
+            parent_tiles = set()
+            for tile in tiles:
+                self.tile_index[tile].append(feature)
+                parent_tiles.add(tile.parent())
+
+            zoom -= 1
+            tiles = parent_tiles
+
+    def __call__(self, tile):
+        return self.tile_index.get(tile, [])
+
+
 class DataFetcher(object):
 
     def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
@@ -196,7 +316,6 @@ class DataFetcher(object):
         the table when called with that table's name.
         """
 
-        from raw_tiles.index.features import FeatureTileIndex
         from raw_tiles.index.index import index_table
 
         self.layers = layers
@@ -204,26 +323,12 @@ class DataFetcher(object):
         self.label_placement_layers = label_placement_layers
         self.layer_indexes = {}
 
-        tile = self.tile_pyramid.tile()
-        max_zoom = self.tile_pyramid.max_z
-
         table_indexes = defaultdict(list)
 
-        for layer_name, info in self.layers.items():
-            # TODO! this shouldn't be none!
-            meta = None
-
-            def min_zoom(fid, shape, props):
-                return info.min_zoom_fn(fid, shape, props, meta)
-
-            layer_index = FeatureTileIndex(tile, max_zoom, min_zoom)
-
-            for shape_type in ('point', 'line', 'polygon'):
-                if info.allows_shape_type(shape_type):
-                    table_name = 'planet_osm_' + shape_type
-                    table_indexes[table_name].append(layer_index)
-
-            self.layer_indexes[layer_name] = layer_index
+        self.layers_index = _LayersIndex(self.layers, self.tile_pyramid)
+        for shape_type in ('point', 'line', 'polygon'):
+            table_name = 'planet_osm_' + shape_type
+            table_indexes[table_name].append(self.layers_index)
 
         self.osm = OsmRawrLookup()
         # NOTE: order here is different from that in raw_tiles index()
@@ -249,34 +354,18 @@ class DataFetcher(object):
                     return layer_name
         return None
 
-    def _lookup(self, zoom, unpadded_bounds, layer_name):
-        from tilequeue.tile import mercator_point_to_coord
-        from raw_tiles.tile import Tile
-
-        minx, miny, maxx, maxy = unpadded_bounds
-        topleft = mercator_point_to_coord(zoom, minx, miny)
-        bottomright = mercator_point_to_coord(zoom, maxx, maxy)
-        index = self.layer_indexes[layer_name]
-
-        # make sure that the bottom right coordinate is below and to the right
-        # of the top left coordinate. it can happen that the coordinates are
-        # mixed up due to small numerical precision artefacts being enlarged
-        # by the conversion to integer and y-coordinate flip.
-        assert topleft.zoom == bottomright.zoom
-        bottomright.column = max(bottomright.column, topleft.column)
-        bottomright.row = max(bottomright.row, topleft.row)
-
+    def _lookup(self, zoom, unpadded_bounds):
         features = []
         seen_ids = set()
-        for x in range(int(topleft.column), int(bottomright.column) + 1):
-            for y in range(int(topleft.row), int(bottomright.row) + 1):
-                tile = Tile(zoom, x, y)
-                tile_features = index(tile)
-                for feature in tile_features:
-                    feature_id = id(feature)
-                    if feature_id not in seen_ids:
-                        seen_ids.add(feature_id)
-                        features.append(feature)
+
+        for tile in _tiles(zoom, unpadded_bounds):
+            tile_features = self.layers_index(tile)
+            for feature in tile_features:
+                feature_id = id(feature)
+                if feature_id not in seen_ids:
+                    seen_ids.add(feature_id)
+                    features.append(feature)
+
         return features
 
     def __call__(self, zoom, unpadded_bounds):
@@ -292,27 +381,46 @@ class DataFetcher(object):
         assert zoom >= self.tile_pyramid.z
         assert bbox.within(self.tile_pyramid.bbox())
 
-        for layer_name, info in self.layers.items():
+        for (fid, shape, props, layer_min_zooms) in self._lookup(
+                zoom, unpadded_bounds):
+            # reject any feature which doesn't intersect the given bounds
+            if bbox.disjoint(shape):
+                continue
 
-            for (fid, shape, props) in self._lookup(
-                    zoom, unpadded_bounds, layer_name):
-                # reject any feature which doesn't intersect the given bounds
-                if bbox.disjoint(shape):
+            # place for assembing the read row as if from postgres
+            read_row = {}
+            generate_label_placement = False
+
+            # add name into whichever of the pois, landuse or buildings
+            # layers has claimed this feature.
+            name = props.get('name', None)
+            named_layer = self._named_layer(fid, shape, props)
+
+            for layer_name, min_zoom in layer_min_zooms.items():
+                # we need to keep fractional zooms, e.g: 4.999 should appear
+                # in tiles at zoom level 4, but not 3. also, tiles at zooms
+                # past the max zoom should be clamped to the max zoom.
+                tile_zoom = min(self.tile_pyramid.max_z, floor(min_zoom))
+                if tile_zoom > zoom:
                     continue
-
-                # place for assembing the read row as if from postgres
-                read_row = {}
 
                 layer_props = layer_properties(
                     fid, shape, props, layer_name, zoom, self.osm)
+                layer_props['min_zoom'] = min_zoom
 
-                # add name into whichever of the pois, landuse or buildings
-                # layers has claimed this feature.
-                name = props.get('name', None)
-                if name and self._named_layer(fid, shape, props) == layer_name:
+                if name and named_layer == layer_name:
                     layer_props['name'] = name
 
                 read_row['__' + layer_name + '_properties__'] = layer_props
+
+                # if the feature exists in any label placement layer, then we
+                # should consider generating a centroid
+                label_layers = self.label_placement_layers.get(
+                    shape_type_lookup(shape), {})
+                if layer_name in label_layers:
+                    generate_label_placement = True
+
+            if read_row:
                 read_row['__id__'] = fid
 
                 # if this is a water layer feature, then clip to an expanded
@@ -325,11 +433,7 @@ class DataFetcher(object):
                 clip_shape = clip_box.intersection(shape)
                 read_row['__geometry__'] = bytes(clip_shape.wkb)
 
-                # if the feature exists in any label placement layer, then we
-                # should consider generating a centroid
-                label_layers = self.label_placement_layers.get(
-                    shape_type_lookup(shape), {})
-                if layer_name in label_layers:
+                if generate_label_placement:
                     read_row['__label__'] = bytes(
                         shape.representative_point().wkb)
 
