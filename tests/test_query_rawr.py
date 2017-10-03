@@ -2,6 +2,11 @@ import unittest
 
 
 class TestGetTable(object):
+    """
+    Mocks the interface expected by raw_tiles.index.index.index_table,
+    which provides "table lookup". Here, we just return static stuff
+    previously set up in the test.
+    """
 
     def __init__(self, tables):
         self.tables = tables
@@ -11,6 +16,10 @@ class TestGetTable(object):
 
 
 class RawrTestCase(unittest.TestCase):
+    """
+    Base layer of the tests, providing a utility function to create a data
+    fetcher with a set of mocked data.
+    """
 
     def _make(self, min_zoom_fn, props_fn, tables, tile_pyramid,
               layer_name='testlayer', label_placement_layers={}):
@@ -26,6 +35,10 @@ class RawrTestCase(unittest.TestCase):
 class TestQueryRawr(RawrTestCase):
 
     def test_query_simple(self):
+        # just check that we can get back the mock data we put into a tile,
+        # and that the indexing/fetching code respects the tile boundary and
+        # min_zoom function.
+
         from shapely.geometry import Point
         from tilequeue.query.rawr import TilePyramid
         from tilequeue.tile import coord_to_mercator_bounds
@@ -74,6 +87,10 @@ class TestQueryRawr(RawrTestCase):
         self.assertEquals(0, len(read_rows))
 
     def test_query_min_zoom_fraction(self):
+        # test that fractional min zooms are included in their "floor" zoom
+        # tile. this is to allow over-zooming of a zoom N tile until N+1,
+        # where the next zoom tile kicks in.
+
         from shapely.geometry import Point
         from tilequeue.query.rawr import TilePyramid
         from tilequeue.tile import coord_to_mercator_bounds
@@ -105,6 +122,10 @@ class TestQueryRawr(RawrTestCase):
         self.assertEquals(0, len(read_rows))
 
     def test_query_past_max_zoom(self):
+        # check that features with a min_zoom beyond the maximum zoom are still
+        # included at the maximum zoom. since this is the last zoom level we
+        # generate, it must include everything.
+
         from shapely.geometry import Point
         from tilequeue.query.rawr import TilePyramid
         from tilequeue.tile import coord_to_mercator_bounds
@@ -138,6 +159,8 @@ class TestQueryRawr(RawrTestCase):
         self.assertEquals(0, len(read_rows))
 
     def test_root_relation_id(self):
+        # check the logic for finding a root relation ID for station complexes.
+
         from shapely.geometry import Point
         from tilequeue.query.rawr import TilePyramid
         from tilequeue.tile import coord_to_mercator_bounds
@@ -239,6 +262,9 @@ class TestLabelPlacement(RawrTestCase):
         return read_rows
 
     def test_named_item(self):
+        # check that a label is generated for features in label placement
+        # layers.
+
         from shapely import wkb
 
         layer_name = 'testlayer'
@@ -295,6 +321,9 @@ class TestGeometryClipping(RawrTestCase):
         return read_rows[0]
 
     def test_normal_layer(self):
+        # check that normal layer geometries are clipped to the bounding box of
+        # the tile.
+
         from ModestMaps.Core import Coordinate
         from tilequeue.tile import coord_to_mercator_bounds
         from shapely import wkb
@@ -313,7 +342,8 @@ class TestGeometryClipping(RawrTestCase):
         self.assertAlmostEqual(1.0, y_factor)
 
     def test_water_layer(self):
-        # water layer should be expanded by 10% on each side.
+        # water layer should be clipped to the tile bounds expanded by 10%.
+
         from ModestMaps.Core import Coordinate
         from tilequeue.tile import coord_to_mercator_bounds
         from shapely import wkb

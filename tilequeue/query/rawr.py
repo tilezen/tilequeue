@@ -13,6 +13,13 @@ from math import floor
 
 
 class Relation(object):
+    """
+    Relation object holds data about a relation and provides a nicer interface
+    than the raw tuple by turning the tags array into a dict, and separating
+    out the "parts" array of IDs into separate lists for nodes, ways and other
+    relations.
+    """
+
     def __init__(self, rel_id, way_off, rel_off, parts, members, tags):
         self.id = rel_id
         self.tags = deassoc(tags)
@@ -22,6 +29,11 @@ class Relation(object):
 
 
 class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
+    """
+    Represents a "tile pyramid" of all tiles which are geographically
+    contained within the tile `z/x/y` up to a maximum zoom of `max_z`. This is
+    the set of tiles corresponding to one RAWR tile.
+    """
 
     def tile(self):
         from raw_tiles.tile import Tile
@@ -40,7 +52,9 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
         return box(*self.bounds())
 
 
-# weak type of enum type
+# weak enum type used to represent shape type, rather than use a string.
+# (or, where we have to use a string, at least use a shared single instance
+# of a string)
 class ShapeType(object):
     point = 1
     line = 2
@@ -50,9 +64,12 @@ class ShapeType(object):
 
     @staticmethod
     def lookup(typ):
+        "turn the enum into a string"
         return ShapeType._LOOKUP[typ-1]
 
 
+# determine the shape type from the raw WKB bytes. this means we don't have to
+# parse the WKB, which can be an expensive operation for large polygons.
 def _wkb_shape(wkb):
     reverse = ord(wkb[0]) == 1
     type_bytes = map(ord, wkb[1:5])
@@ -69,6 +86,9 @@ def _wkb_shape(wkb):
         assert False, "WKB shape type %d not understood." % (typ,)
 
 
+# return true if the tuple of values corresponds to, and each is an instance
+# of, the tuple of types. this is used to make sure that argument lists are
+# the right "shape" before destructuring (splatting?) them in a function call.
 def _match_type(values, types):
     if len(values) != len(types):
         return False
@@ -79,6 +99,15 @@ def _match_type(values, types):
 
 
 class OsmRawrLookup(object):
+    """
+    Implements the interface needed by the common code (e.g: layer_properties)
+    to look up information about node, way and relation IDs. For database
+    lookups, we previously did this with a JOIN, and the fixture data source
+    just iterates over the (small) number of items.
+
+    For RAWR tiles, we index the data to provide faster lookup, and are more
+    selective about what goes into the index.
+    """
 
     def __init__(self):
         self.nodes = {}
@@ -196,6 +225,7 @@ class OsmRawrLookup(object):
         return set(self.relations_using_rel(rel_id))
 
 
+# yield all the tiles at the given zoom level which intersect the given bounds.
 def _tiles(zoom, unpadded_bounds):
     from tilequeue.tile import mercator_point_to_coord
     from raw_tiles.tile import Tile
@@ -218,6 +248,10 @@ def _tiles(zoom, unpadded_bounds):
             yield tile
 
 
+# the object which gets indexed. this is a normal (fid, shape, props) tuple
+# expanded to include a dict of layer name to min zoom in `layer_min_zooms`.
+# this means that the properties don't have to be copied and altered to
+# include the min zoom for each layer, reducing the memory footprint.
 _Feature = namedtuple('_Feature', 'fid shape properties layer_min_zooms')
 
 
@@ -241,6 +275,14 @@ class _LazyShape(object):
 
 
 class _LayersIndex(object):
+    """
+    Index features by the tile(s) that they appear in.
+
+    This is done by calculating a min-min-zoom, the lowest min_zoom for that
+    feature across all layers, and then adding that feature to a list for each
+    tile it appears in from the min-min-zoom up to the max zoom for the tile
+    pyramid.
+    """
 
     def __init__(self, layers, tile_pyramid):
         self.layers = layers
