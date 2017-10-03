@@ -302,6 +302,36 @@ class _LazyShape(object):
 _Metadata = namedtuple('_Metadata', 'source ways relations')
 
 
+def _make_meta(source, fid, shape_type, osm):
+    ways = []
+    rels = []
+
+    # fetch ways and relations for any node
+    if fid >= 0 and shape_type == ShapeType.point:
+        for way_id in osm.ways_using_node(fid):
+            ways.append(osm.way(way_id))
+        for rel_id in osm.relations_using_node(fid):
+            rels.append(osm.relation(rel_id))
+
+    # and relations for any way
+    if fid >= 0 and shape_type == ShapeType.line:
+        for rel_id in osm.relations_using_way(fid):
+            rels.append(osm.relation(rel_id))
+
+    # have to transform the Relation object into a dict, which is
+    # what the functions called on this data expect.
+    # TODO: reusing the Relation object would be better.
+    rel_dicts = []
+    for r in rels:
+        tags = []
+        for k, v in r.tags.items():
+            tags.append(k)
+            tags.append(v)
+        rel_dicts.append(dict(tags=tags))
+
+    return _Metadata(source, ways, rel_dicts)
+
+
 class _LayersIndex(object):
     """
     Index features by the tile(s) that they appear in.
@@ -344,34 +374,7 @@ class _LayersIndex(object):
         # grab the shape type without decoding the WKB to save time.
         shape_type = _wkb_shape(shape.wkb)
 
-        ways = []
-        rels = []
-
-        # fetch ways and relations for any node
-        if fid >= 0 and shape_type == ShapeType.point:
-            for way_id in osm.ways_using_node(fid):
-                ways.append(osm.way(way_id))
-            for rel_id in osm.relations_using_node(fid):
-                rels.append(osm.relation(rel_id))
-
-        # and relations for any way
-        if fid >= 0 and shape_type == ShapeType.line:
-            for rel_id in osm.relations_using_way(fid):
-                rels.append(osm.relation(rel_id))
-
-        # have to transform the Relation object into a dict, which is
-        # what the functions called on this data expect.
-        # TODO: reusing the Relation object would be better.
-        rel_dicts = []
-        for r in rels:
-            tags = []
-            for k, v in r.tags.items():
-                tags.append(k)
-                tags.append(v)
-            rel_dicts.append(dict(tags=tags))
-
-        meta = _Metadata(self.source, ways, rel_dicts)
-
+        meta = _make_meta(self.source, fid, shape_type, osm)
         for layer_name, info in self.layers.items():
             shape_type_str = ShapeType.lookup(shape_type)
             if info.shape_types and shape_type_str not in info.shape_types:
@@ -475,8 +478,9 @@ class DataFetcher(object):
         for layer_name in ('pois', 'landuse', 'buildings'):
             info = self.layers.get(layer_name)
             if info and info.min_zoom_fn:
-                # TODO! meta should not be None!
-                min_zoom = info.min_zoom_fn(shape, props, fid, None)
+                shape_type = _wkb_shape(shape.wkb)
+                meta = _make_meta(self.source, fid, shape_type, self.osm)
+                min_zoom = info.min_zoom_fn(shape, props, fid, meta)
                 if min_zoom is not None:
                     return layer_name
         return None
