@@ -514,3 +514,69 @@ class TestMeta(RawrTestCase):
         self.assertEquals(shape.wkb, read_row.get('__geometry__'))
         self.assertEquals({'min_zoom': 11, 'barrier': 'gate'},
                           read_row.get('__testlayer_properties__'))
+
+    def test_meta_route(self):
+        # test that we can use meta in the min zoom function to find out which
+        # route(s) a road is part of.
+
+        from shapely.geometry import LineString
+        from tilequeue.query.rawr import TilePyramid
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+        from tilequeue.query.common import deassoc
+
+        feature_min_zoom = 11
+
+        rel_tags = [
+            'type', 'route',
+            'route', 'road',
+            'ref', '101',
+        ]
+
+        def min_zoom_fn(shape, props, fid, meta):
+            self.assertIsNotNone(meta)
+
+            # expect meta to have a source, which is a string name for the
+            # source of the data.
+            self.assertEquals('test', meta.source)
+
+            # expect meta to have a list of ways, but empty for this test.
+            self.assertEquals(0, len(meta.ways))
+
+            # expect meta to have a list of relations, each of which is a dict
+            # containing at least the key 'tags' mapped to a list of
+            # alternating k, v suitable for passing into deassoc().
+            self.assertEquals(1, len(meta.relations))
+            rel = meta.relations[0]
+            self.assertIsInstance(rel, dict)
+            self.assertIn('tags', rel)
+            self.assertEquals(deassoc(rel_tags), deassoc(rel['tags']))
+
+            return feature_min_zoom
+
+        shape = LineString([[0, 0], [1, 1]])
+        # get_table(table_name) should return a generator of rows.
+        tables = TestGetTable({
+            'planet_osm_line': [(1, shape.wkb, {'highway': 'secondary'})],
+            'planet_osm_rels': [(2, 0, 1, [1], [''], rel_tags)],
+        })
+
+        zoom = 10
+        max_zoom = zoom + 5
+        coord = mercator_point_to_coord(zoom, *shape.coords[0])
+        tile_pyramid = TilePyramid(zoom, coord.column, coord.row, max_zoom)
+
+        fetch = self._make(min_zoom_fn, None, tables, tile_pyramid)
+
+        # first, check that it can get the original item back when both the
+        # min zoom filter and geometry filter are okay.
+        feature_coord = mercator_point_to_coord(
+            feature_min_zoom, *shape.coords[0])
+        read_rows = fetch(
+            feature_min_zoom, coord_to_mercator_bounds(feature_coord))
+
+        self.assertEquals(1, len(read_rows))
+        read_row = read_rows[0]
+        self.assertEquals(1, read_row.get('__id__'))
+        self.assertEquals({'min_zoom': 11, 'highway': 'secondary'},
+                          read_row.get('__testlayer_properties__'))

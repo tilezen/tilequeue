@@ -186,7 +186,10 @@ class OsmRawrLookup(object):
 
     def add_relation(self, rel_id, way_off, rel_off, parts, members, tags):
         r = Relation(rel_id, way_off, rel_off, parts, members, tags)
-        if mz_is_interesting_transit_relation(r.tags):
+        is_transit_relation = mz_is_interesting_transit_relation(r.tags)
+        is_route = 'route' in r.tags and \
+                   ('network' in r.tags or 'ref' in r.tags)
+        if is_route or is_transit_relation:
             self.relations[r.id] = r
             for node_id in r.node_ids:
                 if node_id in self.nodes:
