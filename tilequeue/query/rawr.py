@@ -470,19 +470,16 @@ class DataFetcher(object):
         # single set of _Feature objects.
         self.layers_index.index(self.osm)
 
-    def _named_layer(self, fid, shape, props):
+    def _named_layer(self, layer_min_zooms):
         # we want only one layer from ('pois', 'landuse', 'buildings') for
         # each feature to be assigned a name. therefore, we use the presence
         # or absence of a min zoom to check whether these features as in these
-        # layers, and therefore which should be assigned the name.
+        # layers, and therefore which should be assigned the name. handily,
+        # the min zooms are already pre-calculated as layer_min_zooms from the
+        # index.
         for layer_name in ('pois', 'landuse', 'buildings'):
-            info = self.layers.get(layer_name)
-            if info and info.min_zoom_fn:
-                shape_type = _wkb_shape(shape.wkb)
-                meta = _make_meta(self.source, fid, shape_type, self.osm)
-                min_zoom = info.min_zoom_fn(shape, props, fid, meta)
-                if min_zoom is not None:
-                    return layer_name
+            if layer_name in layer_min_zooms:
+                return layer_name
         return None
 
     def _lookup(self, zoom, unpadded_bounds):
@@ -525,7 +522,7 @@ class DataFetcher(object):
             # add name into whichever of the pois, landuse or buildings
             # layers has claimed this feature.
             name = props.get('name', None)
-            named_layer = self._named_layer(fid, shape, props)
+            named_layer = self._named_layer(layer_min_zooms)
 
             for layer_name, min_zoom in layer_min_zooms.items():
                 # we need to keep fractional zooms, e.g: 4.999 should appear
