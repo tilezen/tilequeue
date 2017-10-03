@@ -98,6 +98,19 @@ def _match_type(values, types):
     return True
 
 
+# return true if the tags indicate that this is a gate
+def _is_gate(props):
+    return props.get('barrier') == 'gate'
+
+
+# return true if the tags indicate that this is a highway, cycleway or footway
+# which might be part of a route relation. note that this is pretty loose, and
+# might return true for things we don't eventually render as roads, but is just
+# aimed at cutting down the number of items we need in our index.
+def _is_routeable(props):
+    return props.get('whitewater') == 'portage_way' or 'highway' in props
+
+
 class OsmRawrLookup(object):
     """
     Implements the interface needed by the common code (e.g: layer_properties)
@@ -131,7 +144,7 @@ class OsmRawrLookup(object):
         if _match_type(args, (num, (str, bytes), dict)):
             self.add_feature(*args)
 
-        elif _match_type(args, (num, list, dict)):
+        elif _match_type(args, (num, list, list)):
             self.add_way(*args)
 
         elif _match_type(args, (num, num, num, list, list, list)):
@@ -151,16 +164,25 @@ class OsmRawrLookup(object):
             # must be a station or stop node
             self.nodes[fid] = (fid, shape_wkb, props)
 
+        elif _is_gate(props) and shape_type == ShapeType.point:
+            # index the highways that use gates to influence min zoom
+            self.nodes[fid] = (fid, shape_wkb, props)
+
         elif (is_station_or_line(fid, None, props) and
               shape_type != ShapeType.point):
             # must be a station polygon or stop line
             self.ways[fid] = (fid, shape_wkb, props)
 
+        elif _is_routeable(props) and shape_type == ShapeType.line:
+            # index routable items (highways, cycleways, footpaths) to
+            # get the relations using them.
+            self.ways[fid] = (fid, shape_wkb, props)
+
     def add_way(self, way_id, nodes, tags):
         for node_id in nodes:
             if node_id in self.nodes:
-                self._ways_using_node[node_id] = way_id
                 assert way_id in self.ways
+                self._ways_using_node[node_id].append(way_id)
 
     def add_relation(self, rel_id, way_off, rel_off, parts, members, tags):
         r = Relation(rel_id, way_off, rel_off, parts, members, tags)
@@ -274,6 +296,9 @@ class _LazyShape(object):
         return getattr(self.obj, name)
 
 
+_Metadata = namedtuple('_Metadata', 'source ways relations')
+
+
 class _LayersIndex(object):
     """
     Index features by the tile(s) that they appear in.
@@ -284,23 +309,71 @@ class _LayersIndex(object):
     pyramid.
     """
 
-    def __init__(self, layers, tile_pyramid):
+    def __init__(self, layers, tile_pyramid, source):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.tile_index = defaultdict(list)
+        self.source = source
+        self.delayed_features = []
 
     def add_row(self, fid, shape_wkb, props):
         shape = _LazyShape(shape_wkb)
-        # TODO! meta is not None!
-        meta = None
+        # single object (hence single id()) will be shared amongst all layers.
+        # this allows us to easily and quickly de-duplicate at later layers in
+        # the stack.
+        feature = _Feature(fid, shape, props, {})
 
-        layer_min_zooms = {}
+        # delay min zoom calculation in order to collect more information about
+        # the ways and relations using a particular feature.
+        self.delayed_features.append(feature)
+
+    def index(self, osm):
+        for feature in self.delayed_features:
+            self._index_feature(feature, osm)
+        del self.delayed_features
+
+    def _index_feature(self, feature, osm):
+        fid = feature.fid
+        shape = feature.shape
+        props = feature.properties
+        layer_min_zooms = feature.layer_min_zooms
+
+        # grab the shape type without decoding the WKB to save time.
+        shape_type = _wkb_shape(shape.wkb)
+
+        ways = []
+        rels = []
+
+        # fetch ways and relations for any node
+        if fid >= 0 and shape_type == ShapeType.point:
+            for way_id in osm.ways_using_node(fid):
+                ways.append(osm.way(way_id))
+            for rel_id in osm.relations_using_node(fid):
+                rels.append(osm.relation(rel_id))
+
+        # and relations for any way
+        if fid >= 0 and shape_type == ShapeType.line:
+            for rel_id in osm.relations_using_way(fid):
+                rels.append(osm.relation(rel_id))
+
+        # have to transform the Relation object into a dict, which is
+        # what the functions called on this data expect.
+        # TODO: reusing the Relation object would be better.
+        rel_dicts = []
+        for r in rels:
+            tags = []
+            for k, v in r.tags.items():
+                tags.append(k)
+                tags.append(v)
+            rel_dicts.append(dict(tags=tags))
+
+        meta = _Metadata(self.source, ways, rel_dicts)
+
         for layer_name, info in self.layers.items():
-            shape_type = _wkb_shape(shape_wkb)
             shape_type_str = ShapeType.lookup(shape_type)
             if info.shape_types and shape_type_str not in info.shape_types:
                 continue
-            min_zoom = info.min_zoom_fn(fid, shape, props, meta)
+            min_zoom = info.min_zoom_fn(shape, props, fid, meta)
             if min_zoom is not None:
                 layer_min_zooms[layer_name] = min_zoom
 
@@ -315,11 +388,6 @@ class _LayersIndex(object):
         # for each layer and is used by the _client_ to determine feature
         # visibility.
         min_zoom = min(self.tile_pyramid.max_z, min(layer_min_zooms.values()))
-
-        # single object (hence single id()) will be shared amongst all layers.
-        # this allows us to easily and quickly de-duplicate at later layers in
-        # the stack.
-        feature = _Feature(fid, shape, props, layer_min_zooms)
 
         # take the minimum integer zoom - this is the min zoom tile that the
         # feature should appear in, and a feature with min_zoom = 1.9 should
@@ -351,7 +419,8 @@ class _LayersIndex(object):
 
 class DataFetcher(object):
 
-    def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
+    def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
+                 source):
         """
         Expect layers to be a dict of layer name to LayerInfo (see fixture.py).
         Tables should be a callable which returns a generator over the rows in
@@ -363,11 +432,13 @@ class DataFetcher(object):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.label_placement_layers = label_placement_layers
+        self.source = source
         self.layer_indexes = {}
 
         table_indexes = defaultdict(list)
 
-        self.layers_index = _LayersIndex(self.layers, self.tile_pyramid)
+        self.layers_index = _LayersIndex(
+            self.layers, self.tile_pyramid, self.source)
         for shape_type in ('point', 'line', 'polygon'):
             table_name = 'planet_osm_' + shape_type
             table_indexes[table_name].append(self.layers_index)
@@ -381,6 +452,17 @@ class DataFetcher(object):
             source = tables(table_name)
             extra_indexes = table_indexes[table_name]
             index_table(source, self.osm, *extra_indexes)
+
+        # there's a chicken and egg problem with the indexes: we want to know
+        # which features to index, but also calculate the feature's min zoom,
+        # which might depend on ways and relations not seen yet. one solution
+        # would be to do this in two passes, but that might mean paying a cost
+        # to decompress or deserialize the data twice. instead, the index
+        # buffers the features and indexes them in the following step. this
+        # might mean we buffer more information in memory than we technically
+        # need if many of the features are not visible, but means we get one
+        # single set of _Feature objects.
+        self.layers_index.index(self.osm)
 
     def _named_layer(self, fid, shape, props):
         # we want only one layer from ('pois', 'landuse', 'buildings') for
@@ -486,6 +568,7 @@ class DataFetcher(object):
 
 # tables is a callable which should return a generator over the rows of the
 # table when called with the table name.
-def make_rawr_data_fetcher(layers, tables, tile_pyramid,
+def make_rawr_data_fetcher(layers, tables, tile_pyramid, source,
                            label_placement_layers={}):
-    return DataFetcher(layers, tables, tile_pyramid, label_placement_layers)
+    return DataFetcher(layers, tables, tile_pyramid, label_placement_layers,
+                       source)

@@ -22,13 +22,14 @@ class RawrTestCase(unittest.TestCase):
     """
 
     def _make(self, min_zoom_fn, props_fn, tables, tile_pyramid,
-              layer_name='testlayer', label_placement_layers={}):
+              layer_name='testlayer', label_placement_layers={},
+              source='test'):
         from tilequeue.query.common import LayerInfo
         from tilequeue.query.rawr import make_rawr_data_fetcher
 
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
         return make_rawr_data_fetcher(
-            layers, tables, tile_pyramid,
+            layers, tables, tile_pyramid, source,
             label_placement_layers=label_placement_layers)
 
 
@@ -399,7 +400,8 @@ class TestNameHandling(RawrTestCase):
         layers = {}
         for name in input_layer_names:
             layers[name] = LayerInfo(min_zoom_fn, props_fn)
-        fetch = make_rawr_data_fetcher(layers, tables, tile_pyramid)
+        source = 'test'
+        fetch = make_rawr_data_fetcher(layers, tables, tile_pyramid, source)
 
         read_rows = fetch(tile.zoom, coord_to_mercator_bounds(tile))
         # the RAWR query goes over features multiple times because of the
@@ -442,3 +444,73 @@ class TestNameHandling(RawrTestCase):
         self._test(['pois', 'landuse', 'buildings'], ['pois'])
         # otherwise, landuse should take precedence over buildings.
         self._test(['landuse', 'buildings'], ['landuse'])
+
+
+class TestMeta(RawrTestCase):
+
+    def test_meta_gate(self):
+        # test that the meta is passed to the min zoom function, and that we
+        # can use it to get information about the highways that a gate is
+        # part of.
+
+        from shapely.geometry import Point, LineString
+        from tilequeue.query.rawr import TilePyramid
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+
+        feature_min_zoom = 11
+
+        def min_zoom_fn(shape, props, fid, meta):
+            self.assertIsNotNone(meta)
+
+            # expect meta to have a source, which is a string name for the
+            # source of the data.
+            self.assertEquals('test', meta.source)
+
+            # expect meta to have a list of relations, which is empty for this
+            # test.
+            self.assertEquals(0, len(meta.relations))
+
+            # only do this for the node
+            if fid == 0:
+                # expect meta to have a list of ways, each of which is a (fid,
+                # shape, props) tuple, of which only props is used.
+                self.assertEquals(1, len(meta.ways))
+                way_fid, way_shape, way_props = meta.ways[0]
+                self.assertEquals(1, way_fid)
+                self.assertEquals({'highway': 'secondary'}, way_props)
+
+            # only set a min zoom for the node - this just simplifies the
+            # checking later, as there'll only be one feature.
+            return feature_min_zoom if fid == 0 else None
+
+        shape = Point(0, 0)
+        way_shape = LineString([[0, 0], [1, 1]])
+        # get_table(table_name) should return a generator of rows.
+        tables = TestGetTable({
+            'planet_osm_point': [(0, shape.wkb, {'barrier': 'gate'})],
+            'planet_osm_line': [(1, way_shape.wkb, {'highway': 'secondary'})],
+            'planet_osm_ways': [(1, [0], ['highway', 'secondary'])],
+        })
+
+        zoom = 10
+        max_zoom = zoom + 5
+        coord = mercator_point_to_coord(zoom, shape.x, shape.y)
+        tile_pyramid = TilePyramid(zoom, coord.column, coord.row, max_zoom)
+
+        fetch = self._make(min_zoom_fn, None, tables, tile_pyramid)
+
+        # first, check that it can get the original item back when both the
+        # min zoom filter and geometry filter are okay.
+        feature_coord = mercator_point_to_coord(
+            feature_min_zoom, shape.x, shape.y)
+        read_rows = fetch(
+            feature_min_zoom, coord_to_mercator_bounds(feature_coord))
+
+        self.assertEquals(1, len(read_rows))
+        read_row = read_rows[0]
+        self.assertEquals(0, read_row.get('__id__'))
+        # query processing code expects WKB bytes in the __geometry__ column
+        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
+        self.assertEquals({'min_zoom': 11, 'barrier': 'gate'},
+                          read_row.get('__testlayer_properties__'))
