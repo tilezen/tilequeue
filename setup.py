@@ -35,6 +35,7 @@ setup(name='tilequeue',
       install_requires=[
           'boto',
           'edtf',
+          'enum34',
           'hiredis',
           'Jinja2',
           'mapbox-vector-tile',
