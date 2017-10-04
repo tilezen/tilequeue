@@ -1,6 +1,7 @@
 appdirs==1.4.3
 argparse==1.2.1
 boto==2.33.0
+enum34==1.1.6
 future==0.15.2
 hiredis==0.2.0
 Jinja2==2.8

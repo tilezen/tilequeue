@@ -10,6 +10,7 @@ from tilequeue.query.common import shape_type_lookup
 from tilequeue.transform import calculate_padded_bounds
 from raw_tiles.tile import shape_tile_coverage
 from math import floor
+from enum import Enum
 
 
 class Relation(object):
@@ -52,20 +53,10 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
         return box(*self.bounds())
 
 
-# weak enum type used to represent shape type, rather than use a string.
-# (or, where we have to use a string, at least use a shared single instance
-# of a string)
-class ShapeType(object):
+class ShapeType(Enum):
     point = 1
     line = 2
     polygon = 3
-
-    _LOOKUP = ['point', 'line', 'polygon']
-
-    @staticmethod
-    def lookup(typ):
-        "turn the enum into a string"
-        return ShapeType._LOOKUP[typ-1]
 
 
 # determine the shape type from the raw WKB bytes. this means we don't have to
@@ -376,7 +367,7 @@ class _LayersIndex(object):
 
         meta = _make_meta(self.source, fid, shape_type, osm)
         for layer_name, info in self.layers.items():
-            shape_type_str = ShapeType.lookup(shape_type)
+            shape_type_str = shape_type.name
             if info.shape_types and shape_type_str not in info.shape_types:
                 continue
             min_zoom = info.min_zoom_fn(shape, props, fid, meta)
