@@ -1802,9 +1802,11 @@ def tilequeue_rawr_process(cfg, peripherals):
     assert bucket, 'Missing rawr sink bucket'
     prefix = rawr_sink_yaml.get('prefix')
     assert prefix, 'Missing rawr sink prefix'
+    suffix = rawr_sink_yaml.get('suffix')
+    assert suffix, 'Missing rawr sink suffix'
 
     s3_client = boto3.client('s3')
-    rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix)
+    rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
     toi_yaml = cfg.yml.get('toi-store')
     assert toi_yaml.get('type') == 's3', 'Only s3 toi store supported'

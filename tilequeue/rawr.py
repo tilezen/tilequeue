@@ -5,6 +5,7 @@ from ModestMaps.Core import Coordinate
 from raw_tiles.tile import Tile
 from tilequeue.command import explode_and_intersect
 from tilequeue.queue.message import MessageHandle
+from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.toi import load_set_from_gzipped_fp
@@ -230,22 +231,26 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
-def make_s3_path(tile, prefix):
-    return '%s/%d/%d/%d.zip' % (prefix, tile.z, tile.x, tile.y)
+def make_rawr_s3_path(tile, prefix, suffix):
+    path_to_hash = '%d/%d/%d%s' % (tile.z, tile.x, tile.y, suffix)
+    path_hash = calc_hash(path_to_hash)
+    path_with_hash = '%s/%s/%s' % (prefix, path_hash, path_to_hash)
+    return path_with_hash
 
 
 class RawrS3Sink(object):
 
     """Rawr sink to write to s3"""
 
-    def __init__(self, s3_client, bucket, prefix):
+    def __init__(self, s3_client, bucket, prefix, suffix):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
+        self.suffix = suffix
 
     def __call__(self, rawr_tile):
         payload = make_rawr_zip_payload(rawr_tile)
-        location = make_s3_path(rawr_tile.tile, self.prefix)
+        location = make_rawr_s3_path(rawr_tile.tile, self.prefix, self.suffix)
         self.s3_client.put_object(
                 Body=payload,
                 Bucket=self.bucket,
