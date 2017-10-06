@@ -115,7 +115,8 @@ def common_parent(coords, parent_zoom):
 def convert_coord_object(coord):
     """Convert ModestMaps.Core.Coordinate -> raw_tiles.tile.Tile"""
     assert isinstance(coord, Coordinate)
-    return Tile(coord.zoom, coord.column, coord.row)
+    coord = coord.container()
+    return Tile(int(coord.zoom), int(coord.column), int(coord.row))
 
 
 def convert_to_coord_ints(coords):
