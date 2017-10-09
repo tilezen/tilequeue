@@ -10,6 +10,7 @@ from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import serialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
+from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from time import gmtime
 from time import time
@@ -244,37 +245,65 @@ class RawrTileGenerationPipeline(object):
 
     def __call__(self):
         while True:
-            timing = {}
-            # NOTE: it's ok if reading from the queue takes a long time
-            with time_block(timing, 'queue-read'):
-                msg_handle = self.rawr_queue.read()
+            try:
+                msg_handle = None
+                parent = None
+                rawr_tile_generated = False
+                coords_intersected = False
+                coords_enqueued = False
+                timing = {}
 
-            coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-            parent = common_parent(coords, self.group_by_zoom)
-            rawr_tile_coord = convert_coord_object(parent)
+                # NOTE: it's ok if reading from the queue takes a long time
+                with time_block(timing, 'queue-read'):
+                    msg_handle = self.rawr_queue.read()
 
-            with time_block(timing, 'rawr-gen'):
-                self.rawr_gen(rawr_tile_coord)
+                coords = self.msg_marshaller.unmarshall(msg_handle.payload)
+                parent = common_parent(coords, self.group_by_zoom)
+                rawr_tile_coord = convert_coord_object(parent)
 
-            with time_block(timing, 'toi-intersect'):
-                # because this returns a generator, the timing is wrong unless
-                # we realize immediately
-                coords_to_enqueue = list(self.rawr_toi_intersector(coords))
+                with time_block(timing, 'rawr-gen'):
+                    self.rawr_gen(rawr_tile_coord)
+                rawr_tile_generated = True
 
-            with time_block(timing, 'queue-write'):
-                self.queue_writer.enqueue_batch(coords_to_enqueue)
+                with time_block(timing, 'toi-intersect'):
+                    # because this returns a generator, the timing is wrong
+                    # unless we realize immediately
+                    coords_to_enqueue = list(self.rawr_toi_intersector(coords))
+                coords_intersected = True
 
-            with time_block(timing, 'queue-done'):
-                self.rawr_queue.done(msg_handle)
+                with time_block(timing, 'queue-write'):
+                    self.queue_writer.enqueue_batch(coords_to_enqueue)
+                coords_enqueued = True
 
-            if self.logger:
-                self.logger.info(
-                    'Rawr message processed: '
-                    'tile(%s) n-coords(%s) timing(%s)' % (
-                        serialize_coord(parent),
-                        len(coords),
-                        json.dumps(timing),
-                    ))
+                with time_block(timing, 'queue-done'):
+                    self.rawr_queue.done(msg_handle)
+
+                if self.logger:
+                    self.logger.info(
+                        'Rawr message processed: '
+                        'tile(%s) n-coords(%s) timing(%s)' % (
+                            serialize_coord(parent),
+                            len(coords),
+                            json.dumps(timing),
+                        ))
+            except Exception:
+                stacktrace = format_stacktrace_one_line()
+                if self.logger:
+                    if not msg_handle:
+                        msg = 'could not read rawr tile from queue'
+                    elif not rawr_tile_generated:
+                        msg = 'generating rawr tile'
+                    elif not coords_intersected:
+                        msg = 'intersecting coords'
+                    elif not coords_enqueued:
+                        msg = 'enqueueing coords'
+                    else:
+                        msg = 'acknowledging coord'
+                    msg = 'Error: %s' % msg
+                    if parent:
+                        msg += ' for parent: %s' % serialize_coord(parent)
+                    msg += ' - %s' % stacktrace
+                    self.logger.info(msg)
 
 
 def make_rawr_zip_payload(rawr_tile, date_time=None):
