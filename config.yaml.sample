@@ -268,3 +268,17 @@ toi-prune:
     # integration-test-coordinates:
     #   bucket: mapzen-tiles-assets
     #   key: test/integration-test-coords.txt
+rawr:
+  # this is the parent zoom level that coordinates are expected to be grouped under
+  group-zoom: 10
+  queue: <sqs-queue-name>
+  postgresql:
+    host: localhost
+    port: 5432
+    dbname: dbname
+    user: dbuser
+    password: dbpassword
+  sink:
+    bucket: s3-bucket-name
+    prefix: s3-bucket-prefix
+    suffix: .zip
