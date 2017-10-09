@@ -1,10 +1,11 @@
-import sys
-import traceback
-import re
-from itertools import islice
 from datetime import datetime
+from itertools import islice
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import create_coord
+from time import time
+import re
+import sys
+import traceback
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -70,3 +71,22 @@ def encode_utf8(x):
         return tuple(encode_utf8(list(x)))
     else:
         return x
+
+
+class time_block(object):
+
+    """Convenience to capture timing information"""
+
+    def __init__(self, timing_state, key):
+        # timing_state should be a dictionary
+        self.timing_state = timing_state
+        self.key = key
+
+    def __enter__(self):
+        self.start = time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        stop = time()
+        duration_seconds = stop - self.start
+        duration_millis = duration_seconds * 1000
+        self.timing_state[self.key] = duration_millis

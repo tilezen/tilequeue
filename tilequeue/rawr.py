@@ -12,8 +12,8 @@ from tilequeue.tile import serialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
+from tilequeue.utils import time_block
 from time import gmtime
-from time import time
 import json
 import zipfile
 
@@ -207,25 +207,6 @@ class RawrToiIntersector(object):
         for coord_int in intersected_coord_ints:
             coord = coord_unmarshall_int(coord_int)
             yield coord
-
-
-class time_block(object):
-
-    """Convenience to capture timing information"""
-
-    def __init__(self, timing_state, key):
-        # timing_state should be a dictionary
-        self.timing_state = timing_state
-        self.key = key
-
-    def __enter__(self):
-        self.start = time()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        stop = time()
-        duration_seconds = stop - self.start
-        duration_millis = duration_seconds * 1000
-        self.timing_state[self.key] = duration_millis
 
 
 class RawrTileGenerationPipeline(object):
