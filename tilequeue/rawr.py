@@ -8,9 +8,12 @@ from tilequeue.queue.message import MessageHandle
 from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import serialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import grouper
 from time import gmtime
+from time import time
+import json
 import zipfile
 
 
@@ -79,7 +82,8 @@ class SqsQueue(object):
         )
 
 
-def process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords):
+def process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords,
+                   logger=None):
     """enqueue coords from expiry grouped by parent zoom"""
     grouped_by_zoom = defaultdict(list)
     for coord in coords:
@@ -88,11 +92,24 @@ def process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords):
         parent_coord_int = coord_marshall_int(parent)
         grouped_by_zoom[parent_coord_int].append(coord)
 
-    payloads = (msg_marshaller.marshall(coords)
-                for _, coords in grouped_by_zoom.iteritems())
+    n_coords = 0
+    payloads = []
+    for _, coords in grouped_by_zoom.iteritems():
+        payload = msg_marshaller.marshall(coords)
+        payloads.append(payload)
+        n_coords += len(coords)
+    n_payloads = len(payloads)
+
     rawr_queue_batch_size = 10
+    n_msgs_sent = 0
     for payloads_chunk in grouper(payloads, rawr_queue_batch_size):
         rawr_queue.send(payloads_chunk)
+        n_msgs_sent += 1
+
+    if logger:
+        logger.info(
+            'Expiry processed: coords(%d) payloads(%d) enqueue-calls(%d))' %
+            (n_coords, n_payloads, n_msgs_sent))
 
 
 def common_parent(coords, parent_zoom):
@@ -191,31 +208,73 @@ class RawrToiIntersector(object):
             yield coord
 
 
+class time_block(object):
+
+    """Convenience to capture timing information"""
+
+    def __init__(self, timing_state, key):
+        # timing_state should be a dictionary
+        self.timing_state = timing_state
+        self.key = key
+
+    def __enter__(self):
+        self.start = time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        stop = time()
+        duration_seconds = stop - self.start
+        duration_millis = duration_seconds * 1000
+        self.timing_state[self.key] = duration_millis
+
+
 class RawrTileGenerationPipeline(object):
 
     """Entry point for rawr process command"""
 
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            queue_writer, rawr_toi_intersector):
+            queue_writer, rawr_toi_intersector, logger=None):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.rawr_gen = rawr_gen
         self.queue_writer = queue_writer
         self.rawr_toi_intersector = rawr_toi_intersector
+        self.logger = logger
 
     def __call__(self):
-        # TODO - should probably provide a way to stop iteration
         while True:
-            msg_handle = self.rawr_queue.read()
+            timing = {}
+            # NOTE: it's ok if reading from the queue takes a long time
+            with time_block(timing, 'queue-read'):
+                msg_handle = self.rawr_queue.read()
+
             coords = self.msg_marshaller.unmarshall(msg_handle.payload)
             parent = common_parent(coords, self.group_by_zoom)
             rawr_tile_coord = convert_coord_object(parent)
-            self.rawr_gen(rawr_tile_coord)
-            coords_to_enqueue = self.rawr_toi_intersector(coords)
-            self.queue_writer.enqueue_batch(coords_to_enqueue)
-            self.rawr_queue.done(msg_handle)
+
+            with time_block(timing, 'rawr-gen'):
+                self.rawr_gen(rawr_tile_coord)
+
+            with time_block(timing, 'toi-intersect'):
+                # because this returns a generator, the timing is wrong unless
+                # we realize immediately
+                coords_to_enqueue = list(self.rawr_toi_intersector(coords))
+
+            with time_block(timing, 'queue-write'):
+                self.queue_writer.enqueue_batch(coords_to_enqueue)
+
+            with time_block(timing, 'queue-done'):
+                self.rawr_queue.done(msg_handle)
+
+            if self.logger:
+                self.logger.info(
+                    'Rawr message processed: '
+                    'tile(%s) n-coords(%s) timing(%s)' % (
+                        serialize_coord(parent),
+                        len(coords),
+                        json.dumps(timing),
+                    ))
 
 
 def make_rawr_zip_payload(rawr_tile, date_time=None):
