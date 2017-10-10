@@ -1760,9 +1760,11 @@ def tilequeue_rawr_enqueue(cfg, args):
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
     from tilequeue.rawr import process_expiry
+    logger = make_logger(cfg, 'rawr_expiry')
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
-        process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords)
+        process_expiry(
+            rawr_queue, msg_marshaller, group_by_zoom, coords, logger)
 
 
 def tilequeue_rawr_process(cfg, peripherals):
@@ -1819,12 +1821,13 @@ def tilequeue_rawr_process(cfg, peripherals):
 
     rawr_toi_intersector = RawrToiIntersector(s3_client, toi_bucket, toi_key)
 
+    logger = make_logger(cfg, 'rawr_process')
     rawr_osm_source = OsmSource(conn_ctx)
     rawr_formatter = Gzip(Msgpack())
     rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            peripherals.queue_writer, rawr_toi_intersector)
+            peripherals.queue_writer, rawr_toi_intersector, logger)
     rawr_pipeline()
 
 
