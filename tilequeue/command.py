@@ -1,25 +1,19 @@
+from tilequeue.tile import coord_to_mercator_bounds
 from collections import defaultdict
-from collections import Iterable
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
-from jinja2 import Environment
-from jinja2 import FileSystemLoader
 from multiprocessing.pool import ThreadPool
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.query import DataFetcher
-from tilequeue.query import jinja_filter_bbox
-from tilequeue.query import jinja_filter_bbox_filter
-from tilequeue.query import jinja_filter_bbox_intersection
-from tilequeue.query import jinja_filter_bbox_overlaps
-from tilequeue.query import jinja_filter_bbox_padded_intersection
-from tilequeue.query import jinja_filter_geometry
+from tilequeue.process import convert_source_data_to_feature_layers
+from tilequeue.process import process_coord
+from tilequeue.query import DBConnectionPool
+from tilequeue.query import make_db_data_fetcher
 from tilequeue.queue import make_sqs_queue
-from tilequeue.store import s3_tile_key
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
@@ -28,6 +22,7 @@ from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
+from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
@@ -35,12 +30,13 @@ from tilequeue.toi import load_set_from_fp
 from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
+from tilequeue.utils import parse_log_file
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
-from tilequeue.worker import SqsQueueReader
-from tilequeue.worker import SqsQueueWriter
+from tilequeue.worker import TileQueueReader
+from tilequeue.worker import TileQueueWriter
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
@@ -58,15 +54,6 @@ import threading
 import time
 import traceback
 import yaml
-
-
-def create_command_parser(fn):
-    def create_parser_fn(parser):
-        parser.add_argument('--config', required=True,
-                            help='The path to the tilequeue config file.')
-        parser.set_defaults(func=fn)
-        return parser
-    return create_parser_fn
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
@@ -140,54 +127,154 @@ def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
     return result
 
 
-def make_queue(queue_type, queue_name, queue_cfg, redis_client,
-               aws_access_key_id=None, aws_secret_access_key=None):
-    if queue_type == 'multisqs':
-        from tilequeue.queue import make_multi_sqs_queue
-        assert isinstance(queue_name, list)
-        queue_names = queue_name
-
-        zoom_queue_map_cfg = queue_cfg.get('zoom-queue-map')
-        assert zoom_queue_map_cfg, \
-            'Missing zoom-queue-map config for multiqueue'
-        assert isinstance(zoom_queue_map_cfg, dict), \
-            'zoom-queue-map cfg must be a map'
-
-        get_queue_idx_for_zoom = make_get_queue_name_for_zoom(
-            zoom_queue_map_cfg, queue_names)
-        result = make_multi_sqs_queue(
-            queue_names, get_queue_idx_for_zoom, redis_client)
-        return result
-
-    elif queue_type == 'sqs':
-        return make_sqs_queue(queue_name, redis_client,
-                              aws_access_key_id, aws_secret_access_key)
-    elif queue_type == 'mem':
-        from tilequeue.queue import MemoryQueue
-        return MemoryQueue()
-    elif queue_type == 'file':
-        from tilequeue.queue import OutputFileQueue
-        if os.path.exists(queue_name):
-            assert os.path.isfile(queue_name), \
-                'Could not create file queue. `./{}` is not a file!'.format(
-                    queue_name)
-
-        # The mode here is important: if `tilequeue seed` is being run, then
-        # new tile coordinates will get appended to the queue file due to the
-        # `a`. Otherwise, if it's something like `tilequeue process`,
-        # coordinates will be read from the beginning of the file thanks to the
-        # `+`.
-        fp = open(queue_name, 'a+')
-        return OutputFileQueue(fp)
-    elif queue_type == 'stdout':
-        # only support writing
-        from tilequeue.queue import OutputFileQueue
-        return OutputFileQueue(sys.stdout)
-    elif queue_type == 'redis':
-        from tilequeue.queue import make_redis_queue
-        return make_redis_queue(redis_client, queue_name)
+def make_queue_mapper(queue_mapper_yaml, tile_queue_name_map):
+    queue_mapper_type = queue_mapper_yaml.get('type')
+    assert queue_mapper_type, 'Missing queue mapper type'
+    if queue_mapper_type == 'single':
+        queue_name = queue_mapper_yaml.get('queue-name')
+        assert queue_name, 'Missing queue name in queue mapper config'
+        tile_queue = tile_queue_name_map.get(queue_name)
+        assert tile_queue, 'No queue found in mapping for %s' % queue_name
+        return make_single_queue_mapper(queue_name, tile_queue)
+    elif queue_mapper_type == 'multiple':
+        multi_queue_map_yaml = queue_mapper_yaml.get('multiple')
+        assert multi_queue_map_yaml, \
+            'Missing yaml config for multiple queue mapper'
+        assert isinstance(multi_queue_map_yaml, list), \
+            'Mulitple queue mapper config should be a list'
+        return make_multi_queue_group_mapper_from_cfg(
+            multi_queue_map_yaml, tile_queue_name_map)
     else:
-        raise ValueError('Unknown queue type: %s' % queue_type)
+        assert 0, 'Unknown queue mapper type: %s' % queue_mapper_type
+
+
+def make_multi_queue_group_mapper_from_cfg(
+        multi_queue_map_yaml, tile_queue_name_map):
+    from tilequeue.queue.mapper import ZoomRangeAndZoomGroupQueueMapper
+    from tilequeue.queue.mapper import ZoomRangeQueueSpec
+    zoom_range_specs = []
+    for zoom_range_spec_yaml in multi_queue_map_yaml:
+        start_zoom = zoom_range_spec_yaml.get('start-zoom')
+        end_zoom = zoom_range_spec_yaml.get('end-zoom')
+        if start_zoom is not None and end_zoom is not None:
+            assert isinstance(start_zoom, int)
+            assert isinstance(end_zoom, int)
+            assert start_zoom < end_zoom
+        else:
+            start_zoom = None
+            end_zoom = None
+        queue_name = zoom_range_spec_yaml['queue-name']
+        queue = tile_queue_name_map[queue_name]
+        group_by_zoom = zoom_range_spec_yaml.get('group-by-zoom')
+        assert group_by_zoom is None or isinstance(group_by_zoom, int)
+        zrs = ZoomRangeQueueSpec(
+                start_zoom, end_zoom, queue_name, queue, group_by_zoom)
+        zoom_range_specs.append(zrs)
+    queue_mapper = ZoomRangeAndZoomGroupQueueMapper(zoom_range_specs)
+    return queue_mapper
+
+
+def make_single_queue_mapper(queue_name, tile_queue):
+    from tilequeue.queue.mapper import SingleQueueMapper
+    queue_mapper = SingleQueueMapper(queue_name, tile_queue)
+    return queue_mapper
+
+
+def make_message_marshaller(msg_marshall_yaml_cfg):
+    msg_mar_type = msg_marshall_yaml_cfg.get('type')
+    assert msg_mar_type, 'Missing message marshall type in config'
+    if msg_mar_type == 'single':
+        from tilequeue.queue.message import SingleMessageMarshaller
+        return SingleMessageMarshaller()
+    elif msg_mar_type == 'multiple':
+        from tilequeue.queue.message import CommaSeparatedMarshaller
+        return CommaSeparatedMarshaller()
+    else:
+        assert 0, 'Unknown message marshall type: %s' % msg_mar_type
+
+
+def make_inflight_manager(inflight_yaml, redis_client=None):
+    if not inflight_yaml:
+        from tilequeue.queue.inflight import NoopInFlightManager
+        return NoopInFlightManager()
+    inflight_type = inflight_yaml.get('type')
+    assert inflight_type, 'Missing inflight type config'
+    if inflight_type == 'redis':
+        assert redis_client, 'redis client required for redis inflight manager'
+        inflight_key = 'tilequeue.in-flight'
+        inflight_redis_cfg = inflight_yaml.get('redis')
+        if inflight_redis_cfg:
+            inflight_key = inflight_redis_cfg.get('key') or inflight_key
+        from tilequeue.queue.inflight import RedisInFlightManager
+        return RedisInFlightManager(redis_client, inflight_key)
+    else:
+        assert 0, 'Unknown inflight type: %s' % inflight_type
+
+
+def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
+    # return a tile_queue, name instance, or list of tilequeue, name pairs
+    # alternatively maybe should force queue implementations to know
+    # about their names?
+    if isinstance(queue_yaml_cfg, list):
+        result = []
+        for queue_item_cfg in queue_yaml_cfg:
+            tile_queue, name = make_tile_queue(
+                    queue_item_cfg, all_cfg, redis_client)
+            result.append((tile_queue, name))
+        return result
+    else:
+        queue_name = queue_yaml_cfg.get('name')
+        assert queue_name, 'Missing queue name'
+        queue_type = queue_yaml_cfg.get('type')
+        assert queue_type, 'Missing queue type'
+        if queue_type == 'sqs':
+            aws_access_key_id = None
+            aws_secret_access_key = None
+            aws_cfg = all_cfg.get('aws')
+            if aws_cfg:
+                aws_access_key_id = aws_cfg.get('aws_access_key_id')
+                aws_secret_access_key = aws_cfg.get('aws_secret_access_key')
+            tile_queue = make_sqs_queue(
+                queue_name, aws_access_key_id, aws_secret_access_key)
+        elif queue_type == 'mem':
+            from tilequeue.queue import MemoryQueue
+            tile_queue = MemoryQueue()
+        elif queue_type == 'file':
+            from tilequeue.queue import OutputFileQueue
+            if os.path.exists(queue_name):
+                assert os.path.isfile(queue_name), \
+                    ('Could not create file queue. `./{}` is not a '
+                     'file!'.format(queue_name))
+            fp = open(queue_name, 'a+')
+            tile_queue = OutputFileQueue(fp)
+        elif queue_type == 'stdout':
+            # only support writing
+            from tilequeue.queue import OutputFileQueue
+            tile_queue = OutputFileQueue(sys.stdout)
+        elif queue_type == 'redis':
+            assert redis_client, 'redis_client required for redis tile_queue'
+            from tilequeue.queue import make_redis_queue
+            tile_queue = make_redis_queue(redis_client, queue_name)
+        else:
+            raise ValueError('Unknown queue type: %s' % queue_type)
+        return tile_queue, queue_name
+
+
+def make_msg_tracker(msg_tracker_yaml):
+    if not msg_tracker_yaml:
+        from tilequeue.queue.message import SingleMessagePerCoordTracker
+        return SingleMessagePerCoordTracker()
+    else:
+        msg_tracker_type = msg_tracker_yaml.get('type')
+        assert msg_tracker_type, 'Missing message tracker type'
+        if msg_tracker_type == 'single':
+            from tilequeue.queue.message import SingleMessagePerCoordTracker
+            return SingleMessagePerCoordTracker()
+        elif msg_tracker_type == 'multiple':
+            from tilequeue.queue.message import MultipleMessagesPerCoordTracker
+            return MultipleMessagesPerCoordTracker()
+        else:
+            assert 0, 'Unknown message tracker type: %s' % msg_tracker_type
 
 
 def make_toi_helper(cfg):
@@ -275,12 +362,16 @@ def make_seed_tile_generator(cfg):
 
 
 def tilequeue_drain(cfg, peripherals):
-    queue = peripherals.queue
     logger = make_logger(cfg, 'drain')
-    logger.info('Draining queue ...')
-    n = queue.clear()
-    logger.info('Draining queue ... done')
-    logger.info('Removed %d messages' % n)
+    logger.info('Draining queues ...')
+    queue_mapper = peripherals.queue_mapper
+    total_cleared = 0
+    for _, tile_queue in queue_mapper.queues_in_priority_order():
+        n = tile_queue.clear()
+        if n is not None and n > 0:
+            total_cleared += n
+    logger.info('Draining queues ... done')
+    logger.info('Removed %d messages' % total_cleared)
 
 
 def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
@@ -347,7 +438,6 @@ def coord_ints_from_paths(paths):
 def tilequeue_intersect(cfg, peripherals):
     logger = make_logger(cfg, 'intersect')
     logger.info("Intersecting expired tiles with tiles of interest")
-    sqs_queue = peripherals.queue
 
     assert cfg.intersect_expired_tiles_location, \
         'Missing tiles expired-location configuration'
@@ -392,9 +482,8 @@ def tilequeue_intersect(cfg, peripherals):
     coords = map(coord_unmarshall_int, coord_ints)
 
     # clamp number of threads between 5 and 20
-    n_threads = max(min(len(expired_tile_paths), 20), 5)
-    enqueuer = ThreadedEnqueuer(sqs_queue, n_threads, logger)
-    n_queued, n_in_flight = enqueuer(coords)
+    queue_writer = peripherals.queue_writer
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
 
     # print counts per file
     for path, count in coord_ints_path_result['path_counts']:
@@ -432,7 +521,8 @@ def make_store(store_type, store_name, cfg):
         return make_s3_store(
             cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
             path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy,
-            date_prefix=cfg.s3_date_prefix)
+            date_prefix=cfg.s3_date_prefix,
+            delete_retry_interval=cfg.s3_delete_retry_interval)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
@@ -475,12 +565,10 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     return resources
 
 
-def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
-                     cfg_path):
-    if reload_templates:
-        from tilequeue.query import DevJinjaQueryGenerator
-    else:
-        from tilequeue.query import JinjaQueryGenerator
+SourcesConfig = namedtuple('SourcesConfig', 'sources queries_generator')
+
+
+def parse_layer_data(query_cfg, buffer_cfg, cfg_path):
     all_layer_names = query_cfg['all']
     layers_config = query_cfg['layers']
     post_process_config = query_cfg.get('post_process', [])
@@ -488,28 +576,10 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
     all_layer_data = []
     post_process_data = []
 
-    environment = Environment(loader=FileSystemLoader(template_path))
-    environment.filters['geometry'] = jinja_filter_geometry
-    environment.filters['bbox_filter'] = jinja_filter_bbox_filter
-    environment.filters['bbox_intersection'] = jinja_filter_bbox_intersection
-    environment.filters['bbox_padded_intersection'] = (
-        jinja_filter_bbox_padded_intersection)
-    environment.filters['bbox'] = jinja_filter_bbox
-    environment.filters['bbox_overlaps'] = jinja_filter_bbox_overlaps
-
     for layer_name, layer_config in layers_config.items():
-        template_name = layer_config['template']
-        start_zoom = layer_config['start_zoom']
         area_threshold = int(layer_config.get('area-inclusion-threshold', 1))
-        if reload_templates:
-            query_generator = DevJinjaQueryGenerator(
-                environment, template_name, start_zoom)
-        else:
-            template = environment.get_template(template_name)
-            query_generator = JinjaQueryGenerator(template, start_zoom)
         layer_datum = dict(
             name=layer_name,
-            query_generator=query_generator,
             is_clipped=layer_config.get('clip', True),
             clip_factor=layer_config.get('clip_factor', 1.0),
             geometry_types=layer_config['geometry_types'],
@@ -544,6 +614,30 @@ def parse_layer_data(query_cfg, buffer_cfg, template_path, reload_templates,
     return all_layer_data, layer_data, post_process_data
 
 
+def make_output_calc_mapping(process_yaml_cfg):
+    output_calc_mapping = {}
+    if process_yaml_cfg['type'] == 'parse':
+        parse_cfg = process_yaml_cfg['parse']
+        yaml_path = parse_cfg['path']
+        assert os.path.isdir(yaml_path), 'Invalid yaml path: %s' % yaml_path
+        from vectordatasource.meta.python import make_function_name_props
+        from vectordatasource.meta.python import output_kind
+        from vectordatasource.meta.python import parse_layers
+        layer_parse_result = parse_layers(
+            yaml_path, output_kind, make_function_name_props)
+        for layer_datum in layer_parse_result.layer_data:
+            output_calc_mapping[layer_datum.layer] = layer_datum.fn
+    elif process_yaml_cfg['type'] == 'callable':
+        callable_cfg = process_yaml_cfg['callable']
+        dotted_name = callable_cfg['dotted-name']
+        fn = resolve(dotted_name)
+        output_calc_mapping = fn(*callable_cfg['args'])
+    else:
+        raise ValueError('Invalid process yaml config: %s' % process_yaml_cfg)
+
+    return output_calc_mapping
+
+
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
     logger.warn('tilequeue processing started')
@@ -555,19 +649,24 @@ def tilequeue_process(cfg, peripherals):
         query_cfg = yaml.load(query_cfg_fp)
     all_layer_data, layer_data, post_process_data = (
         parse_layer_data(
-            query_cfg, cfg.buffer_cfg, cfg.template_path, cfg.reload_templates,
-            os.path.dirname(cfg.query_cfg)))
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
 
     formats = lookup_formats(cfg.output_formats)
-
-    sqs_queue = peripherals.queue
 
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
+    from shapely import speedups
+    if speedups.available:
+        speedups.enable()
+        logger.info('Shapely speedups enabled')
+    else:
+        logger.warn('Shapely speedups not enabled, they were not available')
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
+
     n_cpu = multiprocessing.cpu_count()
-    sqs_messages_per_batch = 10
     n_simultaneous_query_sets = cfg.n_simultaneous_query_sets
     if not n_simultaneous_query_sets:
         # default to number of databases configured
@@ -575,7 +674,8 @@ def tilequeue_process(cfg, peripherals):
     assert n_simultaneous_query_sets > 0
     # reduce queue size when we're rendering metatiles to try and avoid the
     # geometry waiting to be processed from taking up all the RAM!
-    default_queue_buffer_size = max(1, 128 >> (2 * (cfg.metatile_size or 0)))
+    size_sqr = (cfg.metatile_size or 1)**2
+    default_queue_buffer_size = max(1, 16 / size_sqr)
     sql_queue_buffer_size = cfg.sql_queue_buffer_size or \
         default_queue_buffer_size
     proc_queue_buffer_size = cfg.proc_queue_buffer_size or \
@@ -596,15 +696,18 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-
-    feature_fetcher = DataFetcher(cfg.postgresql_conn_info, all_layer_data,
-                                  io_pool, n_layers)
+    feature_fetcher = make_db_data_fetcher(
+        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
+        query_cfg, io_pool)
 
     # create all queues used to manage pipeline
 
-    sqs_input_queue_buffer_size = sqs_messages_per_batch
-    # holds coord messages from sqs
-    sqs_input_queue = Queue.Queue(sqs_input_queue_buffer_size)
+    # holds coordinate messages from tile queue reader
+    # TODO can move this hardcoded value to configuration
+    # having a little less than the value is beneficial
+    # ie prefer to read on-demand from queue rather than hold messages
+    # in waiting while others are processed, can become stale faster
+    tile_input_queue = Queue.Queue(10)
 
     # holds raw sql results - no filtering or processing done on them
     sql_data_fetch_queue = multiprocessing.Queue(sql_queue_buffer_size)
@@ -618,32 +721,38 @@ def tilequeue_process(cfg, peripherals):
     s3_store_queue = Queue.Queue(s3_queue_buffer_size)
 
     # create worker threads/processes
-    thread_sqs_queue_reader_stop = threading.Event()
-    sqs_queue_reader = SqsQueueReader(
-        sqs_queue, sqs_input_queue, logger, thread_sqs_queue_reader_stop,
-        cfg.max_zoom)
+    thread_tile_queue_reader_stop = threading.Event()
+
+    queue_mapper = peripherals.queue_mapper
+    msg_marshaller = peripherals.msg_marshaller
+    msg_tracker = peripherals.msg_tracker
+    tile_queue_reader = TileQueueReader(
+        queue_mapper, msg_marshaller, msg_tracker, tile_input_queue, logger,
+        thread_tile_queue_reader_stop, cfg.max_zoom
+    )
 
     data_fetch = DataFetch(
-        feature_fetcher, sqs_input_queue, sql_data_fetch_queue, io_pool,
+        feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
         logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, logger)
+        cfg.buffer_cfg, output_calc_mapping, layer_data, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            logger, cfg.metatile_size)
 
-    thread_sqs_writer_stop = threading.Event()
-    sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
-                                      thread_sqs_writer_stop)
+    thread_tile_writer_stop = threading.Event()
+    tile_queue_writer = TileQueueWriter(
+        queue_mapper, s3_store_queue, peripherals.inflight_mgr,
+        peripherals.msg_tracker, logger, thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
         t.start()
         return t
 
-    thread_sqs_queue_reader = create_and_start_thread(sqs_queue_reader)
+    thread_tile_queue_reader = create_and_start_thread(tile_queue_reader)
 
     threads_data_fetch = []
     threads_data_fetch_stop = []
@@ -675,12 +784,12 @@ def tilequeue_process(cfg, peripherals):
         threads_s3_storage.append(thread_s3_storage)
         threads_s3_storage_stop.append(thread_s3_storage_stop)
 
-    thread_sqs_writer = create_and_start_thread(sqs_queue_writer)
+    thread_tile_writer = create_and_start_thread(tile_queue_writer)
 
     if cfg.log_queue_sizes:
         assert(cfg.log_queue_sizes_interval_seconds > 0)
         queue_data = (
-            (sqs_input_queue, 'sqs'),
+            (tile_input_queue, 'queue'),
             (sql_data_fetch_queue, 'sql'),
             (processor_queue, 'proc'),
             (s3_store_queue, 's3'),
@@ -702,14 +811,14 @@ def tilequeue_process(cfg, peripherals):
         # each worker guards its read loop with an event object
         # ask all these to stop first
 
-        thread_sqs_queue_reader_stop.set()
+        thread_tile_queue_reader_stop.set()
         for thread_data_fetch_stop in threads_data_fetch_stop:
             thread_data_fetch_stop.set()
         for data_processor_stop in data_processors_stop:
             data_processor_stop.set()
         for thread_s3_storage_stop in threads_s3_storage_stop:
             thread_s3_storage_stop.set()
-        thread_sqs_writer_stop.set()
+        thread_tile_writer_stop.set()
 
         if queue_printer_thread_stop:
             queue_printer_thread_stop.set()
@@ -724,12 +833,12 @@ def tilequeue_process(cfg, peripherals):
 
         logger.info('joining all workers ...')
 
-        logger.info('joining sqs queue reader ...')
-        thread_sqs_queue_reader.join()
-        logger.info('joining sqs queue reader ... done')
+        logger.info('joining tile queue reader ...')
+        thread_tile_queue_reader.join()
+        logger.info('joining tile queue reader ... done')
         logger.info('enqueueing sentinels for data fetchers ...')
         for i in range(len(threads_data_fetch)):
-            sqs_input_queue.put(None)
+            tile_input_queue.put(None)
         logger.info('enqueueing sentinels for data fetchers ... done')
         logger.info('joining data fetchers ...')
         for thread_data_fetch in threads_data_fetch:
@@ -751,12 +860,12 @@ def tilequeue_process(cfg, peripherals):
         for thread_s3_storage in threads_s3_storage:
             thread_s3_storage.join()
         logger.info('joining s3 storage ... done')
-        logger.info('enqueueing sentinel for sqs queue writer ...')
+        logger.info('enqueueing sentinel for tile queue writer ...')
         s3_store_queue.put(None)
-        logger.info('enqueueing sentinel for sqs queue writer ... done')
-        logger.info('joining sqs queue writer ...')
-        thread_sqs_writer.join()
-        logger.info('joining sqs queue writer ... done')
+        logger.info('enqueueing sentinel for tile queue writer ... done')
+        logger.info('joining tile queue writer ...')
+        thread_tile_writer.join()
+        logger.info('joining tile queue writer ... done')
         if queue_printer_thread:
             logger.info('joining queue printer ...')
             queue_printer_thread.join()
@@ -795,96 +904,19 @@ def tilequeue_process(cfg, peripherals):
         time.sleep(1024)
 
 
-class ThreadedEnqueuer(object):
-
-    def __init__(self, sqs_queue, n_threads, logger=None):
-        self.sqs_queue = sqs_queue
-        self.n_threads = n_threads
-        self.logger = logger
-
-    def _log(self, level, msg):
-        if self.logger is not None:
-            self.logger.log(level, msg)
-
-    def __call__(self, coords_iter_or_queue):
-        # 10 is the number of messages that sqs can send at once
-        buf_size = 10
-        thread_work_queue = Queue.Queue(self.n_threads * buf_size)
-        thread_results_queue = Queue.Queue(self.n_threads)
-        threads = []
-
-        def enqueue():
-            buf = []
-            done = False
-            total_queued = 0
-            total_in_flight = 0
-            while not done:
-                coord = thread_work_queue.get()
-                if coord is None:
-                    done = True
-                else:
-                    buf.append(coord)
-                if len(buf) >= buf_size or (done and buf):
-                    n_queued, n_in_flight = self.sqs_queue.enqueue_batch(buf)
-                    total_queued += n_queued
-                    total_in_flight += n_in_flight
-                    del buf[:]
-            thread_results_queue.put((total_queued, total_in_flight))
-
-        # first start up all the threads
-        self._log(logging.INFO, 'Starting %d enqueueing threads ...' %
-                  self.n_threads)
-        for i in xrange(self.n_threads):
-            thread = threading.Thread(target=enqueue)
-            thread.start()
-            threads.append(thread)
-        self._log(logging.INFO, 'Starting %d enqueueing threads ... done' %
-                  self.n_threads)
-
-        # queue up the work
-        self._log(logging.INFO, 'Starting to enqueue coordinates ...')
-
-        if isinstance(coords_iter_or_queue, Iterable):
-            for coord in coords_iter_or_queue:
-                thread_work_queue.put(coord)
-        else:
-            assert isinstance(coords_iter_or_queue, Queue.Queue), \
-                'Unknown coords_iter_or_queue: %s' % coords_iter_or_queue
-            while True:
-                coord = coords_iter_or_queue.get()
-                if coord is None:
-                    break
-                thread_work_queue.put(coord)
-
-        # tell the threads to stop
-        total_queued_across_threads = 0
-        total_in_flight_across_threads = 0
-        for thread in threads:
-            thread_work_queue.put(None)
-        for thread in threads:
-            # join with the thread
-            thread.join()
-            # and also get the results from that thread
-            n_queued, n_in_flight = thread_results_queue.get()
-            total_queued_across_threads += n_queued
-            total_in_flight_across_threads += n_in_flight
-
-        n_proc = total_queued_across_threads + total_in_flight_across_threads
-        self._log(logging.INFO, 'Starting to enqueue coordinates ... done')
-        self._log(logging.INFO, '%d processed - %d enqueued - %d in flight' %
-                  (n_proc, total_queued_across_threads,
-                   total_in_flight_across_threads))
-
-        return total_queued_across_threads, total_in_flight_across_threads
+def coords_generator_from_queue(queue):
+    """given a python queue, read from it and yield coordinates"""
+    while True:
+        coord = queue.get()
+        if coord is None:
+            break
+        yield coord
 
 
 def tilequeue_seed(cfg, peripherals):
     logger = make_logger(cfg, 'seed')
     logger.info('Seeding tiles ...')
-    tile_queue = peripherals.queue
-    # suppresses checking the in flight list while seeding
-    tile_queue.is_seeding = True
-    enqueuer = ThreadedEnqueuer(tile_queue, cfg.seed_n_threads, logger)
+    queue_writer = peripherals.queue_writer
 
     # based on cfg, create tile generator
     tile_generator = make_seed_tile_generator(cfg)
@@ -892,11 +924,12 @@ def tilequeue_seed(cfg, peripherals):
     queue_buf_size = 1024
     tile_queue_queue = Queue.Queue(queue_buf_size)
 
-    # updating sqs happens in background threads
+    # updating tile queue happens in background threads
     def tile_queue_enqueue():
-        enqueuer(tile_queue_queue)
+        coords = coords_generator_from_queue(tile_queue_queue)
+        queue_writer.enqueue_batch(coords)
 
-    logger.info('Enqueueing to SQS ... ')
+    logger.info('Enqueueing ... ')
     thread_enqueue = threading.Thread(target=tile_queue_enqueue)
     thread_enqueue.start()
 
@@ -910,7 +943,7 @@ def tilequeue_seed(cfg, peripherals):
     tile_queue_queue.put(None)
 
     thread_enqueue.join()
-    logger.info('Enqueueing to SQS ... done')
+    logger.info('Enqueueing ... done')
 
     if cfg.seed_should_add_to_tiles_of_interest:
         logger.info('Adding to Tiles of Interest ... ')
@@ -939,7 +972,6 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger = make_logger(cfg, 'enqueue_tiles_of_interest')
     logger.info('Enqueueing tiles of interest')
 
-    sqs_queue = peripherals.queue
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     n_toi = len(tiles_of_interest)
@@ -951,11 +983,50 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
         if coord.zoom <= cfg.max_zoom:
             coords.append(coord)
 
-    enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
-    n_queued, n_in_flight = enqueuer(coords)
+    queue_writer = peripherals.queue_writer
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
 
     logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
     logger.info('%d tiles of interest processed' % n_toi)
+
+
+def tilequeue_consume_tile_traffic(cfg, peripherals):
+    logger = make_logger(cfg, 'consume_tile_traffic')
+    logger.info('Consuming tile traffic logs ...')
+
+    tile_log_records = None
+    with open(cfg.tile_traffic_log_path, 'r') as log_file:
+        tile_log_records = parse_log_file(log_file)
+
+    if not tile_log_records:
+        logger.info("Couldn't parse log file")
+        sys.exit(1)
+
+    conn_info = dict(cfg.postgresql_conn_info)
+    dbnames = conn_info.pop('dbnames')
+    sql_conn_pool = DBConnectionPool(dbnames, conn_info, False)
+    sql_conn = sql_conn_pool.get_conns(1)[0]
+    with sql_conn.cursor() as cursor:
+
+        # insert the log records after the latest_date
+        cursor.execute('SELECT max(date) from tile_traffic_v4')
+        max_timestamp = cursor.fetchone()[0]
+
+        n_coords_inserted = 0
+        for host, timestamp, coord_int in tile_log_records:
+            if not max_timestamp or timestamp > max_timestamp:
+                coord = coord_unmarshall_int(coord_int)
+                cursor.execute(
+                    "INSERT into tile_traffic_v4 "
+                    "(date, z, x, y, tilesize, service, host) VALUES "
+                    "('%s', %d, %d, %d, %d, '%s', '%s')"
+                    % (timestamp, coord.zoom, coord.column, coord.row, 512,
+                       'vector-tiles', host))
+                n_coords_inserted += 1
+
+        logger.info('Inserted %d records' % n_coords_inserted)
+
+    sql_conn_pool.put_conns([sql_conn])
 
 
 def emit_toi_stats(toi_set, peripherals):
@@ -987,32 +1058,41 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     logger.info('Fetching tiles recently requested ...')
     import psycopg2
-    import boto
 
     prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_cfg = prune_cfg.get('redshift', {})
-    redshift_uri = redshift_cfg.get('database-uri')
-    assert redshift_uri, ("A redshift connection URI must "
+    tile_history_cfg = prune_cfg.get('tile-history', {})
+    db_conn_info = tile_history_cfg.get('database-uri')
+    assert db_conn_info, ("A postgres-compatible connection URI must "
                           "be present in the config yaml")
 
-    redshift_days_to_query = redshift_cfg.get('days')
+    redshift_days_to_query = tile_history_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
-    redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
+    redshift_zoom_cutoff = int(tile_history_cfg.get('max-zoom', '16'))
 
-    s3_parts = prune_cfg.get('s3')
-    assert s3_parts, ("The name of an S3 bucket containing tiles "
-                      "to delete must be specified")
+    # flag indicating that s3 entry in toi-prune is used for s3 store
+    legacy_fallback = 's3' in prune_cfg
+    store_parts = prune_cfg.get('s3') or prune_cfg.get('store')
+    assert store_parts, (
+        'The configuration of a store containing tiles to delete must be '
+        'specified under toi-prune:store or toi-prune:s3')
+    # explictly override the store configuration with values provided
+    # in toi-prune:s3
+    if legacy_fallback:
+        cfg.store_type = 's3'
+        cfg.s3_bucket = store_parts['bucket']
+        cfg.s3_date_prefix = store_parts['date-prefix']
+        cfg.s3_path = store_parts['path']
 
     redshift_results = defaultdict(int)
-    with psycopg2.connect(redshift_uri) as conn:
+    with psycopg2.connect(db_conn_info) as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd(day, -{days}, getdate()))
+                where (date >= (current_timestamp - interval '{days} days'))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1021,7 +1101,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 order by z, x, y, tilesize
                 """.format(
                     days=redshift_days_to_query,
-                    max_zoom=redshift_zoom_cutoff,
+                    max_zoom=redshift_zoom_cutoff
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
@@ -1128,25 +1208,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    def delete_from_s3(s3_parts, coord_ints):
-        # Remove from S3
-        s3 = boto.connect_s3(cfg.aws_access_key_id, cfg.aws_secret_access_key)
-        buk = s3.get_bucket(s3_parts['bucket'], validate=False)
-        keys = [
-            s3_tile_key(
-                s3_parts['date-prefix'],
-                s3_parts['path'],
-                s3_parts['layer'],
-                coord_unmarshall_int(coord_int),
-                s3_parts['format']
-            )
-            for coord_int in coord_ints
-        ]
-        del_result = buk.delete_keys(keys)
-        removed = len(del_result.deleted)
-
-        logger.info('Removed %s tiles from S3', removed)
-
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
     if not toi_to_remove:
         logger.info('Skipping TOI remove step because there are '
                     'no tiles to remove')
@@ -1155,7 +1217,11 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            delete_from_s3(s3_parts, coord_ints)
+            removed = store.delete_tiles(
+                map(coord_unmarshall_int, coord_ints),
+                lookup_format_by_extension(
+                    store_parts['format']), store_parts['layer'])
+            logger.info('Removed %s tiles from S3', removed)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
                     len(toi_to_remove))
@@ -1170,17 +1236,14 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         logger.info('Skipping TOI add step because there are '
                     'no tiles to add')
     else:
-        logger.info('Enqueueing %s tiles to SQS ...',
-                    len(toi_to_add))
+        logger.info('Enqueueing %s tiles ...', len(toi_to_add))
 
-        sqs_queue = peripherals.queue
-        enqueuer = ThreadedEnqueuer(sqs_queue, cfg.seed_n_threads, logger)
-        n_queued, n_in_flight = enqueuer(
+        queue_writer = peripherals.queue_writer
+        n_queued, n_in_flight = queue_writer.enqueue_batch(
             coord_unmarshall_int(coord_int) for coord_int in toi_to_add
         )
 
-        logger.info('Enqueueing %s tiles to SQS ... done',
-                    len(toi_to_add))
+        logger.info('Enqueueing %s tiles ... done', len(toi_to_add))
 
     if toi_to_add or toi_to_remove:
         logger.info('Setting new tiles of interest ... ')
@@ -1404,7 +1467,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     n_enqueue_threads = 20
     current_date = datetime.date.today()
     processor = make_wof_processor(
-        fetcher, model, peripherals.toi, peripherals.queue,
+        fetcher, model, peripherals.toi, peripherals.queue_writer,
         n_enqueue_threads, logger, current_date)
 
     logger.info('Processing ...')
@@ -1463,45 +1526,6 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     )
 
 
-def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
-    """
-    Dumps the tiles of interest from Redis into a newline-delimited
-    file called 'toi.txt'.
-
-    This is intended to be used once to migrate away from using Redis
-    and then removed.
-    """
-    logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
-    logger.info('Dumping TOI from Redis ...')
-
-    logger.info('Fetching tiles of interest from Redis ...')
-
-    # Make a raw Redis client so we can do low-level set manipulation
-    redis_client = make_redis_client(cfg)
-
-    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key, count=10000)
-
-    toi_set = set()
-    for coord_int in toi_iter:
-        toi_set.add(coord_int)
-
-    logger.info('Fetching tiles of interest from Redis ... done')
-
-    toi_filename = "toi.txt"
-
-    n_toi = len(toi_set)
-    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
-
-    with open(toi_filename, "w") as f:
-        save_set_to_fp(toi_set, f)
-
-    logger.info(
-        'Writing %d tiles of interest to %s ... done',
-        n_toi,
-        toi_filename
-    )
-
-
 def tilequeue_load_tiles_of_interest(cfg, peripherals):
     """
     Given a newline-delimited file containing tile coordinates in
@@ -1524,6 +1548,102 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     logger.info('Setting new TOI (with %s tiles) ... done', len(new_toi))
 
     logger.info('Loading tiles of interest ... done')
+
+
+def tilequeue_stuck_tiles(cfg, peripherals):
+    """
+    Check which files exist on s3 but are not in toi.
+    """
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    format = lookup_format_by_extension('zip')
+    layer = 'all'
+
+    assert peripherals.toi, 'Missing toi'
+    toi = peripherals.toi.fetch_tiles_of_interest()
+
+    for coord in store.list_tiles(format, layer):
+        coord_int = coord_marshall_int(coord)
+        if coord_int not in toi:
+            print serialize_coord(coord)
+
+
+def tilequeue_delete_stuck_tiles(cfg, peripherals):
+    logger = make_logger(cfg, 'delete_stuck_tiles')
+
+    format = lookup_format_by_extension('zip')
+    layer = 'all'
+
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+
+    logger.info('Removing tiles from S3 ...')
+    total_removed = 0
+    for coord_strs in grouper(sys.stdin, 1000):
+        coords = []
+        for coord_str in coord_strs:
+            coord = deserialize_coord(coord_str)
+            if coord:
+                coords.append(coord)
+        if coords:
+            n_removed = store.delete_tiles(coords, format, layer)
+            total_removed += n_removed
+            logger.info('Removed %s tiles from S3', n_removed)
+
+    logger.info('Total removed: %d', total_removed)
+    logger.info('Removing tiles from S3 ... DONE')
+
+
+def tilequeue_tile_status(cfg, peripherals, args):
+    """
+    Report the status of the given tiles in the store, queue and TOI.
+    """
+    logger = make_logger(cfg, 'tile_status')
+
+    # friendly warning to avoid confusion when this command outputs nothing
+    # at all when called with no positional arguments.
+    if not args.coords:
+        logger.warning('No coordinates given on the command line.')
+        return
+
+    # pre-load TOI to avoid having to do it for each coordinate
+    toi = None
+    if peripherals.toi:
+        toi = peripherals.toi.fetch_tiles_of_interest()
+
+    # TODO: make these configurable!
+    tile_format = lookup_format_by_extension('zip')
+    tile_layer = 'all'
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+
+    for coord_str in args.coords:
+        coord = deserialize_coord(coord_str)
+
+        # input checking! make sure that the coordinate is okay to use in
+        # the rest of the code.
+        if not coord:
+            logger.warning('Could not deserialize %r as coordinate', coord_str)
+            continue
+
+        if not coord_is_valid(coord):
+            logger.warning('Coordinate is not valid: %r (parsed from %r)',
+                           coord, coord_str)
+            continue
+
+        # now we think we probably have a valid coordinate. go look up
+        # whether it exists in various places.
+
+        logger.info("=== %s ===", coord_str)
+        coord_int = coord_marshall_int(coord)
+
+        if peripherals.inflight_mgr:
+            is_inflight = peripherals.inflight_mgr.is_inflight(coord)
+            logger.info('inflight: %r', is_inflight)
+
+        if toi:
+            in_toi = coord_int in toi
+            logger.info('in TOI: %r' % (in_toi,))
+
+        data = store.read_tile(coord, tile_format, tile_layer)
+        logger.info('tile in store: %r', bool(data))
 
 
 class TileArgumentParser(argparse.ArgumentParser):
@@ -1567,6 +1687,157 @@ class FakeStatsTimer(object):
         pass
 
 
+def tilequeue_process_tile(cfg, peripherals, args):
+    if not args.coord:
+        print >> sys.stderr, 'Missing coord argument'
+        sys.exit(1)
+
+    coord_str = args.coord
+    coord = deserialize_coord(coord_str)
+    if not coord:
+        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        sys.exit(2)
+
+    with open(cfg.query_cfg) as query_cfg_fp:
+        query_cfg = yaml.load(query_cfg_fp)
+
+    all_layer_data, layer_data, post_process_data = (
+        parse_layer_data(
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
+    io_pool = ThreadPool(len(layer_data))
+
+    data_fetcher = make_db_data_fetcher(
+        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
+        query_cfg, io_pool)
+
+    unpadded_bounds = coord_to_mercator_bounds(coord)
+    source_rows = data_fetcher(coord.zoom, unpadded_bounds)
+    feature_layers = convert_source_data_to_feature_layers(
+        source_rows, layer_data, unpadded_bounds, coord.zoom)
+    cut_coords = []
+    formats = lookup_formats(cfg.output_formats)
+    formatted_tiles, extra_data = process_coord(
+        coord, coord.zoom, feature_layers, post_process_data, formats,
+        unpadded_bounds, cut_coords, cfg.buffer_cfg, output_calc_mapping)
+
+    # can think about making this configurable
+    # but this is intended for debugging anyway
+    json_tile = [x for x in formatted_tiles
+                 if x['format'].extension == 'json']
+    assert json_tile
+    json_tile = json_tile[0]
+    tile_data = json_tile['tile']
+    print tile_data
+
+
+def make_rawr_queue(rawr_queue_name):
+    import boto3
+    sqs_client = boto3.client('sqs')
+    resp = sqs_client.get_queue_url(QueueName=rawr_queue_name)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+    queue_url = resp['QueueUrl']
+    from tilequeue.rawr import SqsQueue
+    rawr_queue = SqsQueue(sqs_client, queue_url)
+    return rawr_queue
+
+
+def tilequeue_rawr_enqueue(cfg, args):
+    """command to take tile expiry path and enqueue for rawr tile generation"""
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    from tilequeue.rawr import process_expiry
+    logger = make_logger(cfg, 'rawr_expiry')
+    with open(args.expiry_path) as fh:
+        coords = create_coords_generator_from_tiles_file(fh)
+        process_expiry(
+            rawr_queue, msg_marshaller, group_by_zoom, coords, logger)
+
+
+def tilequeue_rawr_process(cfg, peripherals):
+    """command to read from rawr queue and generate rawr tiles"""
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    rawr_postgresql_yaml = rawr_yaml.get('postgresql')
+    assert rawr_postgresql_yaml, 'Missing rawr postgresql config'
+
+    from raw_tiles.formatter.gzip import Gzip
+    from raw_tiles.formatter.msgpack import Msgpack
+    from raw_tiles.gen import RawrGenerator
+    from raw_tiles.source.conn import ConnectionContextManager
+    from raw_tiles.source.osm import OsmSource
+    from tilequeue.rawr import RawrS3Sink
+    from tilequeue.rawr import RawrTileGenerationPipeline
+    from tilequeue.rawr import RawrToiIntersector
+    import boto3
+    # pass through the postgresql yaml config directly
+    conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
+
+    rawr_sink_yaml = rawr_yaml.get('sink')
+    assert rawr_sink_yaml, 'Missing rawr sink config'
+    bucket = rawr_sink_yaml.get('bucket')
+    assert bucket, 'Missing rawr sink bucket'
+    prefix = rawr_sink_yaml.get('prefix')
+    assert prefix, 'Missing rawr sink prefix'
+    suffix = rawr_sink_yaml.get('suffix')
+    assert suffix, 'Missing rawr sink suffix'
+
+    s3_client = boto3.client('s3')
+    rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
+
+    toi_yaml = cfg.yml.get('toi-store')
+    assert toi_yaml.get('type') == 's3', 'Only s3 toi store supported'
+    toi_s3_yaml = toi_yaml.get('s3')
+    assert toi_s3_yaml, 'Missing toi-store s3 config'
+    toi_bucket = toi_s3_yaml.get('bucket')
+    toi_key = toi_s3_yaml.get('key')
+    assert toi_bucket, 'Missing toi-store s3 bucket'
+    assert toi_key, 'Missing toi-store s3 key'
+
+    rawr_toi_intersector = RawrToiIntersector(s3_client, toi_bucket, toi_key)
+
+    logger = make_logger(cfg, 'rawr_process')
+    rawr_osm_source = OsmSource(conn_ctx)
+    rawr_formatter = Gzip(Msgpack())
+    rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
+    rawr_pipeline = RawrTileGenerationPipeline(
+            rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
+            peripherals.queue_writer, rawr_toi_intersector, logger)
+    rawr_pipeline()
+
+
+Peripherals = namedtuple(
+    'Peripherals',
+    'toi stats redis_client '
+    'queue_mapper msg_tracker msg_marshaller inflight_mgr queue_writer'
+)
+
+
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -1574,53 +1845,127 @@ def tilequeue_main(argv_args=None):
     parser = TileArgumentParser()
     subparsers = parser.add_subparsers()
 
-    parser_config = (
-        ('process', create_command_parser(tilequeue_process)),
-        ('seed', create_command_parser(tilequeue_seed)),
-        ('drain', create_command_parser(tilequeue_drain)),
-        ('intersect', create_command_parser(tilequeue_intersect)),
-        ('dump-tiles-of-interest',
-            create_command_parser(tilequeue_dump_tiles_of_interest)),
-        ('dump-tiles-of-interest-from-redis',
-            create_command_parser(
-                tilequeue_dump_tiles_of_interest_from_redis)),
-        ('load-tiles-of-interest',
-            create_command_parser(tilequeue_load_tiles_of_interest)),
-        ('enqueue-tiles-of-interest',
-         create_command_parser(tilequeue_enqueue_tiles_of_interest)),
-        ('prune-tiles-of-interest',
-         create_command_parser(tilequeue_prune_tiles_of_interest)),
-        ('tile-size', create_command_parser(tilequeue_tile_sizes)),
-        ('wof-process-neighbourhoods', create_command_parser(
-            tilequeue_process_wof_neighbourhoods)),
-        ('wof-load-initial-neighbourhoods', create_command_parser(
-            tilequeue_initial_load_wof_neighbourhoods)),
+    # these are all the "standard" parsers which just take a config argument
+    # that is already included at the top level.
+    cfg_commands = (
+        ('process', tilequeue_process),
+        ('seed', tilequeue_seed),
+        ('drain', tilequeue_drain),
+        ('intersect', tilequeue_intersect),
+        ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
+        ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
+        ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
+        ('prune-tiles-of-interest', tilequeue_prune_tiles_of_interest),
+        ('tile-size', tilequeue_tile_sizes),
+        ('wof-process-neighbourhoods', tilequeue_process_wof_neighbourhoods),
+        ('wof-load-initial-neighbourhoods',
+            tilequeue_initial_load_wof_neighbourhoods),
+        ('consume-tile-traffic', tilequeue_consume_tile_traffic),
+        ('stuck-tiles', tilequeue_stuck_tiles),
+        ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
+        ('rawr-process', tilequeue_rawr_process),
     )
-    for parser_name, parser_func in parser_config:
+
+    def _make_peripherals(cfg):
+        redis_client = make_redis_client(cfg)
+
+        toi_helper = make_toi_helper(cfg)
+
+        tile_queue_result = make_tile_queue(
+                cfg.queue_cfg, cfg.yml, redis_client)
+        tile_queue_name_map = {}
+        if isinstance(tile_queue_result, tuple):
+            tile_queue, queue_name = tile_queue_result
+            tile_queue_name_map[queue_name] = tile_queue
+        else:
+            assert isinstance(tile_queue_result, list), \
+                'Unknown tile_queue result: %s' % tile_queue_result
+            for tile_queue, queue_name in tile_queue_result:
+                tile_queue_name_map[queue_name] = tile_queue
+
+        queue_mapper_yaml = cfg.yml.get('queue-mapping')
+        assert queue_mapper_yaml, 'Missing queue-mapping configuration'
+        queue_mapper = make_queue_mapper(
+                queue_mapper_yaml, tile_queue_name_map)
+
+        msg_marshall_yaml = cfg.yml.get('message-marshall')
+        assert msg_marshall_yaml, 'Missing message-marshall config'
+        msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+        inflight_yaml = cfg.yml.get('in-flight')
+        inflight_mgr = make_inflight_manager(inflight_yaml, redis_client)
+
+        enqueue_batch_size = 10
+        from tilequeue.queue.writer import QueueWriter
+        queue_writer = QueueWriter(
+            queue_mapper, msg_marshaller, inflight_mgr, enqueue_batch_size)
+
+        msg_tracker_yaml = cfg.yml.get('message-tracker')
+        msg_tracker = make_msg_tracker(msg_tracker_yaml)
+
+        if cfg.statsd_host:
+            import statsd
+            stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
+                                       prefix=cfg.statsd_prefix)
+        else:
+            stats = FakeStatsd()
+
+        peripherals = Peripherals(
+            toi_helper, stats, redis_client, queue_mapper, msg_tracker,
+            msg_marshaller, inflight_mgr, queue_writer
+        )
+        return peripherals
+
+    def _make_peripherals_command(func):
+        def command_fn(cfg, args):
+            peripherals = _make_peripherals(cfg)
+            return func(cfg, peripherals)
+        return command_fn
+
+    def _make_peripherals_with_args_command(func):
+        def command_fn(cfg, args):
+            peripherals = _make_peripherals(cfg)
+            return func(cfg, peripherals, args)
+        return command_fn
+
+    for parser_name, func in cfg_commands:
         subparser = subparsers.add_parser(parser_name)
-        parser_func(subparser)
+
+        # config parameter is shared amongst all parsers, but appears here so
+        # that it can be given _after_ the name of the command.
+        subparser.add_argument('--config', required=True,
+                               help='The path to the tilequeue config file.')
+        command_fn = _make_peripherals_command(func)
+        subparser.set_defaults(func=command_fn)
+
+    # add "special" commands which take arguments
+    subparser = subparsers.add_parser('tile-status')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('coords', nargs='*',
+                           help='Tile coordinates as "z/x/y".')
+    subparser.set_defaults(
+            func=_make_peripherals_with_args_command(tilequeue_tile_status))
+
+    subparser = subparsers.add_parser('tile')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('coord',
+                           help='Tile coordinate as "z/x/y".')
+    subparser.set_defaults(
+            func=_make_peripherals_with_args_command(tilequeue_process_tile))
+
+    subparser = subparsers.add_parser('rawr-enqueue')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--expiry-path', required=True,
+                           help='path to tile expiry file')
+    subparser.set_defaults(func=tilequeue_rawr_enqueue)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh)
-    redis_client = make_redis_client(cfg)
-    Peripherals = namedtuple('Peripherals', 'toi queue stats')
 
-    toi_helper = make_toi_helper(cfg)
-
-    queue = make_queue(
-        cfg.queue_type, cfg.queue_name, cfg.queue_cfg, redis_client,
-        aws_access_key_id=cfg.aws_access_key_id,
-        aws_secret_access_key=cfg.aws_secret_access_key)
-
-    if cfg.statsd_host:
-        import statsd
-        stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
-                                   prefix=cfg.statsd_prefix)
-    else:
-        stats = FakeStatsd()
-
-    peripherals = Peripherals(toi_helper, queue, stats)
-    args.func(cfg, peripherals)
+    args.func(cfg, args)

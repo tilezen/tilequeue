@@ -5,11 +5,13 @@ from boto.s3.bucket import Bucket
 from builtins import range
 from future.utils import raise_from
 import md5
+from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
 import random
 import threading
+import time
 
 
 def calc_hash(s):
@@ -38,14 +40,35 @@ def s3_tile_key(date, path, layer, coord, extension):
     return s3_path
 
 
+def parse_coordinate_from_path(path, extension, layer):
+    if path.endswith(extension):
+        fields = path.rsplit('/', 4)
+        if len(fields) == 5:
+            _, tile_layer, z_str, x_str, y_fmt = fields
+            if tile_layer == layer:
+                y_fields = y_fmt.split('.')
+                if y_fields:
+                    y_str = y_fields[0]
+                    try:
+                        z = int(z_str)
+                        x = int(x_str)
+                        y = int(y_str)
+                        coord = Coordinate(zoom=z, column=x, row=y)
+                        return coord
+                    except ValueError:
+                        pass
+
+
 class S3(object):
 
     def __init__(
-            self, bucket, date_prefix, path, reduced_redundancy):
+            self, bucket, date_prefix, path, reduced_redundancy,
+            delete_retry_interval):
         self.bucket = bucket
         self.date_prefix = date_prefix
         self.path = path
         self.reduced_redundancy = reduced_redundancy
+        self.delete_retry_interval = delete_retry_interval
 
     def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
@@ -66,6 +89,46 @@ class S3(object):
             return None
         tile_data = key.get_contents_as_string()
         return tile_data
+
+    def delete_tiles(self, coords, format, layer):
+        key_names = [
+            s3_tile_key(self.date_prefix, self.path, layer, coord,
+                        format.extension).lstrip('/')
+            for coord in coords
+        ]
+
+        num_deleted = 0
+        while key_names:
+            del_result = self.bucket.delete_keys(key_names)
+            num_deleted += len(del_result.deleted)
+
+            key_names = []
+            for error in del_result.errors:
+                # retry on internal error. documentation implies that the only
+                # possible two errors are AccessDenied and InternalError.
+                # retrying when access denied seems unlikely to work, but an
+                # internal error might be transient.
+                if error.code == 'InternalError':
+                    key_names.append(error.key)
+
+            # pause a bit to give transient errors a chance to clear.
+            if key_names:
+                time.sleep(self.delete_retry_interval)
+
+        # make sure that we deleted all the tiles - this seems like the
+        # expected behaviour from the calling code.
+        assert num_deleted == len(coords), \
+            "Failed to delete some coordinates from S3."
+
+        return num_deleted
+
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for key_obj in self.bucket.list(prefix=self.date_prefix):
+            key = key_obj.key
+            coord = parse_coordinate_from_path(key, ext, layer)
+            if coord:
+                yield coord
 
 
 def make_dir_path(base_path, coord, layer):
@@ -200,6 +263,26 @@ class TileDirectory(object):
         except IOError:
             return None
 
+    def delete_tiles(self, coords, format, layer):
+        delete_count = 0
+        for coord in coords:
+            file_path = make_file_path(
+                self.base_path, coord, layer, format.extension)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                delete_count += 1
+
+        return delete_count
+
+    def list_tiles(self, format, layer):
+        ext = '.' + format.extension
+        for root, dirs, files in os.walk(self.base_path):
+            for name in files:
+                tile_path = '%s/%s' % (root, name)
+                coord = parse_coordinate_from_path(tile_path, ext, layer)
+                if coord:
+                    yield coord
+
 
 def make_tile_file_store(base_path=None):
     if base_path is None:
@@ -221,13 +304,21 @@ class Memory(object):
         tile_data, coord, format, layer = self.data
         return tile_data
 
+    def delete_tiles(self, coords, format, layer):
+        pass
+
+    def list_tiles(self, format, layer):
+        return [self.data] if self.data else []
+
 
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
-                  path='osm', reduced_redundancy=False, date_prefix=''):
+                  path='osm', reduced_redundancy=False, date_prefix='',
+                  delete_retry_interval=60):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
-    s3_store = S3(bucket, date_prefix, path, reduced_redundancy)
+    s3_store = S3(bucket, date_prefix, path, reduced_redundancy,
+                  delete_retry_interval)
     return s3_store
 
 

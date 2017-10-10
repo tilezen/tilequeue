@@ -19,8 +19,6 @@ class Configuration(object):
             self._cfg('aws credentials aws_secret_access_key') or \
             os.environ.get('AWS_SECRET_ACCESS_KEY')
 
-        self.queue_name = self._cfg('queue name')
-        self.queue_type = self._cfg('queue type')
         self.queue_cfg = self.yml['queue']
 
         self.store_type = self._cfg('store type')
@@ -28,6 +26,8 @@ class Configuration(object):
         self.s3_reduced_redundancy = self._cfg('store reduced-redundancy')
         self.s3_path = self._cfg('store path')
         self.s3_date_prefix = self._cfg('store date-prefix')
+        self.s3_delete_retry_interval = \
+            self._cfg('store delete-retry-interval')
 
         seed_cfg = self.yml['tiles']['seed']
         self.seed_all_zoom_start = seed_cfg['all']['zoom-start']
@@ -104,6 +104,7 @@ class Configuration(object):
         self.reload_templates = process_cfg['reload-templates']
         self.output_formats = process_cfg['formats']
         self.buffer_cfg = process_cfg['buffer']
+        self.process_yaml_cfg = process_cfg['yaml']
 
         self.postgresql_conn_info = self.yml['postgresql']
         dbnames = self.postgresql_conn_info.get('dbnames')
@@ -130,6 +131,9 @@ class Configuration(object):
         self.proc_queue_buffer_size = self._cfg('queue_buffer_size proc')
         self.s3_queue_buffer_size = self._cfg('queue_buffer_size s3')
 
+        self.tile_traffic_log_path = self._cfg(
+            'toi-prune tile-traffic-log-path')
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml
@@ -151,6 +155,7 @@ def default_yml_config():
             'path': 'osm',
             'reduced-redundancy': False,
             'date-prefix': '',
+            'delete-retry-interval': 60,
         },
         'aws': {
             'credentials': {
@@ -193,6 +198,9 @@ def default_yml_config():
         'toi-store': {
             'type': None,
         },
+        'toi-prune': {
+            'tile-traffic-log-path': '/tmp/tile-traffic.log',
+        },
         'process': {
             'n-simultaneous-query-sets': 0,
             'n-simultaneous-s3-storage': 0,
@@ -203,6 +211,15 @@ def default_yml_config():
             'reload-templates': False,
             'formats': ['json'],
             'buffer': {},
+            'yaml': {
+                'type': None,
+                'parse': {
+                    'path': '',
+                },
+                'callable': {
+                    'dotted-name': '',
+                },
+            },
         },
         'logging': {
             'config': None

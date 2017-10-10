@@ -1,6 +1,9 @@
+from itertools import izip
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
+from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
+from tilequeue.queue.message import QueueMessageHandle
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
@@ -89,69 +92,82 @@ class OutputQueue(object):
 # stop event has been received in the interim.
 
 
-class SqsQueueReader(object):
+class TileQueueReader(object):
 
     def __init__(
-            self, sqs_queue, output_queue, logger, stop, max_zoom,
-            sqs_msgs_to_read_size=10):
-        self.sqs_queue = sqs_queue
+            self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
+            logger, stop, max_zoom):
+        self.queue_mapper = queue_mapper
+        self.msg_marshaller = msg_marshaller
+        self.msg_tracker = msg_tracker
         self.output = OutputQueue(output_queue, stop)
-        self.sqs_msgs_to_read_size = sqs_msgs_to_read_size
         self.logger = logger
         self.stop = stop
         self.max_zoom = max_zoom
 
     def __call__(self):
         while not self.stop.is_set():
-            try:
-                msgs = self.sqs_queue.read(
-                    max_to_read=self.sqs_msgs_to_read_size)
-            except:
-                stacktrace = format_stacktrace_one_line()
-                self.logger.error(stacktrace)
-                continue
+            for queue_id, tile_queue in (
+                    self.queue_mapper.queues_in_priority_order()):
+                try:
+                    msg_handles = tile_queue.read()
+                except:
+                    stacktrace = format_stacktrace_one_line()
+                    self.logger.error(stacktrace)
+                    continue
+                if msg_handles:
+                    break
 
-            for msg in msgs:
+            for msg_handle in msg_handles:
                 # if asked to stop, break as soon as possible
                 if self.stop.is_set():
                     break
 
-                if msg.coord.zoom > self.max_zoom:
-                    self.logger.log(
-                        logging.WARNING,
-                        'Job coordinates above max zoom are not supported, '
-                        'skipping %r > %d' % (msg.coord, self.max_zoom))
+                coords = self.msg_marshaller.unmarshall(msg_handle.payload)
+                queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
+                coord_handles = self.msg_tracker.track(
+                    queue_msg_handle, coords)
+                for coord, coord_handle in izip(coords, coord_handles):
+                    if coord.zoom > self.max_zoom:
+                        self.logger.log(
+                            logging.WARNING,
+                            'Job coordinates above max zoom are not '
+                            'supported, skipping %r > %d' %
+                            (coord, self.max_zoom))
 
-                    # delete jobs that we can't handle from the queue,
-                    # otherwise we'll get stuck in a cycle of timed-out jobs
-                    # being re-added to the queue until they overflow
-                    # max-retries.
-                    try:
-                        self.sqs_queue.job_done(msg)
-                    except:
-                        stacktrace = format_stacktrace_one_line()
-                        self.logger.error('Error acknowledging: %s - %s' % (
-                            serialize_coord(msg.coord), stacktrace))
-                    continue
+                        # delete jobs that we can't handle from the
+                        # queue, otherwise we'll get stuck in a cycle
+                        # of timed-out jobs being re-added to the
+                        # queue until they overflow max-retries.
+                        try:
+                            self.msg_tracker.done(coord_handle)
+                        except:
+                            stacktrace = format_stacktrace_one_line()
+                            self.logger.error(
+                                'Error acknowledging: %s - %s' % (
+                                    serialize_coord(coord),
+                                    stacktrace))
+                            continue
 
-                metadata = dict(
-                    timing=dict(
-                        fetch_seconds=None,
-                        process_seconds=None,
-                        s3_seconds=None,
-                        ack_seconds=None,
-                    ),
-                    coord_message=msg,
-                )
-                data = dict(
-                    metadata=metadata,
-                    coord=msg.coord,
-                )
-                if self.output(msg.coord, data):
-                    break
+                    metadata = dict(
+                        timing=dict(
+                            fetch_seconds=None,
+                            process_seconds=None,
+                            s3_seconds=None,
+                            ack_seconds=None,
+                        ),
+                        coord_handle=coord_handle,
+                    )
+                    data = dict(
+                        metadata=metadata,
+                        coord=coord,
+                    )
+                    if self.output(coord, data):
+                        break
 
-        self.sqs_queue.close()
-        self.logger.debug('sqs queue reader stopped')
+        for _, tile_queue in self.queue_mapper.queues_in_priority_order():
+            tile_queue.close()
+        self.logger.debug('tile queue reader stopped')
 
 
 class DataFetch(object):
@@ -187,7 +203,7 @@ class DataFetch(object):
             start = time.time()
 
             try:
-                fetch_data = self.fetcher(nominal_zoom, unpadded_bounds)
+                source_rows = self.fetcher(nominal_zoom, unpadded_bounds)
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 stacktrace = format_stacktrace_one_line(
@@ -214,8 +230,8 @@ class DataFetch(object):
             data = dict(
                 metadata=metadata,
                 coord=coord,
-                feature_layers=fetch_data['feature_layers'],
-                unpadded_bounds=fetch_data['unpadded_bounds'],
+                source_rows=source_rows,
+                unpadded_bounds=unpadded_bounds,
                 cut_coords=cut_coords,
                 nominal_zoom=nominal_zoom,
             )
@@ -233,13 +249,16 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, buffer_cfg, logger):
+                 output_queue, buffer_cfg, output_calc_mapping, layer_data,
+                 logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.buffer_cfg = buffer_cfg
+        self.output_calc_mapping = output_calc_mapping
+        self.layer_data = layer_data
         self.logger = logger
 
     def __call__(self, stop):
@@ -259,18 +278,21 @@ class ProcessAndFormatData(object):
                 break
 
             coord = data['coord']
-            feature_layers = data['feature_layers']
             unpadded_bounds = data['unpadded_bounds']
             cut_coords = data['cut_coords']
             nominal_zoom = data['nominal_zoom']
+            source_rows = data['source_rows']
 
             start = time.time()
 
             try:
+                feature_layers = convert_source_data_to_feature_layers(
+                    source_rows, self.layer_data, unpadded_bounds,
+                    nominal_zoom)
                 formatted_tiles, extra_data = process_coord(
                     coord, nominal_zoom, feature_layers,
                     self.post_process_data, self.formats, unpadded_bounds,
-                    cut_coords, self.buffer_cfg)
+                    cut_coords, self.buffer_cfg, self.output_calc_mapping)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
@@ -400,11 +422,15 @@ class S3Storage(object):
         return async_jobs
 
 
-class SqsQueueWriter(object):
+class TileQueueWriter(object):
 
-    def __init__(self, sqs_queue, input_queue, logger, stop):
-        self.sqs_queue = sqs_queue
+    def __init__(
+            self, queue_mapper, input_queue, inflight_mgr, msg_tracker, logger,
+            stop):
+        self.queue_mapper = queue_mapper
         self.input_queue = input_queue
+        self.inflight_mgr = inflight_mgr
+        self.msg_tracker = msg_tracker
         self.logger = logger
         self.stop = stop
 
@@ -420,15 +446,30 @@ class SqsQueueWriter(object):
                 break
 
             metadata = data['metadata']
-            coord_message = metadata['coord_message']
+            coord_handle = metadata['coord_handle']
             coord = data['coord']
 
             start = time.time()
             try:
-                self.sqs_queue.job_done(coord_message)
+                queue_msg_handle, done = self.msg_tracker.done(coord_handle)
+                msg_handle = queue_msg_handle.msg_handle
+                if done:
+                    tile_queue = (
+                        self.queue_mapper.get_queue(queue_msg_handle.queue_id))
+                    assert tile_queue, \
+                        'Missing tile_queue: %s' % queue_msg_handle.queue_id
+                    tile_queue.job_done(msg_handle)
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error acknowledging: %s - %s' % (
+                    serialize_coord(coord), stacktrace))
+                continue
+
+            try:
+                self.inflight_mgr.unmark_inflight(coord)
+            except:
+                stacktrace = format_stacktrace_one_line()
+                self.logger.error('Error unmarking in flight: %s - %s' % (
                     serialize_coord(coord), stacktrace))
                 continue
 
@@ -436,14 +477,13 @@ class SqsQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            coord_message = metadata['coord_message']
-            msg_metadata = coord_message.metadata
+            msg_metadata = msg_handle.metadata
             time_in_queue = 0
             if msg_metadata:
-                sqs_timestamp_millis = msg_metadata.get('timestamp')
-                if sqs_timestamp_millis is not None:
-                    sqs_timestamp_seconds = sqs_timestamp_millis / 1000.0
-                    time_in_queue = now - sqs_timestamp_seconds
+                tile_timestamp_millis = msg_metadata.get('timestamp')
+                if tile_timestamp_millis is not None:
+                    tile_timestamp_seconds = tile_timestamp_millis / 1000.0
+                    time_in_queue = now - tile_timestamp_seconds
 
             layers = metadata['layers']
             size = layers['size']
@@ -457,7 +497,7 @@ class SqsQueueWriter(object):
                 'proc(%.2fs) '
                 's3(%.2fs) '
                 'ack(%.2fs) '
-                'sqs(%.2fs) '
+                'time(%.2fs) '
                 'size(%s) '
                 'stored(%s) '
                 'not_stored(%s)' % (
@@ -474,7 +514,7 @@ class SqsQueueWriter(object):
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('sqs queue writer stopped')
+        self.logger.debug('tile queue writer stopped')
 
 
 class QueuePrint(object):

@@ -1,6 +1,11 @@
+from datetime import datetime
+from itertools import islice
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import create_coord
+from time import time
+import re
 import sys
 import traceback
-from itertools import islice
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -23,3 +28,65 @@ def grouper(iterable, n):
         if not chunk:
             return
         yield chunk
+
+
+def parse_log_file(log_file):
+    ip_pattern = '(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+    # didn't match againts explicit date pattern, in case it changes
+    date_pattern = '\[([\d\w\s\/:]+)\]'
+    tile_id_pattern = '\/([\w]+)\/([\d]+)\/([\d]+)\/([\d]+)\.([\d\w]*)'
+
+    log_pattern = '%s - - %s "([\w]+) %s.*' % (
+        ip_pattern, date_pattern, tile_id_pattern)
+
+    tile_log_records = []
+    for log_string in log_file:
+        match = re.search(log_pattern, log_string)
+        if match and len(match.groups()) == 8:
+            tile_log_records.append(
+                (match.group(1),
+                 datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'),
+                 coord_marshall_int(
+                     create_coord(
+                         match.group(6), match.group(7), match.group(5)))))
+
+    return tile_log_records
+
+
+def encode_utf8(x):
+    if x is None:
+        return None
+    elif isinstance(x, unicode):
+        return x.encode('utf-8')
+    elif isinstance(x, dict):
+        result = {}
+        for k, v in x.items():
+            if isinstance(k, unicode):
+                k = k.encode('utf-8')
+            result[k] = encode_utf8(v)
+        return result
+    elif isinstance(x, list):
+        return map(encode_utf8, x)
+    elif isinstance(x, tuple):
+        return tuple(encode_utf8(list(x)))
+    else:
+        return x
+
+
+class time_block(object):
+
+    """Convenience to capture timing information"""
+
+    def __init__(self, timing_state, key):
+        # timing_state should be a dictionary
+        self.timing_state = timing_state
+        self.key = key
+
+    def __enter__(self):
+        self.start = time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        stop = time()
+        duration_seconds = stop - self.start
+        duration_millis = duration_seconds * 1000
+        self.timing_state[self.key] = duration_millis

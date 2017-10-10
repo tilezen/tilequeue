@@ -8,14 +8,6 @@ merc_proj = pyproj.Proj(init='epsg:3857')
 latlng_proj = pyproj.Proj(proj='latlong')
 
 
-class CoordMessage(object):
-
-    def __init__(self, coord, message_handle, metadata=None):
-        self.coord = coord
-        self.message_handle = message_handle
-        self.metadata = metadata
-
-
 def serialize_coord(coord):
     return '%d/%d/%d' % (coord.zoom, coord.column, coord.row)
 
@@ -99,6 +91,10 @@ def coord_to_bounds(coord):
 
 def reproject_lnglat_to_mercator(x, y, *unused_coords):
     return pyproj.transform(latlng_proj, merc_proj, x, y)
+
+
+def reproject_mercator_to_lnglat(x, y, *unused_coords):
+    return pyproj.transform(merc_proj, latlng_proj, x, y)
 
 
 # mercator <-> point conversions ported from tilestache

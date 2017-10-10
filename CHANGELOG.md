@@ -1,6 +1,23 @@
 CHANGELOG
 =========
 
+v1.9.0
+------
+* Add additional postgres support to toi (tiles-of-interest) gardening. See [#204](https://github.com/tilezen/tilequeue/pull/204).
+* Add default toi-prune cfg to fix test failures. See [#215](https://github.com/tilezen/tilequeue/pull/215).
+* Reduce default queue buffer size. See [#214](https://github.com/tilezen/tilequeue/pull/214).
+* Remove temporary Redis TOI dump command. See [#196](https://github.com/tilezen/tilequeue/pull/196).
+
+v1.8.0
+------
+* Move TOI from redis to s3.
+* Support reading immortal tiles from s3.
+* Split up process_coord into process and format.
+* Create a TOI set on seed if file toi-set doesn’t exist.
+* Add fix when metatiles are disabled.
+* Support single file for intersect command.
+* Add only valid zoom levels to TOI.
+
 v1.7.0
 ------
 * **New features:**
