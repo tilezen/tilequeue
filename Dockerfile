@@ -12,7 +12,7 @@ RUN mkdir -p /usr/src/vector-datasource \
 
 COPY . /usr/src/app
 RUN pip install --no-cache-dir -r requirements.txt \
- && pip install -e . \
- && pip install -e ../vector-datasource
+ && pip install --no-cache-dir -e . \
+ && pip install --no-cache-dir -e ../vector-datasource
 
 CMD [ "tilequeue", "process", "--config", "./config.yaml"]
