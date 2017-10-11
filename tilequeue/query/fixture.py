@@ -7,6 +7,7 @@ from tilequeue.query.common import layer_properties
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from collections import defaultdict
+from contextlib import contextmanager
 
 
 class OsmFixtureLookup(object):
@@ -131,6 +132,12 @@ class DataFetcher(object):
         self.rels = rels
         self.label_placement_layers = label_placement_layers
         self.osm = OsmFixtureLookup(self.rows, self.rels)
+
+    @contextmanager
+    def start(self, top_coord):
+        # fixture data fetcher doesn't need this kind of session management,
+        # so we can just return the same object for all uses.
+        yield self
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []

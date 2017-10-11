@@ -1,4 +1,5 @@
 from collections import namedtuple, defaultdict
+from contextlib import contextmanager
 from shapely.geometry import box
 from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
@@ -414,7 +415,7 @@ class _LayersIndex(object):
         return self.tile_index.get(tile, [])
 
 
-class DataFetcher(object):
+class RawrTile(object):
 
     def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
                  source):
@@ -561,9 +562,33 @@ class DataFetcher(object):
         return read_rows
 
 
+class DataFetcher(object):
+
+    def __init__(self, min_z, max_z, storage, layers, source,
+                 label_placement_layers):
+        self.min_z = min_z
+        self.max_z = max_z
+        self.storage = storage
+        self.layers = layers
+        self.source = source
+        self.label_placement_layers = label_placement_layers
+
+    @contextmanager
+    def start(self, top_coord):
+        tile_pyramid = TilePyramid(
+            int(top_coord.zoom), int(top_coord.column), int(top_coord.row),
+            self.max_z)
+
+        with self.storage(tile_pyramid) as tables:
+            fetcher = RawrTile(self.layers, tables, tile_pyramid,
+                               self.label_placement_layers, self.source)
+
+            yield fetcher
+
+
 # tables is a callable which should return a generator over the rows of the
 # table when called with the table name.
-def make_rawr_data_fetcher(layers, tables, tile_pyramid, source,
+def make_rawr_data_fetcher(min_z, max_z, storage, layers, source,
                            label_placement_layers={}):
-    return DataFetcher(layers, tables, tile_pyramid, label_placement_layers,
-                       source)
+    return DataFetcher(min_z, max_z, storage, layers, source,
+                       label_placement_layers)

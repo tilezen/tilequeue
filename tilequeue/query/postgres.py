@@ -1,4 +1,5 @@
 from collections import namedtuple
+from contextlib import contextmanager
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from psycopg2.extras import RealDictCursor
@@ -167,6 +168,12 @@ class DataFetcher(object):
         self.dbnames_query_index = 0
         self.sql_conn_pool = DBConnectionPool(
             self.dbnames, self.conn_info)
+
+    @contextmanager
+    def start(self, top_coord):
+        # postgres data fetcher doesn't need this kind of session management,
+        # so we can just return the same object for all uses.
+        yield self
 
     def __call__(self, zoom, unpadded_bounds):
         queries = self.queries_generator(zoom, unpadded_bounds)
