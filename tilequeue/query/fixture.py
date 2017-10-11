@@ -133,11 +133,11 @@ class DataFetcher(object):
         self.label_placement_layers = label_placement_layers
         self.osm = OsmFixtureLookup(self.rows, self.rels)
 
-    @contextmanager
-    def start(self, top_coord):
+    def start(self, coords):
         # fixture data fetcher doesn't need this kind of session management,
         # so we can just return the same object for all uses.
-        yield self
+        for coord in coords:
+            yield self
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []

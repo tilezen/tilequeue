@@ -9,8 +9,8 @@ from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
-from tilequeue.utils import CoordsByParent
 from tilequeue.metatile import make_metatiles
+from tilequeue.metatile import common_parent
 import logging
 import Queue
 import signal
@@ -57,6 +57,11 @@ class OutputQueue(object):
         watching for a signal to stop. If the data is too large to send, then
         trap the MemoryError and exit the program.
 
+        Note that `coord` may be a Coordinate instance or a string. It is only
+        used for printing out a message if there's a MemoryError, so for
+        requests which have no meaningful single coordinate, something else
+        can be used.
+
         Returns True if the "stop signal" has been set and the thread should
         shut down. False if normal operations should continue.
         """
@@ -68,9 +73,14 @@ class OutputQueue(object):
 
         except MemoryError:
             stacktrace = format_stacktrace_one_line()
+            # more compact and human readable than the default str on a
+            # Coordinate.
+            if isinstance(coord, Coordinate):
+                coord = serialize_coord(coord)
+
             self.logger.error(
                 "MemoryError while sending %s to the queue. Stacktrace: %s" %
-                (serialize_coord(coord), stacktrace))
+                (coord, stacktrace))
             # memory error might not leave the malloc subsystem in a usable
             # state, so better to exit the whole worker here than crash this
             # thread, which would lock up the whole worker.
@@ -132,39 +142,41 @@ class TileQueueReader(object):
                 coord_handles = self.msg_tracker.track(
                     queue_msg_handle, coords)
 
-                # group all coords by the "unit of work" zoom, i.e: z10 for
-                # RAWR tiles.
-                coords_by_parent = CoordsByParent(self.group_by_zoom)
+                all_coords_data = []
+                top_tile = None
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
                         self._reject_coord(coord, coord_handle)
                         continue
 
-                    coords_by_parent.add(coord, coord_handle)
+                    metadata = dict(
+                        timing=dict(
+                            fetch_seconds=None,
+                            process_seconds=None,
+                            s3_seconds=None,
+                            ack_seconds=None,
+                        ),
+                        coord_handle=coord_handle,
+                    )
+                    data = dict(
+                        metadata=metadata,
+                        coord=coord,
+                    )
 
-                # this means we can dispatch groups of jobs by their common
-                # parent tile, which allows DataFetcher to take advantage of
-                # any common locality.
-                for top_coord, coord_group in coords_by_parent:
-                    all_coords_data = []
-                    for coord, coord_handle in coord_group:
-                        metadata = dict(
-                            timing=dict(
-                                fetch_seconds=None,
-                                process_seconds=None,
-                                s3_seconds=None,
-                                ack_seconds=None,
-                            ),
-                            coord_handle=coord_handle,
-                        )
-                        data = dict(
-                            metadata=metadata,
-                            coord=coord,
-                        )
-                        all_coords_data.append(data)
+                    # find the parent of all the tiles. this is useful to be
+                    # able to describe the job without having to list all the
+                    # tiles.
+                    if top_tile:
+                        top_tile = common_parent(top_tile, coord)
+                    else:
+                        top_tile = coord
 
-                    if self.output(top_coord, all_coords_data):
-                        break
+                    all_coords_data.append(data)
+
+                msg = "group of %d tiles below %s" \
+                      % (len(all_coords_data), serialize_coord(top_tile))
+                if self.output(msg, all_coords_data):
+                    break
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
@@ -207,22 +219,20 @@ class DataFetch(object):
 
         while not stop.is_set():
             try:
-                msg = self.input_queue.get(timeout=timeout_seconds)
+                all_data = self.input_queue.get(timeout=timeout_seconds)
             except Queue.Empty:
                 continue
-            if msg is None:
+            if all_data is None:
                 saw_sentinel = True
                 break
 
-            top_coord, all_data = msg
+            coords = [data['coord'] for data in all_data]
+            metadatas = [data['metadata'] for data in all_data]
+            fetches = self.fetcher.start(coords)
 
-            with self.fetcher.start(top_coord) as fetch:
-                for data in all_data:
-                    coord = data['coord']
-                    metadata = data['metadata']
-
-                    if self._fetch_and_output(fetch, coord, metadata, output):
-                        break
+            for fetch, coord, metadata in izip(fetches, coords, metadatas):
+                if self._fetch_and_output(fetch, coord, metadata, output):
+                    break
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)

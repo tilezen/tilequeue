@@ -58,7 +58,7 @@ def make_multi_metatile(parent, tiles, date_time=None):
                  layer=layer)]
 
 
-def _common_parent(a, b):
+def common_parent(a, b):
     """
     Find the common parent tile of both a and b. The common parent is the tile
     at the highest zoom which both a and b can be transformed into by lowering
@@ -89,7 +89,7 @@ def _parent_tile(tiles):
             parent = t
 
         else:
-            parent = _common_parent(parent, t)
+            parent = common_parent(parent, t)
 
     return parent
 

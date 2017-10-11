@@ -169,11 +169,11 @@ class DataFetcher(object):
         self.sql_conn_pool = DBConnectionPool(
             self.dbnames, self.conn_info)
 
-    @contextmanager
-    def start(self, top_coord):
+    def start(self, coords):
         # postgres data fetcher doesn't need this kind of session management,
         # so we can just return the same object for all uses.
-        yield self
+        for coord in coords:
+            yield self
 
     def __call__(self, zoom, unpadded_bounds):
         queries = self.queries_generator(zoom, unpadded_bounds)

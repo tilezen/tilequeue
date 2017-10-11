@@ -1,5 +1,4 @@
 from collections import namedtuple, defaultdict
-from contextlib import contextmanager
 from shapely.geometry import box
 from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
@@ -9,6 +8,7 @@ from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.transform import calculate_padded_bounds
+from tilequeue.utils import CoordsByParent
 from raw_tiles.tile import shape_tile_coverage
 from math import floor
 from enum import Enum
@@ -573,17 +573,27 @@ class DataFetcher(object):
         self.source = source
         self.label_placement_layers = label_placement_layers
 
-    @contextmanager
-    def start(self, top_coord):
-        tile_pyramid = TilePyramid(
-            int(top_coord.zoom), int(top_coord.column), int(top_coord.row),
-            self.max_z)
+    def start(self, coords):
+        # group all coords by the "unit of work" zoom, i.e: z10 for
+        # RAWR tiles.
+        coords_by_parent = CoordsByParent(self.min_z)
+        for coord in coords:
+            coords_by_parent.add(coord)
 
-        with self.storage(tile_pyramid) as tables:
-            fetcher = RawrTile(self.layers, tables, tile_pyramid,
-                               self.label_placement_layers, self.source)
+        # this means we can dispatch groups of jobs by their common parent
+        # tile, which allows DataFetcher to take advantage of any common
+        # locality.
+        for top_coord, coord_group in coords_by_parent:
+            tile_pyramid = TilePyramid(
+                self.min_z, int(top_coord.column), int(top_coord.row),
+                self.max_z)
 
-            yield fetcher
+            with self.storage(tile_pyramid) as tables:
+                fetcher = RawrTile(self.layers, tables, tile_pyramid,
+                                   self.label_placement_layers, self.source)
+
+                for coord in coord_group:
+                    yield fetcher
 
 
 # tables is a callable which should return a generator over the rows of the
