@@ -98,14 +98,6 @@ tiles:
     # be set to false to save memory
     unique: true
 
-  intersect:
-    # path to file that contains expired tile coordinates
-    # or directory where expired tile coordinates files are generated  
-    expired-location: <path/to/expired/tiles/list>
-    # the lowest zoom level to consider when enqueueing tiles to
-    # process on update
-    parent-zoom-until: 11
-
   # zoom where tile content stops changing
   max-zoom-with-changes: 16
 
