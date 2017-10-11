@@ -1442,12 +1442,27 @@ def tilequeue_tile_sizes(cfg, peripherals):
 
 
 def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
+    from tilequeue.rawr import make_rawr_enqueuer
     from tilequeue.wof import make_wof_model
     from tilequeue.wof import make_wof_url_neighbourhood_fetcher
     from tilequeue.wof import make_wof_processor
 
     wof_cfg = cfg.wof
     assert wof_cfg, 'Missing wof config'
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
     logger = make_logger(cfg, 'wof_process_neighbourhoods')
     logger.info('WOF process neighbourhoods run started')
@@ -1464,11 +1479,11 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     )
     model = make_wof_model(wof_cfg['postgresql'])
 
-    n_enqueue_threads = 20
     current_date = datetime.date.today()
+    rawr_enqueuer = make_rawr_enqueuer(
+            rawr_queue, msg_marshaller, group_by_zoom, logger)
     processor = make_wof_processor(
-        fetcher, model, peripherals.toi, peripherals.queue_writer,
-        n_enqueue_threads, logger, current_date)
+        fetcher, model, peripherals.toi, rawr_enqueuer, logger, current_date)
 
     logger.info('Processing ...')
     processor()
@@ -1759,12 +1774,13 @@ def tilequeue_rawr_enqueue(cfg, args):
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    from tilequeue.rawr import process_expiry
     logger = make_logger(cfg, 'rawr_expiry')
+    from tilequeue.rawr import make_rawr_enqueuer
+    rawr_enqueuer = make_rawr_enqueuer(
+        rawr_queue, msg_marshaller, group_by_zoom, logger)
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
-        process_expiry(
-            rawr_queue, msg_marshaller, group_by_zoom, coords, logger)
+        rawr_enqueuer(coords)
 
 
 def tilequeue_rawr_process(cfg, peripherals):

@@ -898,12 +898,12 @@ def log_failure(logger, failure):
 class WofProcessor(object):
 
     def __init__(self, fetcher, model, redis_cache_index, intersector,
-                 queue_writer, logger, current_date):
+                 rawr_enqueuer, logger, current_date):
         self.fetcher = fetcher
         self.model = model
         self.redis_cache_index = redis_cache_index
         self.intersector = intersector
-        self.queue_writer = queue_writer
+        self.rawr_enqueuer = rawr_enqueuer
         self.logger = logger
         self.zoom_expiry = 16
         self.zoom_until = 11
@@ -1183,7 +1183,7 @@ class WofProcessor(object):
         if coords:
             self.logger.info('Asking enqueuer to enqueue %d coords ...' %
                              len(coords))
-            self.queue_writer.write_batch(coords)
+            self.rawr_enqueuer(coords)
             self.logger.info('Asking enqueuer to enqueue %d coords ... done' %
                              len(coords))
         else:
@@ -1253,12 +1253,12 @@ def make_wof_model(postgresql_conn_info):
 
 
 def make_wof_processor(
-        fetcher, model, redis_cache_index, queue_writer, n_threads, logger,
+        fetcher, model, redis_cache_index, rawr_enqueuer, logger,
         current_date):
     from tilequeue.command import explode_and_intersect
     wof_processor = WofProcessor(
         fetcher, model, redis_cache_index, explode_and_intersect,
-        queue_writer, logger, current_date)
+        rawr_enqueuer, logger, current_date)
     return wof_processor
 
 
