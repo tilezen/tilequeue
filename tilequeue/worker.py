@@ -1,5 +1,6 @@
 from itertools import izip
 from operator import attrgetter
+from ModestMaps.Core import Coordinate
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord

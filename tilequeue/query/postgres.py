@@ -1,5 +1,4 @@
 from collections import namedtuple
-from contextlib import contextmanager
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from psycopg2.extras import RealDictCursor
