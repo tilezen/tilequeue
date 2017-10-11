@@ -83,34 +83,42 @@ class SqsQueue(object):
         )
 
 
-def process_expiry(rawr_queue, msg_marshaller, group_by_zoom, coords,
-                   logger=None):
+class RawrEnqueuer(object):
     """enqueue coords from expiry grouped by parent zoom"""
-    grouped_by_zoom = defaultdict(list)
-    for coord in coords:
-        assert group_by_zoom <= coord.zoom
-        parent = coord.zoomTo(group_by_zoom).container()
-        parent_coord_int = coord_marshall_int(parent)
-        grouped_by_zoom[parent_coord_int].append(coord)
 
-    n_coords = 0
-    payloads = []
-    for _, coords in grouped_by_zoom.iteritems():
-        payload = msg_marshaller.marshall(coords)
-        payloads.append(payload)
-        n_coords += len(coords)
-    n_payloads = len(payloads)
+    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger):
+        self.rawr_queue = rawr_queue
+        self.msg_marshaller = msg_marshaller
+        self.group_by_zoom = group_by_zoom
+        self.logger = logger
 
-    rawr_queue_batch_size = 10
-    n_msgs_sent = 0
-    for payloads_chunk in grouper(payloads, rawr_queue_batch_size):
-        rawr_queue.send(payloads_chunk)
-        n_msgs_sent += 1
+    def __call__(self, coords):
+        grouped_by_zoom = defaultdict(list)
+        for coord in coords:
+            assert self.group_by_zoom <= coord.zoom
+            parent = coord.zoomTo(self.group_by_zoom).container()
+            parent_coord_int = coord_marshall_int(parent)
+            grouped_by_zoom[parent_coord_int].append(coord)
 
-    if logger:
-        logger.info(
-            'Expiry processed: coords(%d) payloads(%d) enqueue-calls(%d))' %
-            (n_coords, n_payloads, n_msgs_sent))
+        n_coords = 0
+        payloads = []
+        for _, coords in grouped_by_zoom.iteritems():
+            payload = self.msg_marshaller.marshall(coords)
+            payloads.append(payload)
+            n_coords += len(coords)
+        n_payloads = len(payloads)
+
+        rawr_queue_batch_size = 10
+        n_msgs_sent = 0
+        for payloads_chunk in grouper(payloads, rawr_queue_batch_size):
+            self.rawr_queue.send(payloads_chunk)
+            n_msgs_sent += 1
+
+        if self.logger:
+            self.logger.info(
+                'Expiry processed: '
+                'coords(%d) payloads(%d) enqueue-calls(%d))' %
+                (n_coords, n_payloads, n_msgs_sent))
 
 
 def common_parent(coords, parent_zoom):
@@ -305,6 +313,10 @@ def make_rawr_s3_path(tile, prefix, suffix):
     path_hash = calc_hash(path_to_hash)
     path_with_hash = '%s/%s/%s' % (prefix, path_hash, path_to_hash)
     return path_with_hash
+
+
+def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger):
+    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger)
 
 
 class RawrS3Sink(object):
