@@ -435,82 +435,6 @@ def coord_ints_from_paths(paths):
     return result
 
 
-def tilequeue_intersect(cfg, peripherals):
-    logger = make_logger(cfg, 'intersect')
-    logger.info("Intersecting expired tiles with tiles of interest")
-
-    assert cfg.intersect_expired_tiles_location, \
-        'Missing tiles expired-location configuration'
-    assert os.path.exists(cfg.intersect_expired_tiles_location), \
-        'tiles expired-location does not exist'
-
-    if os.path.isdir(cfg.intersect_expired_tiles_location):
-        file_names = os.listdir(cfg.intersect_expired_tiles_location)
-        if not file_names:
-            logger.info('No expired tiles found, terminating.')
-            return
-        file_names.sort()
-        # cap the total number of files that we process in one shot
-        # this will limit memory usage, as well as keep progress moving
-        # along more consistently rather than bursts
-        expired_tile_files_cap = 20
-        file_names = file_names[:expired_tile_files_cap]
-        expired_tile_paths = \
-            [os.path.join(cfg.intersect_expired_tiles_location, x)
-             for x in file_names]
-    else:
-        expired_tile_paths = [cfg.intersect_expired_tiles_location]
-
-    logger.info('Fetching tiles of interest ...')
-    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
-    logger.info('Fetching tiles of interest ... done')
-
-    logger.info('Will process %d expired tile files.'
-                % len(expired_tile_paths))
-
-    # This will store all coords from all paths as integers in a
-    # set. A set is used because if the same tile has been expired in
-    # more than one file, we only process it once
-    coord_ints_path_result = coord_ints_from_paths(expired_tile_paths)
-    all_coord_ints_set = coord_ints_path_result['coord_set']
-    logger.info('Unique expired tiles read to process: %d' %
-                len(all_coord_ints_set))
-
-    # determine the list of coordinates we would want to enqueue
-    coord_ints, intersect_metrics = explode_and_intersect(
-        all_coord_ints_set, tiles_of_interest, until=cfg.intersect_zoom_until)
-    coords = map(coord_unmarshall_int, coord_ints)
-
-    # clamp number of threads between 5 and 20
-    queue_writer = peripherals.queue_writer
-    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
-
-    # print counts per file
-    for path, count in coord_ints_path_result['path_counts']:
-        logger.info('Path count: %s %d' % (path, count))
-
-    # print metrics across intersection
-    logger.info(
-        'Intersect metrics: toi(%d) - candidates(%d) - hits(%d) - misses(%d)'
-        ' - enqueued(%d) - in-flight(%d) - expiry-tiles(%d)' %
-        (len(tiles_of_interest),
-         intersect_metrics['total'],
-         intersect_metrics['hits'],
-         intersect_metrics['misses'],
-         n_queued,
-         n_in_flight,
-         len(all_coord_ints_set),
-         ))
-
-    # print and remove expiry files
-    for expired_tile_path in expired_tile_paths:
-        logger.info('Processing complete: %s' % expired_tile_path)
-        os.remove(expired_tile_path)
-        logger.info('Removed: %s' % expired_tile_path)
-
-    logger.info('Intersection complete.')
-
-
 def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
@@ -1867,7 +1791,6 @@ def tilequeue_main(argv_args=None):
         ('process', tilequeue_process),
         ('seed', tilequeue_seed),
         ('drain', tilequeue_drain),
-        ('intersect', tilequeue_intersect),
         ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
         ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
         ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
