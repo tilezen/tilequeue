@@ -1,5 +1,5 @@
 [loggers]
-keys=root,process,seed,intersect,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic,tile_status,stuck_tiles,delete_stuck_tiles,rawr_expiry,rawr_process
+keys=root,process,seed,drain,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic,tile_status,stuck_tiles,delete_stuck_tiles,rawr_enqueue,rawr_process
 
 [handlers]
 keys=consoleHandler
@@ -47,12 +47,6 @@ handlers=consoleHandler
 qualName=seed
 propagate=0
 
-[logger_intersect]
-level=INFO
-handlers=consoleHandler
-qualName=intersect
-propagate=0
-
 [logger_drain]
 level=INFO
 handlers=consoleHandler
@@ -95,10 +89,10 @@ handlers=consoleHandler
 qualName=delete_stuck_tiles
 propagate=0
 
-[logger_rawr_expiry]
+[logger_rawr_enqueue]
 level=INFO
 handlers=consoleHandler
-qualName=rawr_expiry
+qualName=rawr_enqueue
 propagate=0
 
 [logger_rawr_process]

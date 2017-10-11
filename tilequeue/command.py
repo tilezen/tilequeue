@@ -1698,7 +1698,7 @@ def tilequeue_rawr_enqueue(cfg, args):
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    logger = make_logger(cfg, 'rawr_expiry')
+    logger = make_logger(cfg, 'rawr_enqueue')
     from tilequeue.rawr import make_rawr_enqueuer
     rawr_enqueuer = make_rawr_enqueuer(
         rawr_queue, msg_marshaller, group_by_zoom, logger)
