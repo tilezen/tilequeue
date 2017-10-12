@@ -2,6 +2,7 @@ from botocore.exceptions import ClientError
 from collections import defaultdict
 from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
+from msgpack import Unpacker
 from raw_tiles.tile import Tile
 from tilequeue.command import explode_and_intersect
 from tilequeue.queue.message import MessageHandle
@@ -308,6 +309,23 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
+def unpack_rawr_zip_payload(io):
+    """unpack a zipfile and turn it into a callable "tables" object."""
+    # TODO: the io we get from S3 is streaming, so we can't seek on it, but
+    # zipfile seems to require that. should we write a temporary file rather
+    # than storing it all in memory?
+    buf = io.BytesIO(io.read())
+    zfh = zipfile.ZipFile(buf, 'r')
+
+    def get_table(table_name):
+        fh = zfh.open(table_name, 'r')
+        unpacker = Unpacker(file_like=fh)
+        for obj in unpacker:
+            yield obj
+
+    return get_table
+
+
 def make_rawr_s3_path(tile, prefix, suffix):
     path_to_hash = '%d/%d/%d%s' % (tile.z, tile.x, tile.y, suffix)
     path_hash = calc_hash(path_to_hash)
@@ -339,3 +357,31 @@ class RawrS3Sink(object):
                 ContentLength=len(payload),
                 Key=location,
         )
+
+
+class RawrS3Source(object):
+
+    """Rawr source to read from S3"""
+
+    def __init__(self, s3_client, bucket, prefix, suffix):
+        self.s3_client = s3_client
+        self.bucket = bucket
+        self.prefix = prefix
+        self.suffix = suffix
+
+    def __call__(self, tile):
+        location = make_rawr_s3_path(tile, self.prefix, self.suffix)
+
+        # TODO: i guess this throws an exception if the object is missing, or
+        # there's a server error. do we want to catch it, or is propagating it
+        # the right option?
+        response = self.s3_client.get_object(
+                Bucket=self.bucket,
+                Key=location,
+        )
+
+        # check that the response isn't a delete marker.
+        assert not response['DeleteMarker']
+
+        body = response['Body']
+        return unpack_rawr_zip_payload(body)
