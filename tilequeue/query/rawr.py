@@ -596,8 +596,20 @@ class DataFetcher(object):
                     yield fetcher
 
 
-# tables is a callable which should return a generator over the rows of the
-# table when called with the table name.
+# Make a RAWR tile data fetcher given:
+#
+#  - min_z:   Lowest *nominal* zoom level, e.g: z10 for a RAWR tile.
+#  - max_z:   Highest *nominal* zoom level, e.g: z16 for a RAWR tile.
+#  - storage: Callable which takes a TilePyramid as the only argument,
+#             returning a "tables" callable. The "tables" callable returns a
+#             list of rows given the table name as its only argument.
+#  - layers:  A dict of layer name to LayerInfo (see fixture.py).
+#  - source:  String indicating the source of the data (e.g: 'osm').
+#  - label_placement_layers:
+#             A dict of geometry type ('point', 'linestring', 'polygon') to
+#             set (or other in-supporting collection) of layer names.
+#             Geometries of that type in that layer will have a label
+#             placement generated for them.
 def make_rawr_data_fetcher(min_z, max_z, storage, layers, source,
                            label_placement_layers={}):
     return DataFetcher(min_z, max_z, storage, layers, source,
