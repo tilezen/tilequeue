@@ -12,7 +12,7 @@ from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
 from tilequeue.query import DBConnectionPool
-from tilequeue.query import make_db_data_fetcher
+from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
@@ -558,6 +558,7 @@ def tilequeue_process(cfg, peripherals):
 
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
+
     all_layer_data, layer_data, post_process_data = (
         parse_layer_data(
             query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
@@ -607,9 +608,7 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-    feature_fetcher = make_db_data_fetcher(
-        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
-        query_cfg, io_pool)
+    feature_fetcher = make_data_fetcher(cfg, query_cfg, io_pool)
 
     # create all queues used to manage pipeline
 
@@ -1453,9 +1452,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
     io_pool = ThreadPool(len(layer_data))
 
-    data_fetcher = make_db_data_fetcher(
-        cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
-        query_cfg, io_pool)
+    data_fetcher = make_data_fetcher(cfg, query_cfg, io_pool)
 
     unpadded_bounds = coord_to_mercator_bounds(coord)
     source_rows = data_fetcher(coord.zoom, unpadded_bounds)
