@@ -1,5 +1,4 @@
 import unittest
-from contextlib import contextmanager
 
 
 class TestGetTable(object):
@@ -21,9 +20,8 @@ class ConstantStorage(object):
     def __init__(self, tables):
         self.tables = tables
 
-    @contextmanager
     def __call__(self, top_tile):
-        yield self.tables
+        return self.tables
 
 
 class RawrTestCase(unittest.TestCase):
@@ -253,6 +251,53 @@ class TestQueryRawr(RawrTestCase):
             _rel(4, rels=[3]),
             _rel(5, rels=[2, 4]),
         ], 5)
+
+    def test_query_source(self):
+        # check that the source is added to the result properties, and that
+        # it overrides any existing source.
+
+        from shapely.geometry import Point
+        from tilequeue.query.rawr import TilePyramid
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.tile import mercator_point_to_coord
+
+        feature_min_zoom = 11
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return feature_min_zoom
+
+        shape = Point(0, 0)
+        # get_table(table_name) should return a generator of rows.
+        tables = TestGetTable({
+            'planet_osm_point': [(0, shape.wkb,
+                                  {'source': 'originalrowsource'})],
+        })
+
+        zoom = 10
+        max_zoom = zoom + 5
+        coord = mercator_point_to_coord(zoom, shape.x, shape.y)
+        tile_pyramid = TilePyramid(zoom, coord.column, coord.row, max_zoom)
+
+        fetch = self._make(min_zoom_fn, None, tables, tile_pyramid,
+                           source='testingquerysource')
+
+        # first, check that it can get the original item back when both the
+        # min zoom filter and geometry filter are okay.
+        feature_coord = mercator_point_to_coord(
+            feature_min_zoom, shape.x, shape.y)
+        for fetcher, _ in fetch.start(_wrap(coord)):
+            read_rows = fetcher(
+                feature_min_zoom, coord_to_mercator_bounds(feature_coord))
+
+        self.assertEquals(1, len(read_rows))
+        read_row = read_rows[0]
+        self.assertEquals(0, read_row.get('__id__'))
+        # query processing code expects WKB bytes in the __geometry__ column
+        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
+        self.assertEquals({'min_zoom': 11},
+                          read_row.get('__testlayer_properties__'))
+        self.assertEquals({'source': 'testingquerysource'},
+                          read_row.get('__properties__'))
 
 
 class TestLabelPlacement(RawrTestCase):

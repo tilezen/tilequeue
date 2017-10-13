@@ -124,11 +124,11 @@ def _make_layer_info(layer_data, process_yaml_cfg):
 
 
 def _parse_shape_types(inputs):
-    from tilequeue.query.common import shape_type_lookup
-
     outputs = set()
     for value in inputs:
-        outputs.add(shape_type_lookup(value))
+        if value.startswith('Multi'):
+            value = value[len('Multi'):]
+        outputs.add(value.lower())
 
     if outputs:
         return outputs
@@ -136,12 +136,23 @@ def _parse_shape_types(inputs):
         return None
 
 
+def _parse_layers(yaml_path, output_fn, make_function_name_fn):
+    from vectordatasource.meta.python import parse_layers
+
+    layer_parse_result = parse_layers(
+        yaml_path, output_fn, make_function_name_fn)
+
+    layers = {}
+    for function_data in layer_parse_result.layer_data:
+        layers[function_data.layer] = function_data.fn
+    return layers
+
+
 def _parse_yaml_functions(process_yaml_cfg):
     from vectordatasource.meta.python import make_function_name_props
     from vectordatasource.meta.python import make_function_name_min_zoom
     from vectordatasource.meta.python import output_kind
     from vectordatasource.meta.python import output_min_zoom
-    from vectordatasource.meta.python import parse_layers
     import os.path
 
     # can't handle "callable" type - how do we get the min zoom fn?
@@ -152,9 +163,9 @@ def _parse_yaml_functions(process_yaml_cfg):
 
     assert os.path.isdir(yaml_path)
 
-    output_layer_data = parse_layers(
+    output_layer_data = _parse_layers(
         yaml_path, output_kind, make_function_name_props)
-    min_zoom_layer_data = parse_layers(
+    min_zoom_layer_data = _parse_layers(
         yaml_path, output_min_zoom, make_function_name_min_zoom)
 
     keys = set(output_layer_data.keys())

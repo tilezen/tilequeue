@@ -173,8 +173,11 @@ class OsmRawrLookup(object):
     def add_way(self, way_id, nodes, tags):
         for node_id in nodes:
             if node_id in self.nodes:
-                assert way_id in self.ways
-                self._ways_using_node[node_id].append(way_id)
+                # a way might be missing here if we filtered it out because it
+                # was not interesting, e.g: not a road, station, etc... that
+                # we might need to look up later.
+                if way_id in self.ways:
+                    self._ways_using_node[node_id].append(way_id)
 
     def add_relation(self, rel_id, way_off, rel_off, parts, members, tags):
         r = Relation(rel_id, way_off, rel_off, parts, members, tags)
@@ -322,6 +325,17 @@ def _make_meta(source, fid, shape_type, osm):
         rel_dicts.append(dict(tags=tags))
 
     return _Metadata(source, ways, rel_dicts)
+
+
+_EXPANDED_SOURCES = {
+    'osm': 'openstreetmap.org',
+}
+
+
+# horrible little hack, as in some places we use source="osm" and in other
+# places use source="openstreetmap.org", and so on for other sources.
+def _expand_source(source):
+    return _EXPANDED_SOURCES.get(source, source)
 
 
 class _LayersIndex(object):
@@ -557,6 +571,10 @@ class RawrTile(object):
                     read_row['__label__'] = bytes(
                         shape.representative_point().wkb)
 
+                if self.source:
+                    source = _expand_source(self.source)
+                    read_row['__properties__'] = {'source': source}
+
                 read_rows.append(read_row)
 
         return read_rows
@@ -589,12 +607,13 @@ class DataFetcher(object):
                 self.min_z, int(top_coord.column), int(top_coord.row),
                 self.max_z)
 
-            with self.storage(tile_pyramid) as tables:
-                fetcher = RawrTile(self.layers, tables, tile_pyramid,
-                                   self.label_placement_layers, self.source)
+            tables = self.storage(tile_pyramid.tile())
 
-                for coord, data in coord_group:
-                    yield fetcher, data
+            fetcher = RawrTile(self.layers, tables, tile_pyramid,
+                               self.label_placement_layers, self.source)
+
+            for coord, data in coord_group:
+                yield fetcher, data
 
 
 # Make a RAWR tile data fetcher given:

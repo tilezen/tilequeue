@@ -256,6 +256,11 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
 def layer_properties(fid, shape, props, layer_name, zoom, osm):
     layer_props = props.copy()
 
+    # drop the 'source' tag, if it exists. we override it anyway, and it just
+    # gets confusing having multiple source tags. in the future, we may
+    # replace the whole thing with a separate 'meta' for source.
+    layer_props.pop('source', None)
+
     # need to make sure that the name is only applied to one of
     # the pois, landuse or buildings layers - in that order of
     # priority.
