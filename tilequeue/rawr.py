@@ -361,24 +361,34 @@ class RawrS3Sink(object):
 
 class RawrS3Source(object):
 
-    """Rawr source to read from S3"""
+    """Rawr source to read from S3. Uses a thread pool for I/O if provided."""
 
-    def __init__(self, s3_client, bucket, prefix, suffix):
+    def __init__(self, s3_client, bucket, prefix, suffix, io_pool=None):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
         self.suffix = suffix
+        self.io_pool = io_pool
 
-    def __call__(self, tile):
+    def _get_object(self, tile):
         location = make_rawr_s3_path(tile, self.prefix, self.suffix)
 
-        # TODO: i guess this throws an exception if the object is missing, or
-        # there's a server error. do we want to catch it, or is propagating it
-        # the right option?
         response = self.s3_client.get_object(
                 Bucket=self.bucket,
                 Key=location,
         )
+
+        return response
+
+    def __call__(self, tile):
+        # TODO: i guess this throws an exception if the object is missing, or
+        # there's a server error. do we want to catch it, or is propagating it
+        # the right option?
+        if self.io_pool:
+            response = self.thread_pool.apply(
+                self._get_object, (tile,))
+        else:
+            response = self._get_object(tile)
 
         # check that the response isn't a delete marker.
         assert not response['DeleteMarker']

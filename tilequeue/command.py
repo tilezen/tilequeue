@@ -608,7 +608,7 @@ def tilequeue_process(cfg, peripherals):
     n_max_io_workers = 50
     n_io_workers = min(n_total_needed, n_max_io_workers)
     io_pool = ThreadPool(n_io_workers)
-    feature_fetcher = make_data_fetcher(cfg, query_cfg, io_pool)
+    feature_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
     # create all queues used to manage pipeline
 
@@ -1452,7 +1452,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
     io_pool = ThreadPool(len(layer_data))
 
-    data_fetcher = make_data_fetcher(cfg, query_cfg, io_pool)
+    data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
     unpadded_bounds = coord_to_mercator_bounds(coord)
     source_rows = data_fetcher(coord.zoom, unpadded_bounds)

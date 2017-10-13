@@ -573,12 +573,13 @@ class DataFetcher(object):
         self.source = source
         self.label_placement_layers = label_placement_layers
 
-    def start(self, coords):
+    def start(self, all_data):
         # group all coords by the "unit of work" zoom, i.e: z10 for
         # RAWR tiles.
         coords_by_parent = CoordsByParent(self.min_z)
-        for coord in coords:
-            coords_by_parent.add(coord)
+        for data in all_data:
+            coord = data['coord']
+            coords_by_parent.add(coord, data)
 
         # this means we can dispatch groups of jobs by their common parent
         # tile, which allows DataFetcher to take advantage of any common
@@ -592,8 +593,8 @@ class DataFetcher(object):
                 fetcher = RawrTile(self.layers, tables, tile_pyramid,
                                    self.label_placement_layers, self.source)
 
-                for coord in coord_group:
-                    yield fetcher
+                for coord, data in coord_group:
+                    yield fetcher, data
 
 
 # Make a RAWR tile data fetcher given:

@@ -227,11 +227,9 @@ class DataFetch(object):
                 saw_sentinel = True
                 break
 
-            coords = [data['coord'] for data in all_data]
-            metadatas = [data['metadata'] for data in all_data]
-            fetches = self.fetcher.start(coords)
-
-            for fetch, coord, metadata in izip(fetches, coords, metadatas):
+            for fetch, data in self.fetcher.start(all_data):
+                metadata = data['metadata']
+                coord = data['coord']
                 if self._fetch_and_output(fetch, coord, metadata, output):
                     break
 
