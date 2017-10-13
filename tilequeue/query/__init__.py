@@ -31,6 +31,24 @@ def make_data_fetcher(cfg, layer_data, query_cfg, io_pool):
         return db_fetcher
 
 
+class _NullRawrStorage(object):
+
+    def __init__(self, source):
+        self.source = source
+
+    def __call__(self, tile):
+        # returns a "tables" object, which responds to __call__(table_name)
+        # with tuples for that table.
+        data = {}
+        for location in self.source(tile):
+            data[location.name] = location.records
+
+        def _tables(table_name):
+            return data.get(table_name, [])
+
+        return _tables
+
+
 def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
@@ -40,17 +58,35 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
 
     rawr_source_yaml = rawr_yaml.get('source')
     assert rawr_source_yaml, 'Missing rawr source config'
-    bucket = rawr_source_yaml.get('bucket')
-    assert bucket, 'Missing rawr sink bucket'
-    prefix = rawr_source_yaml.get('prefix')
-    assert prefix, 'Missing rawr sink prefix'
-    suffix = rawr_source_yaml.get('suffix')
-    assert suffix, 'Missing rawr sink suffix'
 
-    import boto3
-    from tilequeue.rawr import RawrS3Source
-    s3_client = boto3.client('s3')
-    storage = RawrS3Source(s3_client, bucket, prefix, suffix, io_pool)
+    # set this flag, and provide a postgresql subkey, to generate RAWR tiles
+    # directly, rather than trying to load them from S3. this can be useful
+    # for standalone use and testing.
+    is_s3_storage = not rawr_source_yaml.get('generate-from-scratch')
+
+    if is_s3_storage:
+        bucket = rawr_source_yaml.get('bucket')
+        assert bucket, 'Missing rawr sink bucket'
+        prefix = rawr_source_yaml.get('prefix')
+        assert prefix, 'Missing rawr sink prefix'
+        suffix = rawr_source_yaml.get('suffix')
+        assert suffix, 'Missing rawr sink suffix'
+
+        import boto3
+        from tilequeue.rawr import RawrS3Source
+        s3_client = boto3.client('s3')
+        storage = RawrS3Source(s3_client, bucket, prefix, suffix, io_pool)
+
+    else:
+        from raw_tiles.source.conn import ConnectionContextManager
+        from raw_tiles.source.osm import OsmSource
+
+        postgresql_cfg = rawr_source_yaml.get('postgresql')
+        assert postgresql_cfg, 'Missing rawr postgresql config'
+
+        conn_ctx = ConnectionContextManager(postgresql_cfg)
+        rawr_osm_source = OsmSource(conn_ctx)
+        storage = _NullRawrStorage(rawr_osm_source)
 
     # TODO: this needs to be configurable, everywhere!
     max_z = 16
