@@ -71,11 +71,14 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         assert prefix, 'Missing rawr sink prefix'
         suffix = rawr_source_yaml.get('suffix')
         assert suffix, 'Missing rawr sink suffix'
+        allow_missing_tiles = rawr_source_yaml.get(
+            'allow-missing-tiles', False)
 
         import boto3
         from tilequeue.rawr import RawrS3Source
         s3_client = boto3.client('s3')
-        storage = RawrS3Source(s3_client, bucket, prefix, suffix, io_pool)
+        storage = RawrS3Source(s3_client, bucket, prefix, suffix, io_pool,
+                               allow_missing_tiles)
 
     else:
         from raw_tiles.source.conn import ConnectionContextManager
@@ -130,43 +133,15 @@ def _parse_shape_types(inputs):
             value = value[len('Multi'):]
         outputs.add(value.lower())
 
-    if outputs:
-        return outputs
-    else:
-        return None
-
-
-def _parse_layers(yaml_path, output_fn, make_function_name_fn):
-    from vectordatasource.meta.python import parse_layers
-
-    layer_parse_result = parse_layers(
-        yaml_path, output_fn, make_function_name_fn)
-
-    layers = {}
-    for function_data in layer_parse_result.layer_data:
-        layers[function_data.layer] = function_data.fn
-    return layers
+    return outputs or None
 
 
 def _parse_yaml_functions(process_yaml_cfg):
-    from vectordatasource.meta.python import make_function_name_props
-    from vectordatasource.meta.python import make_function_name_min_zoom
-    from vectordatasource.meta.python import output_kind
-    from vectordatasource.meta.python import output_min_zoom
-    import os.path
+    from tilequeue.command import make_output_calc_mapping
+    from tilequeue.command import make_min_zoom_calc_mapping
 
-    # can't handle "callable" type - how do we get the min zoom fn?
-    assert process_yaml_cfg['type'] == 'parse'
-
-    parse_cfg = process_yaml_cfg['parse']
-    yaml_path = parse_cfg['path']
-
-    assert os.path.isdir(yaml_path)
-
-    output_layer_data = _parse_layers(
-        yaml_path, output_kind, make_function_name_props)
-    min_zoom_layer_data = _parse_layers(
-        yaml_path, output_min_zoom, make_function_name_min_zoom)
+    output_layer_data = make_output_calc_mapping(process_yaml_cfg)
+    min_zoom_layer_data = make_min_zoom_calc_mapping(process_yaml_cfg)
 
     keys = set(output_layer_data.keys())
     assert keys == set(min_zoom_layer_data.keys())

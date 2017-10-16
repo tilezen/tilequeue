@@ -549,6 +549,26 @@ def make_output_calc_mapping(process_yaml_cfg):
     return output_calc_mapping
 
 
+def make_min_zoom_calc_mapping(process_yaml_cfg):
+    # can't handle "callable" type - how do we get the min zoom fn?
+    assert process_yaml_cfg['type'] == 'parse'
+
+    min_zoom_calc_mapping = {}
+
+    parse_cfg = process_yaml_cfg['parse']
+    yaml_path = parse_cfg['path']
+    assert os.path.isdir(yaml_path), 'Invalid yaml path: %s' % yaml_path
+    from vectordatasource.meta.python import make_function_name_min_zoom
+    from vectordatasource.meta.python import output_min_zoom
+    from vectordatasource.meta.python import parse_layers
+    layer_parse_result = parse_layers(
+        yaml_path, output_min_zoom, make_function_name_min_zoom)
+    for layer_datum in layer_parse_result.layer_data:
+        min_zoom_calc_mapping[layer_datum.layer] = layer_datum.fn
+
+    return min_zoom_calc_mapping
+
+
 def tilequeue_process(cfg, peripherals):
     logger = make_logger(cfg, 'process')
     logger.warn('tilequeue processing started')
