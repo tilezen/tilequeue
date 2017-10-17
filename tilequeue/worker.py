@@ -1,7 +1,11 @@
+from collections import namedtuple
 from itertools import izip
 from operator import attrgetter
-from ModestMaps.Core import Coordinate
 from psycopg2.extensions import TransactionRollbackError
+from tilequeue.log import LogCategory
+from tilequeue.log import LogLevel
+from tilequeue.metatile import common_parent
+from tilequeue.metatile import make_metatiles
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
 from tilequeue.queue.message import QueueMessageHandle
@@ -10,9 +14,6 @@ from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
-from tilequeue.metatile import make_metatiles
-from tilequeue.metatile import common_parent
-import logging
 import Queue
 import signal
 import sys
@@ -48,8 +49,9 @@ def _force_empty_queue(q):
 # so that we can simultaneously check for the "stop" signal when it's time
 # to shut down.
 class OutputQueue(object):
-    def __init__(self, output_queue, stop):
+    def __init__(self, output_queue, tile_proc_logger, stop):
         self.output_queue = output_queue
+        self.tile_proc_logger = tile_proc_logger
         self.stop = stop
 
     def __call__(self, coord, data):
@@ -72,16 +74,10 @@ class OutputQueue(object):
                 if self.stop.is_set():
                     return True
 
-        except MemoryError:
+        except MemoryError as e:
             stacktrace = format_stacktrace_one_line()
-            # more compact and human readable than the default str on a
-            # Coordinate.
-            if isinstance(coord, Coordinate):
-                coord = serialize_coord(coord)
-
-            self.logger.error(
-                "MemoryError while sending %s to the queue. Stacktrace: %s" %
-                (coord, stacktrace))
+            self.tile_proc_logger.error(
+                'MemoryError sending to queue', e, stacktrace, coord)
             # memory error might not leave the malloc subsystem in a usable
             # state, so better to exit the whole worker here than crash this
             # thread, which would lock up the whole worker.
@@ -111,12 +107,12 @@ class TileQueueReader(object):
 
     def __init__(
             self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
-            logger, stop, max_zoom):
+            tile_proc_logger, stop, max_zoom):
         self.queue_mapper = queue_mapper
         self.msg_marshaller = msg_marshaller
         self.msg_tracker = msg_tracker
-        self.output = OutputQueue(output_queue, stop)
-        self.logger = logger
+        self.output = OutputQueue(output_queue, tile_proc_logger, stop)
+        self.tile_proc_logger = tile_proc_logger
         self.stop = stop
         self.max_zoom = max_zoom
 
@@ -126,9 +122,10 @@ class TileQueueReader(object):
                     self.queue_mapper.queues_in_priority_order()):
                 try:
                     msg_handles = tile_queue.read()
-                except:
+                except Exception as e:
                     stacktrace = format_stacktrace_one_line()
-                    self.logger.error(stacktrace)
+                    self.tile_proc_logger.error(
+                        'Queue read error', e, stacktrace)
                     continue
                 if msg_handles:
                     break
@@ -181,42 +178,49 @@ class TileQueueReader(object):
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
-        self.logger.debug('tile queue reader stopped')
+        self.tile_proc_logger.lifecycle('tile queue reader stopped')
 
     def _reject_coord(self, coord, coord_handle):
-        self.logger.log(
-            logging.WARNING,
-            'Job coordinates above max zoom are not supported, skipping '
-            '%r > %d' % (coord, self.max_zoom))
+        self.tile_proc_logger.log(
+            LogLevel.WARNING,
+            LogCategory.PROCESS,
+            'Job coordinates above max zoom are not '
+            'supported, skipping %d > %d' % (
+                coord.zoom, self.max_zoom),
+            None,  # exception
+            None,  # stacktrace
+            coord,
+        )
 
-        # delete jobs that we can't handle from the queue, otherwise we'll get
-        # stuck in a cycle of timed-out jobs being re-added to the queue until
-        # they overflow max-retries.
+        # delete jobs that we can't handle from the
+        # queue, otherwise we'll get stuck in a cycle
+        # of timed-out jobs being re-added to the
+        # queue until they overflow max-retries.
         try:
             self.msg_tracker.done(coord_handle)
-        except:
+        except Exception as e:
             stacktrace = format_stacktrace_one_line()
-            self.logger.error(
-                'Error acknowledging: %s - %s' % (serialize_coord(coord),
-                                                  stacktrace))
+            self.tile_proc_logger.error(
+                'Acknowledge error for coord above max zoom',
+                e, stacktrace, coord)
 
 
 class DataFetch(object):
 
     def __init__(
             self, fetcher, input_queue, output_queue, io_pool,
-            logger, metatile_zoom, max_zoom):
+            tile_proc_logger, metatile_zoom, max_zoom):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
-        self.logger = logger
+        self.tile_proc_logger = tile_proc_logger
         self.metatile_zoom = metatile_zoom
         self.max_zoom = max_zoom
 
     def __call__(self, stop):
         saw_sentinel = False
-        output = OutputQueue(self.output_queue, stop)
+        output = OutputQueue(self.output_queue, self.tile_proc_logger, stop)
 
         while not stop.is_set():
             try:
@@ -235,7 +239,8 @@ class DataFetch(object):
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('data fetch stopped')
+
+        self.tile_proc_logger.lifecycle('data fetch stopped')
 
     def _fetch_and_output(self, fetch, coord, metadata, output):
         try:
@@ -244,16 +249,15 @@ class DataFetch(object):
             if output(coord, data):
                 return True
 
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            stacktrace = format_stacktrace_one_line(
-                (exc_type, exc_value, exc_traceback))
-            if isinstance(exc_value, TransactionRollbackError):
-                log_level = logging.WARNING
+        except Exception as e:
+            stacktrace = format_stacktrace_one_line()
+            if isinstance(e, TransactionRollbackError):
+                log_level = LogLevel.WARNING
             else:
-                log_level = logging.ERROR
-            self.logger.log(log_level, 'Error fetching: %s - %s' % (
-                serialize_coord(coord), stacktrace))
+                log_level = LogLevel.ERROR
+            self.tile_proc_logger.log(
+                log_level, LogCategory.PROCESS, 'Fetch error',
+                e, stacktrace, coord)
 
         return False
 
@@ -291,7 +295,7 @@ class ProcessAndFormatData(object):
 
     def __init__(self, post_process_data, formats, input_queue,
                  output_queue, buffer_cfg, output_calc_mapping, layer_data,
-                 logger):
+                 tile_proc_logger):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
@@ -300,13 +304,13 @@ class ProcessAndFormatData(object):
         self.buffer_cfg = buffer_cfg
         self.output_calc_mapping = output_calc_mapping
         self.layer_data = layer_data
-        self.logger = logger
+        self.tile_proc_logger = tile_proc_logger
 
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        output = OutputQueue(self.output_queue, stop)
+        output = OutputQueue(self.output_queue, self.tile_proc_logger, stop)
 
         saw_sentinel = False
         while not stop.is_set():
@@ -334,10 +338,10 @@ class ProcessAndFormatData(object):
                     coord, nominal_zoom, feature_layers,
                     self.post_process_data, self.formats, unpadded_bounds,
                     cut_coords, self.buffer_cfg, self.output_calc_mapping)
-            except:
+            except Exception as e:
                 stacktrace = format_stacktrace_one_line()
-                self.logger.error('Error processing: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
+                self.tile_proc_logger.error(
+                    'Processing error', e, stacktrace, coord)
                 continue
 
             metadata = data['metadata']
@@ -355,24 +359,25 @@ class ProcessAndFormatData(object):
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('processor stopped')
+        self.tile_proc_logger.lifecycle('processor stopped')
 
 
 class S3Storage(object):
 
-    def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 metatile_size):
+    def __init__(self, input_queue, output_queue, io_pool, store,
+                 tile_proc_logger, metatile_size):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
-        self.logger = logger
+        self.tile_proc_logger = tile_proc_logger
         self.metatile_size = metatile_size
 
     def __call__(self, stop):
         saw_sentinel = False
 
-        queue_output = OutputQueue(self.output_queue, stop)
+        queue_output = OutputQueue(
+            self.output_queue, self.tile_proc_logger, stop)
 
         while not stop.is_set():
             try:
@@ -389,15 +394,15 @@ class S3Storage(object):
             try:
                 async_jobs = self.save_tiles(data['formatted_tiles'])
 
-            except:
+            except Exception as e:
                 # cannot propagate this error - it crashes the thread and
                 # blocks up the whole queue!
-                stacktrace = format_stacktrace_one_line(sys.exc_info())
-                self.logger.error('Error saving tiles: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
+                stacktrace = format_stacktrace_one_line()
+                self.tile_proc_logger.error('Save error', e, stacktrace, coord)
                 continue
 
             async_exc_info = None
+            e = None
             n_stored = 0
             n_not_stored = 0
             for async_job in async_jobs:
@@ -407,7 +412,7 @@ class S3Storage(object):
                         n_stored += 1
                     else:
                         n_not_stored += 1
-                except:
+                except Exception as e:
                     # it's important to wait for all async jobs to
                     # complete but we just keep a reference to the last
                     # exception it's unlikely that we would receive multiple
@@ -416,8 +421,8 @@ class S3Storage(object):
 
             if async_exc_info:
                 stacktrace = format_stacktrace_one_line(async_exc_info)
-                self.logger.error('Error storing: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
+                self.tile_proc_logger.error(
+                    'Store error', e, stacktrace, coord)
                 continue
 
             metadata = data['metadata']
@@ -437,7 +442,7 @@ class S3Storage(object):
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('s3 storage stopped')
+        self.tile_proc_logger.lifecycle('s3 storage stopped')
 
     def save_tiles(self, tiles):
         async_jobs = []
@@ -463,16 +468,22 @@ class S3Storage(object):
         return async_jobs
 
 
+CoordProcessData = namedtuple(
+    'CoordProcessData',
+    ('coord', 'timing', 'size', 'store_info',),
+)
+
+
 class TileQueueWriter(object):
 
     def __init__(
-            self, queue_mapper, input_queue, inflight_mgr, msg_tracker, logger,
-            stop):
+            self, queue_mapper, input_queue, inflight_mgr, msg_tracker,
+            tile_proc_logger, stop):
         self.queue_mapper = queue_mapper
         self.input_queue = input_queue
         self.inflight_mgr = inflight_mgr
         self.msg_tracker = msg_tracker
-        self.logger = logger
+        self.tile_proc_logger = tile_proc_logger
         self.stop = stop
 
     def __call__(self):
@@ -491,6 +502,15 @@ class TileQueueWriter(object):
             coord = data['coord']
 
             start = time.time()
+
+            try:
+                self.inflight_mgr.unmark_inflight(coord)
+            except Exception as e:
+                stacktrace = format_stacktrace_one_line()
+                self.tile_proc_logger.error(
+                    'Unmarking in-flight error', e, coord, stacktrace)
+                continue
+
             try:
                 queue_msg_handle, done = self.msg_tracker.done(coord_handle)
                 msg_handle = queue_msg_handle.msg_handle
@@ -500,18 +520,10 @@ class TileQueueWriter(object):
                     assert tile_queue, \
                         'Missing tile_queue: %s' % queue_msg_handle.queue_id
                     tile_queue.job_done(msg_handle)
-            except:
+            except Exception as e:
                 stacktrace = format_stacktrace_one_line()
-                self.logger.error('Error acknowledging: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
-                continue
-
-            try:
-                self.inflight_mgr.unmark_inflight(coord)
-            except:
-                stacktrace = format_stacktrace_one_line()
-                self.logger.error('Error unmarking in flight: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
+                self.tile_proc_logger.error(
+                    'Acknowledgment error', e, coord, stacktrace)
                 continue
 
             timing = metadata['timing']
@@ -525,45 +537,33 @@ class TileQueueWriter(object):
                 if tile_timestamp_millis is not None:
                     tile_timestamp_seconds = tile_timestamp_millis / 1000.0
                     time_in_queue = now - tile_timestamp_seconds
+            timing['queue'] = time_in_queue
 
             layers = metadata['layers']
             size = layers['size']
-            size_as_str = repr(size)
+            # size_as_str = repr(size)
 
             store_info = metadata['store']
 
-            self.logger.info(
-                '%s '
-                'data(%.2fs) '
-                'proc(%.2fs) '
-                's3(%.2fs) '
-                'ack(%.2fs) '
-                'time(%.2fs) '
-                'size(%s) '
-                'stored(%s) '
-                'not_stored(%s)' % (
-                    serialize_coord(coord),
-                    timing['fetch_seconds'],
-                    timing['process_seconds'],
-                    timing['s3_seconds'],
-                    timing['ack_seconds'],
-                    time_in_queue,
-                    size_as_str,
-                    store_info['stored'],
-                    store_info['not_stored'],
-                ))
+            coord_proc_data = CoordProcessData(
+                coord,
+                timing,
+                size,
+                store_info,
+            )
+            self.tile_proc_logger.log_processed_coord(coord_proc_data)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
-        self.logger.debug('tile queue writer stopped')
+        self.tile_proc_logger.lifecycle('tile queue writer stopped')
 
 
 class QueuePrint(object):
 
-    def __init__(self, interval_seconds, queue_info, logger, stop):
+    def __init__(self, interval_seconds, queue_info, tile_proc_logger, stop):
         self.interval_seconds = interval_seconds
         self.queue_info = queue_info
-        self.logger = logger
+        self.tile_proc_logger = tile_proc_logger
         self.stop = stop
 
     def __call__(self):
@@ -582,15 +582,6 @@ class QueuePrint(object):
             if self.stop.is_set():
                 break
 
-            self.logger.info('')
-            for queue, queue_name in self.queue_info:
-                self.logger.info(
-                    '%s %d %s%s' % (
-                        queue_name,
-                        queue.qsize(),
-                        'empty ' if queue.empty() else '',
-                        'full' if queue.full() else '',
-                    ))
-            self.logger.info('')
+            self.tile_proc_logger.log_queue_sizes(self.queue_info)
 
-        self.logger.debug('queue printer stopped')
+        self.tile_proc_logger.lifecycle('queue printer stopped')

@@ -570,8 +570,10 @@ def make_min_zoom_calc_mapping(process_yaml_cfg):
 
 
 def tilequeue_process(cfg, peripherals):
+    from tilequeue.log import JsonTileProcessingLogger
     logger = make_logger(cfg, 'process')
-    logger.warn('tilequeue processing started')
+    tile_proc_logger = JsonTileProcessingLogger(logger)
+    tile_proc_logger.lifecycle('tilequeue processing started')
 
     assert os.path.exists(cfg.query_cfg), \
         'Invalid query config path'
@@ -592,9 +594,10 @@ def tilequeue_process(cfg, peripherals):
     from shapely import speedups
     if speedups.available:
         speedups.enable()
-        logger.info('Shapely speedups enabled')
+        tile_proc_logger.lifecycle('Shapely speedups enabled')
     else:
-        logger.warn('Shapely speedups not enabled, they were not available')
+        tile_proc_logger.lifecycle(
+            'Shapely speedups not enabled, they were not available')
 
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
 
@@ -657,25 +660,25 @@ def tilequeue_process(cfg, peripherals):
     msg_marshaller = peripherals.msg_marshaller
     msg_tracker = peripherals.msg_tracker
     tile_queue_reader = TileQueueReader(
-        queue_mapper, msg_marshaller, msg_tracker, tile_input_queue, logger,
-        thread_tile_queue_reader_stop, cfg.max_zoom
+        queue_mapper, msg_marshaller, msg_tracker, tile_input_queue,
+        tile_proc_logger, thread_tile_queue_reader_stop, cfg.max_zoom
     )
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
-        logger, cfg.metatile_zoom, cfg.max_zoom)
+        tile_proc_logger, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, output_calc_mapping, layer_data, logger)
+        cfg.buffer_cfg, output_calc_mapping, layer_data, tile_proc_logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
-                           logger, cfg.metatile_size)
+                           tile_proc_logger, cfg.metatile_size)
 
     thread_tile_writer_stop = threading.Event()
     tile_queue_writer = TileQueueWriter(
         queue_mapper, s3_store_queue, peripherals.inflight_mgr,
-        peripherals.msg_tracker, logger, thread_tile_writer_stop)
+        peripherals.msg_tracker, tile_proc_logger, thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
@@ -726,7 +729,7 @@ def tilequeue_process(cfg, peripherals):
         )
         queue_printer_thread_stop = threading.Event()
         queue_printer = QueuePrint(
-            cfg.log_queue_sizes_interval_seconds, queue_data, logger,
+            cfg.log_queue_sizes_interval_seconds, queue_data, tile_proc_logger,
             queue_printer_thread_stop)
         queue_printer_thread = create_and_start_thread(queue_printer)
     else:
@@ -734,9 +737,10 @@ def tilequeue_process(cfg, peripherals):
         queue_printer_thread_stop = None
 
     def stop_all_workers(signum, stack):
-        logger.warn('tilequeue processing shutdown ...')
+        tile_proc_logger.lifecycle('tilequeue processing shutdown ...')
 
-        logger.info('requesting all workers (threads and processes) stop ...')
+        tile_proc_logger.lifecycle(
+            'requesting all workers (threads and processes) stop ...')
 
         # each worker guards its read loop with an event object
         # ask all these to stop first
@@ -753,79 +757,88 @@ def tilequeue_process(cfg, peripherals):
         if queue_printer_thread_stop:
             queue_printer_thread_stop.set()
 
-        logger.info('requesting all workers (threads and processes) stop ... '
-                    'done')
+        tile_proc_logger.lifecycle(
+            'requesting all workers (threads and processes) stop ... done')
 
         # Once workers receive a stop event, they will keep reading
         # from their queues until they receive a sentinel value. This
         # is mandatory so that no messages will remain on queues when
         # asked to join. Otherwise, we never terminate.
 
-        logger.info('joining all workers ...')
+        tile_proc_logger.lifecycle('joining all workers ...')
 
-        logger.info('joining tile queue reader ...')
+        tile_proc_logger.lifecycle('joining tile queue reader ...')
         thread_tile_queue_reader.join()
-        logger.info('joining tile queue reader ... done')
-        logger.info('enqueueing sentinels for data fetchers ...')
+        tile_proc_logger.lifecycle('joining tile queue reader ... done')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinels for data fetchers ...')
         for i in range(len(threads_data_fetch)):
             tile_input_queue.put(None)
-        logger.info('enqueueing sentinels for data fetchers ... done')
-        logger.info('joining data fetchers ...')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinels for data fetchers ... done')
+        tile_proc_logger.lifecycle('joining data fetchers ...')
         for thread_data_fetch in threads_data_fetch:
             thread_data_fetch.join()
-        logger.info('joining data fetchers ... done')
-        logger.info('enqueueing sentinels for data processors ...')
+        tile_proc_logger.lifecycle('joining data fetchers ... done')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinels for data processors ...')
         for i in range(len(data_processors)):
             sql_data_fetch_queue.put(None)
-        logger.info('enqueueing sentinels for data processors ... done')
-        logger.info('joining data processors ...')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinels for data processors ... done')
+        tile_proc_logger.lifecycle('joining data processors ...')
         for data_processor in data_processors:
             data_processor.join()
-        logger.info('joining data processors ... done')
-        logger.info('enqueueing sentinels for s3 storage ...')
+        tile_proc_logger.lifecycle('joining data processors ... done')
+        tile_proc_logger.lifecycle('enqueueing sentinels for s3 storage ...')
         for i in range(len(threads_s3_storage)):
             processor_queue.put(None)
-        logger.info('enqueueing sentinels for s3 storage ... done')
-        logger.info('joining s3 storage ...')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinels for s3 storage ... done')
+        tile_proc_logger.lifecycle('joining s3 storage ...')
         for thread_s3_storage in threads_s3_storage:
             thread_s3_storage.join()
-        logger.info('joining s3 storage ... done')
-        logger.info('enqueueing sentinel for tile queue writer ...')
+        tile_proc_logger.lifecycle('joining s3 storage ... done')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinel for tile queue writer ...')
         s3_store_queue.put(None)
-        logger.info('enqueueing sentinel for tile queue writer ... done')
-        logger.info('joining tile queue writer ...')
+        tile_proc_logger.lifecycle(
+            'enqueueing sentinel for tile queue writer ... done')
+        tile_proc_logger.lifecycle('joining tile queue writer ...')
         thread_tile_writer.join()
-        logger.info('joining tile queue writer ... done')
+        tile_proc_logger.lifecycle('joining tile queue writer ... done')
         if queue_printer_thread:
-            logger.info('joining queue printer ...')
+            tile_proc_logger.lifecycle('joining queue printer ...')
             queue_printer_thread.join()
-            logger.info('joining queue printer ... done')
+            tile_proc_logger.lifecycle('joining queue printer ... done')
 
-        logger.info('joining all workers ... done')
+        tile_proc_logger.lifecycle('joining all workers ... done')
 
-        logger.info('joining io pool ...')
+        tile_proc_logger.lifecycle('joining io pool ...')
         io_pool.close()
         io_pool.join()
-        logger.info('joining io pool ... done')
+        tile_proc_logger.lifecycle('joining io pool ... done')
 
-        logger.info('joining multiprocess data fetch queue ...')
+        tile_proc_logger.lifecycle('joining multiprocess data fetch queue ...')
         sql_data_fetch_queue.close()
         sql_data_fetch_queue.join_thread()
-        logger.info('joining multiprocess data fetch queue ... done')
+        tile_proc_logger.lifecycle(
+            'joining multiprocess data fetch queue ... done')
 
-        logger.info('joining multiprocess process queue ...')
+        tile_proc_logger.lifecycle('joining multiprocess process queue ...')
         processor_queue.close()
         processor_queue.join_thread()
-        logger.info('joining multiprocess process queue ... done')
+        tile_proc_logger.lifecycle(
+            'joining multiprocess process queue ... done')
 
-        logger.warn('tilequeue processing shutdown ... done')
+        tile_proc_logger.lifecycle('tilequeue processing shutdown ... done')
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, stop_all_workers)
     signal.signal(signal.SIGINT, stop_all_workers)
     signal.signal(signal.SIGQUIT, stop_all_workers)
 
-    logger.warn('all tilequeue threads and processes started')
+    tile_proc_logger.lifecycle('all tilequeue threads and processes started')
 
     # this is necessary for the main thread to receive signals
     # when joining on threads/processes, the signal is never received
