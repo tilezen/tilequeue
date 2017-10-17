@@ -591,7 +591,7 @@ class DataFetcher(object):
         self.source = source
         self.label_placement_layers = label_placement_layers
 
-    def start(self, all_data):
+    def fetch_tiles(self, all_data):
         # group all coords by the "unit of work" zoom, i.e: z10 for
         # RAWR tiles.
         coords_by_parent = CoordsByParent(self.min_z)

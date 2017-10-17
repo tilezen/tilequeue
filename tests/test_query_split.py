@@ -3,7 +3,7 @@ import unittest
 
 class _NullFetcher(object):
 
-    def start(self, data):
+    def fetch_tiles(self, data):
         for datum in data:
             yield self, datum
 
@@ -27,7 +27,7 @@ class TestQuerySplit(unittest.TestCase):
         splitter = make_split_data_fetcher(10, above, below)
 
         all_data = [above_data, below_data]
-        result = splitter.start(all_data)
+        result = splitter.fetch_tiles(all_data)
         expected = [(above, above_data), (below, below_data)]
 
         # sadly, dicts aren't hashable and frozendict isn't a thing in the

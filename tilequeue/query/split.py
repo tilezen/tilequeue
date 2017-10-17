@@ -16,7 +16,7 @@ class DataFetcher(object):
         self.below_fetcher = below_fetcher
         self.above_fetcher = above_fetcher
 
-    def start(self, all_data):
+    def fetch_tiles(self, all_data):
         below_data = []
         above_data = []
 
@@ -27,8 +27,8 @@ class DataFetcher(object):
             else:
                 above_data.append(data)
 
-        return chain(self.above_fetcher.start(above_data),
-                     self.below_fetcher.start(below_data))
+        return chain(self.above_fetcher.fetch_tiles(above_data),
+                     self.below_fetcher.fetch_tiles(below_data))
 
 
 def make_split_data_fetcher(split_zoom, below_fetcher, above_fetcher):

@@ -43,9 +43,9 @@ class RawrTestCase(unittest.TestCase):
             label_placement_layers=label_placement_layers)
 
 
-# the call to DataFetcher.start wants a list of "data" dictionaries, each with
-# a 'coord' key. this utility function just repackages a single coordinate in
-# the way it wants.
+# the call to DataFetcher.fetch_tiles wants a list of "data" dictionaries,
+# each with a 'coord' key. this utility function just repackages a single
+# coordinate in the way it wants.
 def _wrap(coord):
     data = dict(coord=coord)
     return [data]
@@ -85,7 +85,7 @@ class TestQueryRawr(RawrTestCase):
         # min zoom filter and geometry filter are okay.
         feature_coord = mercator_point_to_coord(
             feature_min_zoom, shape.x, shape.y)
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
@@ -99,11 +99,11 @@ class TestQueryRawr(RawrTestCase):
 
         # now, check that if the min zoom or geometry filters would exclude
         # the feature then it isn't returned.
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(zoom, coord_to_mercator_bounds(coord))
         self.assertEquals(0, len(read_rows))
 
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(
                     feature_coord.left()))
@@ -137,12 +137,12 @@ class TestQueryRawr(RawrTestCase):
         # check that the fractional zoom of 11.999 means that it's included in
         # the zoom 11 tile, but not the zoom 10 one.
         feature_coord = mercator_point_to_coord(11, shape.x, shape.y)
-        for fetch, _ in fetcher.start(_wrap(coord)):
+        for fetch, _ in fetcher.fetch_tiles(_wrap(coord)):
             read_rows = fetch(11, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(1, len(read_rows))
 
         feature_coord = feature_coord.zoomBy(-1).container()
-        for fetch, _ in fetcher.start(_wrap(coord)):
+        for fetch, _ in fetcher.fetch_tiles(_wrap(coord)):
             read_rows = fetch(10, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(0, len(read_rows))
 
@@ -175,13 +175,13 @@ class TestQueryRawr(RawrTestCase):
         # 16, even though 16<20, because 16 is the "max zoom" at which all the
         # data is included.
         feature_coord = mercator_point_to_coord(16, shape.x, shape.y)
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(16, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(1, len(read_rows))
 
         # but it should not exist at zoom 15
         feature_coord = feature_coord.zoomBy(-1).container()
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(10, coord_to_mercator_bounds(feature_coord))
         self.assertEquals(0, len(read_rows))
 
@@ -216,7 +216,7 @@ class TestQueryRawr(RawrTestCase):
                                layer_name='pois')
 
             feature_coord = mercator_point_to_coord(16, shape.x, shape.y)
-            for fetcher, _ in fetch.start(_wrap(coord)):
+            for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
                 read_rows = fetcher(16, coord_to_mercator_bounds(
                     feature_coord))
             self.assertEquals(1, len(read_rows))
@@ -285,7 +285,7 @@ class TestQueryRawr(RawrTestCase):
         # min zoom filter and geometry filter are okay.
         feature_coord = mercator_point_to_coord(
             feature_min_zoom, shape.x, shape.y)
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
@@ -334,7 +334,7 @@ class TestLabelPlacement(RawrTestCase):
             min_zoom_fn, None, tables, tile_pyramid, layer_name=layer_name,
             label_placement_layers=label_placement_layers)
 
-        for fetcher, _ in fetch.start(_wrap(top_tile)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, bounds)
         return read_rows
 
@@ -393,7 +393,7 @@ class TestGeometryClipping(RawrTestCase):
         fetch = self._make(
             min_zoom_fn, None, tables, tile_pyramid, layer_name=layer_name)
 
-        for fetcher, _ in fetch.start(_wrap(top_tile)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, bounds)
         self.assertEqual(1, len(read_rows))
         return read_rows[0]
@@ -479,7 +479,7 @@ class TestNameHandling(RawrTestCase):
         fetch = make_rawr_data_fetcher(
             top_zoom, max_zoom, storage, layers, source)
 
-        for fetcher, _ in fetch.start(_wrap(top_tile)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
         # the RAWR query goes over features multiple times because of the
         # indexing, so we can't rely on all the properties for one feature to
@@ -581,7 +581,7 @@ class TestMeta(RawrTestCase):
         # min zoom filter and geometry filter are okay.
         feature_coord = mercator_point_to_coord(
             feature_min_zoom, shape.x, shape.y)
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
@@ -650,7 +650,7 @@ class TestMeta(RawrTestCase):
         # min zoom filter and geometry filter are okay.
         feature_coord = mercator_point_to_coord(
             feature_min_zoom, *shape.coords[0])
-        for fetcher, _ in fetch.start(_wrap(coord)):
+        for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 

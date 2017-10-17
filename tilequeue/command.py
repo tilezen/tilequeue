@@ -1475,7 +1475,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
     unpadded_bounds = coord_to_mercator_bounds(coord)
-    for fetch, _ in data_fetcher.start([dict(coord=coord)]):
+    for fetch, _ in data_fetcher.fetch_tiles([dict(coord=coord)]):
         source_rows = fetch(coord.zoom, unpadded_bounds)
     feature_layers = convert_source_data_to_feature_layers(
         source_rows, layer_data, unpadded_bounds, coord.zoom)
