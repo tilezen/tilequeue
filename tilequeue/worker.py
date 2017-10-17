@@ -541,7 +541,6 @@ class TileQueueWriter(object):
 
             layers = metadata['layers']
             size = layers['size']
-            # size_as_str = repr(size)
 
             store_info = metadata['store']
 
