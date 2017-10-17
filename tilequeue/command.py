@@ -675,10 +675,13 @@ def tilequeue_process(cfg, peripherals):
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            tile_proc_logger, cfg.metatile_size)
 
+    from tilequeue.stats import TileProcessingStatsHandler
+    stats_handler = TileProcessingStatsHandler(peripherals.stats)
     thread_tile_writer_stop = threading.Event()
     tile_queue_writer = TileQueueWriter(
         queue_mapper, s3_store_queue, peripherals.inflight_mgr,
-        peripherals.msg_tracker, tile_proc_logger, thread_tile_writer_stop)
+        peripherals.msg_tracker, tile_proc_logger, stats_handler,
+        thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
@@ -1451,6 +1454,15 @@ class FakeStatsd(object):
 
     def timer(self, *args, **kwargs):
         return FakeStatsTimer()
+
+    def pipeline(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
 
 
 class FakeStatsTimer(object):

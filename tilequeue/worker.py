@@ -478,12 +478,13 @@ class TileQueueWriter(object):
 
     def __init__(
             self, queue_mapper, input_queue, inflight_mgr, msg_tracker,
-            tile_proc_logger, stop):
+            tile_proc_logger, stats_handler, stop):
         self.queue_mapper = queue_mapper
         self.input_queue = input_queue
         self.inflight_mgr = inflight_mgr
         self.msg_tracker = msg_tracker
         self.tile_proc_logger = tile_proc_logger
+        self.stats_handler = stats_handler
         self.stop = stop
 
     def __call__(self):
@@ -551,6 +552,7 @@ class TileQueueWriter(object):
                 store_info,
             )
             self.tile_proc_logger.log_processed_coord(coord_proc_data)
+            self.stats_handler(coord_proc_data)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
