@@ -31,10 +31,7 @@ def log_level_name(log_level):
 
 
 def log_category_name(log_category):
-    if log_category == LogCategory.QUEUE_SIZES:
-        return 'queue-sizes'
-    else:
-        return log_category.name.lower()
+    return log_category.name.lower()
 
 
 class JsonTileProcessingLogger(object):
