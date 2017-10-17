@@ -8,6 +8,7 @@ from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.transform import calculate_padded_bounds
+from tilequeue.utils import CoordsByParent
 from raw_tiles.tile import shape_tile_coverage
 from math import floor
 from enum import Enum
@@ -172,8 +173,11 @@ class OsmRawrLookup(object):
     def add_way(self, way_id, nodes, tags):
         for node_id in nodes:
             if node_id in self.nodes:
-                assert way_id in self.ways
-                self._ways_using_node[node_id].append(way_id)
+                # a way might be missing here if we filtered it out because it
+                # was not interesting, e.g: not a road, station, etc... that
+                # we might need to look up later.
+                if way_id in self.ways:
+                    self._ways_using_node[node_id].append(way_id)
 
     def add_relation(self, rel_id, way_off, rel_off, parts, members, tags):
         r = Relation(rel_id, way_off, rel_off, parts, members, tags)
@@ -323,6 +327,17 @@ def _make_meta(source, fid, shape_type, osm):
     return _Metadata(source, ways, rel_dicts)
 
 
+_EXPANDED_SOURCES = {
+    'osm': 'openstreetmap.org',
+}
+
+
+# horrible little hack, as in some places we use source="osm" and in other
+# places use source="openstreetmap.org", and so on for other sources.
+def _expand_source(source):
+    return _EXPANDED_SOURCES.get(source, source)
+
+
 class _LayersIndex(object):
     """
     Index features by the tile(s) that they appear in.
@@ -414,7 +429,7 @@ class _LayersIndex(object):
         return self.tile_index.get(tile, [])
 
 
-class DataFetcher(object):
+class RawrTile(object):
 
     def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
                  source):
@@ -556,14 +571,66 @@ class DataFetcher(object):
                     read_row['__label__'] = bytes(
                         shape.representative_point().wkb)
 
+                if self.source:
+                    source = _expand_source(self.source)
+                    read_row['__properties__'] = {'source': source}
+
                 read_rows.append(read_row)
 
         return read_rows
 
 
-# tables is a callable which should return a generator over the rows of the
-# table when called with the table name.
-def make_rawr_data_fetcher(layers, tables, tile_pyramid, source,
+class DataFetcher(object):
+
+    def __init__(self, min_z, max_z, storage, layers, source,
+                 label_placement_layers):
+        self.min_z = min_z
+        self.max_z = max_z
+        self.storage = storage
+        self.layers = layers
+        self.source = source
+        self.label_placement_layers = label_placement_layers
+
+    def fetch_tiles(self, all_data):
+        # group all coords by the "unit of work" zoom, i.e: z10 for
+        # RAWR tiles.
+        coords_by_parent = CoordsByParent(self.min_z)
+        for data in all_data:
+            coord = data['coord']
+            coords_by_parent.add(coord, data)
+
+        # this means we can dispatch groups of jobs by their common parent
+        # tile, which allows DataFetcher to take advantage of any common
+        # locality.
+        for top_coord, coord_group in coords_by_parent:
+            tile_pyramid = TilePyramid(
+                self.min_z, int(top_coord.column), int(top_coord.row),
+                self.max_z)
+
+            tables = self.storage(tile_pyramid.tile())
+
+            fetcher = RawrTile(self.layers, tables, tile_pyramid,
+                               self.label_placement_layers, self.source)
+
+            for coord, data in coord_group:
+                yield fetcher, data
+
+
+# Make a RAWR tile data fetcher given:
+#
+#  - min_z:   Lowest *nominal* zoom level, e.g: z10 for a RAWR tile.
+#  - max_z:   Highest *nominal* zoom level, e.g: z16 for a RAWR tile.
+#  - storage: Callable which takes a TilePyramid as the only argument,
+#             returning a "tables" callable. The "tables" callable returns a
+#             list of rows given the table name as its only argument.
+#  - layers:  A dict of layer name to LayerInfo (see fixture.py).
+#  - source:  String indicating the source of the data (e.g: 'osm').
+#  - label_placement_layers:
+#             A dict of geometry type ('point', 'linestring', 'polygon') to
+#             set (or other in-supporting collection) of layer names.
+#             Geometries of that type in that layer will have a label
+#             placement generated for them.
+def make_rawr_data_fetcher(min_z, max_z, storage, layers, source,
                            label_placement_layers={}):
-    return DataFetcher(layers, tables, tile_pyramid, label_placement_layers,
-                       source)
+    return DataFetcher(min_z, max_z, storage, layers, source,
+                       label_placement_layers)

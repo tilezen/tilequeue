@@ -1,5 +1,6 @@
 from itertools import izip
 from operator import attrgetter
+from ModestMaps.Core import Coordinate
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
@@ -10,6 +11,7 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.metatile import make_metatiles
+from tilequeue.metatile import common_parent
 import logging
 import Queue
 import signal
@@ -55,6 +57,14 @@ class OutputQueue(object):
         Send data, associated with coordinate coord, to the queue. While also
         watching for a signal to stop. If the data is too large to send, then
         trap the MemoryError and exit the program.
+
+        Note that `coord` may be a Coordinate instance or a string. It is only
+        used for printing out a message if there's a MemoryError, so for
+        requests which have no meaningful single coordinate, something else
+        can be used.
+
+        Returns True if the "stop signal" has been set and the thread should
+        shut down. False if normal operations should continue.
         """
 
         try:
@@ -64,9 +74,14 @@ class OutputQueue(object):
 
         except MemoryError:
             stacktrace = format_stacktrace_one_line()
+            # more compact and human readable than the default str on a
+            # Coordinate.
+            if isinstance(coord, Coordinate):
+                coord = serialize_coord(coord)
+
             self.logger.error(
                 "MemoryError while sending %s to the queue. Stacktrace: %s" %
-                (serialize_coord(coord), stacktrace))
+                (coord, stacktrace))
             # memory error might not leave the malloc subsystem in a usable
             # state, so better to exit the whole worker here than crash this
             # thread, which would lock up the whole worker.
@@ -127,27 +142,13 @@ class TileQueueReader(object):
                 queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
                 coord_handles = self.msg_tracker.track(
                     queue_msg_handle, coords)
+
+                all_coords_data = []
+                top_tile = None
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
-                        self.logger.log(
-                            logging.WARNING,
-                            'Job coordinates above max zoom are not '
-                            'supported, skipping %r > %d' %
-                            (coord, self.max_zoom))
-
-                        # delete jobs that we can't handle from the
-                        # queue, otherwise we'll get stuck in a cycle
-                        # of timed-out jobs being re-added to the
-                        # queue until they overflow max-retries.
-                        try:
-                            self.msg_tracker.done(coord_handle)
-                        except:
-                            stacktrace = format_stacktrace_one_line()
-                            self.logger.error(
-                                'Error acknowledging: %s - %s' % (
-                                    serialize_coord(coord),
-                                    stacktrace))
-                            continue
+                        self._reject_coord(coord, coord_handle)
+                        continue
 
                     metadata = dict(
                         timing=dict(
@@ -162,12 +163,42 @@ class TileQueueReader(object):
                         metadata=metadata,
                         coord=coord,
                     )
-                    if self.output(coord, data):
-                        break
+
+                    # find the parent of all the tiles. this is useful to be
+                    # able to describe the job without having to list all the
+                    # tiles.
+                    if top_tile:
+                        top_tile = common_parent(top_tile, coord)
+                    else:
+                        top_tile = coord
+
+                    all_coords_data.append(data)
+
+                msg = "group of %d tiles below %s" \
+                      % (len(all_coords_data), serialize_coord(top_tile))
+                if self.output(msg, all_coords_data):
+                    break
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
         self.logger.debug('tile queue reader stopped')
+
+    def _reject_coord(self, coord, coord_handle):
+        self.logger.log(
+            logging.WARNING,
+            'Job coordinates above max zoom are not supported, skipping '
+            '%r > %d' % (coord, self.max_zoom))
+
+        # delete jobs that we can't handle from the queue, otherwise we'll get
+        # stuck in a cycle of timed-out jobs being re-added to the queue until
+        # they overflow max-retries.
+        try:
+            self.msg_tracker.done(coord_handle)
+        except:
+            stacktrace = format_stacktrace_one_line()
+            self.logger.error(
+                'Error acknowledging: %s - %s' % (serialize_coord(coord),
+                                                  stacktrace))
 
 
 class DataFetch(object):
@@ -189,59 +220,69 @@ class DataFetch(object):
 
         while not stop.is_set():
             try:
-                data = self.input_queue.get(timeout=timeout_seconds)
+                all_data = self.input_queue.get(timeout=timeout_seconds)
             except Queue.Empty:
                 continue
-            if data is None:
+            if all_data is None:
                 saw_sentinel = True
                 break
 
-            coord = data['coord']
-            nominal_zoom = coord.zoom + self.metatile_zoom
-            unpadded_bounds = coord_to_mercator_bounds(coord)
-
-            start = time.time()
-
-            try:
-                source_rows = self.fetcher(nominal_zoom, unpadded_bounds)
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                stacktrace = format_stacktrace_one_line(
-                    (exc_type, exc_value, exc_traceback))
-                if isinstance(exc_value, TransactionRollbackError):
-                    log_level = logging.WARNING
-                else:
-                    log_level = logging.ERROR
-                self.logger.log(log_level, 'Error fetching: %s - %s' % (
-                    serialize_coord(coord), stacktrace))
-                continue
-
-            metadata = data['metadata']
-            metadata['timing']['fetch_seconds'] = time.time() - start
-
-            # every tile job that we get from the queue is a "parent" tile
-            # and its four children to cut from it. at zoom 15, this may
-            # also include a whole bunch of other children below the max
-            # zoom.
-            cut_coords = list()
-            if nominal_zoom > coord.zoom:
-                cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
-            data = dict(
-                metadata=metadata,
-                coord=coord,
-                source_rows=source_rows,
-                unpadded_bounds=unpadded_bounds,
-                cut_coords=cut_coords,
-                nominal_zoom=nominal_zoom,
-            )
-
-            if output(coord, data):
-                break
+            for fetch, data in self.fetcher.fetch_tiles(all_data):
+                metadata = data['metadata']
+                coord = data['coord']
+                if self._fetch_and_output(fetch, coord, metadata, output):
+                    break
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
         self.logger.debug('data fetch stopped')
+
+    def _fetch_and_output(self, fetch, coord, metadata, output):
+        try:
+            data = self._fetch(fetch, coord, metadata)
+
+            if output(coord, data):
+                return True
+
+        except:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            stacktrace = format_stacktrace_one_line(
+                (exc_type, exc_value, exc_traceback))
+            if isinstance(exc_value, TransactionRollbackError):
+                log_level = logging.WARNING
+            else:
+                log_level = logging.ERROR
+            self.logger.log(log_level, 'Error fetching: %s - %s' % (
+                serialize_coord(coord), stacktrace))
+
+        return False
+
+    def _fetch(self, fetch, coord, metadata):
+        nominal_zoom = coord.zoom + self.metatile_zoom
+        unpadded_bounds = coord_to_mercator_bounds(coord)
+
+        start = time.time()
+
+        source_rows = fetch(nominal_zoom, unpadded_bounds)
+
+        metadata['timing']['fetch_seconds'] = time.time() - start
+
+        # every tile job that we get from the queue is a "parent" tile
+        # and its four children to cut from it. at zoom 15, this may
+        # also include a whole bunch of other children below the max
+        # zoom.
+        cut_coords = list()
+        if nominal_zoom > coord.zoom:
+            cut_coords.extend(coord_children_range(coord, nominal_zoom))
+
+        return dict(
+            metadata=metadata,
+            coord=coord,
+            source_rows=source_rows,
+            unpadded_bounds=unpadded_bounds,
+            cut_coords=cut_coords,
+            nominal_zoom=nominal_zoom,
+        )
 
 
 class ProcessAndFormatData(object):

@@ -168,6 +168,12 @@ class DataFetcher(object):
         self.sql_conn_pool = DBConnectionPool(
             self.dbnames, self.conn_info)
 
+    def fetch_tiles(self, all_data):
+        # postgres data fetcher doesn't need this kind of session management,
+        # so we can just return the same object for all uses.
+        for data in all_data:
+            yield self, data
+
     def __call__(self, zoom, unpadded_bounds):
         queries = self.queries_generator(zoom, unpadded_bounds)
 

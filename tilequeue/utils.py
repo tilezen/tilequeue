@@ -1,11 +1,12 @@
+import sys
+import traceback
+import re
+from collections import defaultdict
 from datetime import datetime
 from itertools import islice
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import create_coord
 from time import time
-import re
-import sys
-import traceback
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -90,3 +91,27 @@ class time_block(object):
         duration_seconds = stop - self.start
         duration_millis = duration_seconds * 1000
         self.timing_state[self.key] = duration_millis
+
+
+class CoordsByParent(object):
+
+    def __init__(self, parent_zoom):
+        self.parent_zoom = parent_zoom
+        self.groups = defaultdict(list)
+
+    def add(self, coord, *extra):
+        data = coord
+        if extra:
+            data = (coord,) + extra
+
+        # treat tiles as singletons below the parent zoom
+        if coord.zoom < self.parent_zoom:
+            self.groups[coord].append(data)
+
+        else:
+            # otherwise, group by the parent tile at the parent zoom.
+            parent_coord = coord.zoomTo(self.parent_zoom).container()
+            self.groups[parent_coord].append(data)
+
+    def __iter__(self):
+        return self.groups.iteritems()

@@ -2,6 +2,7 @@ from botocore.exceptions import ClientError
 from collections import defaultdict
 from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
+from msgpack import Unpacker
 from raw_tiles.tile import Tile
 from tilequeue.command import explode_and_intersect
 from tilequeue.queue.message import MessageHandle
@@ -308,6 +309,24 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
+def unpack_rawr_zip_payload(io):
+    """unpack a zipfile and turn it into a callable "tables" object."""
+    # the io we get from S3 is streaming, so we can't seek on it, but zipfile
+    # seems to require that. so we buffer it all in memory. RAWR tiles are
+    # generally up to around 100MB in size, which should be safe to store in
+    # RAM.
+    buf = io.BytesIO(io.read())
+    zfh = zipfile.ZipFile(buf, 'r')
+
+    def get_table(table_name):
+        fh = zfh.open(table_name, 'r')
+        unpacker = Unpacker(file_like=fh)
+        for obj in unpacker:
+            yield obj
+
+    return get_table
+
+
 def make_rawr_s3_path(tile, prefix, suffix):
     path_to_hash = '%d/%d/%d%s' % (tile.z, tile.x, tile.y, suffix)
     path_hash = calc_hash(path_to_hash)
@@ -339,3 +358,60 @@ class RawrS3Sink(object):
                 ContentLength=len(payload),
                 Key=location,
         )
+
+
+# implement the "get_table" interface, but always return an empty list. this
+# allows us to fake an empty tile that might not be backed by any real data.
+def _empty_table(table_name):
+    return []
+
+
+class RawrS3Source(object):
+
+    """Rawr source to read from S3. Uses a thread pool for I/O if provided."""
+
+    def __init__(self, s3_client, bucket, prefix, suffix, io_pool=None,
+                 allow_missing_tiles=False):
+        self.s3_client = s3_client
+        self.bucket = bucket
+        self.prefix = prefix
+        self.suffix = suffix
+        self.io_pool = io_pool
+        self.allow_missing_tiles = allow_missing_tiles
+
+    def _get_object(self, tile):
+        location = make_rawr_s3_path(tile, self.prefix, self.suffix)
+
+        try:
+            response = self.s3_client.get_object(
+                Bucket=self.bucket,
+                Key=location,
+            )
+        except Exception, e:
+            # if we allow missing tiles, then translate a 404 exception into a
+            # value response. this is useful for local or dev environments
+            # where we might not have a global build, but don't want the lack
+            # of RAWR tiles to kill jobs.
+            if self.allow_missing_tiles and isinstance(e, ClientError):
+                if e.response['ResponseMetadata']['HTTPStatusCode'] == 404:
+                    return None
+            raise
+
+        return response
+
+    def __call__(self, tile):
+        # throws an exception if the object is missing - RAWR tiles
+        if self.io_pool:
+            response = self.thread_pool.apply(
+                self._get_object, (tile,))
+        else:
+            response = self._get_object(tile)
+
+        if response is None:
+            return _empty_table
+
+        # check that the response isn't a delete marker.
+        assert not response['DeleteMarker']
+
+        body = response['Body']
+        return unpack_rawr_zip_payload(body)

@@ -132,6 +132,12 @@ class DataFetcher(object):
         self.label_placement_layers = label_placement_layers
         self.osm = OsmFixtureLookup(self.rows, self.rels)
 
+    def fetch_tiles(self, all_data):
+        # fixture data fetcher doesn't need this kind of session management,
+        # so we can just return the same object for all uses.
+        for data in all_data:
+            yield self, data
+
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []
         bbox = box(*unpadded_bounds)
