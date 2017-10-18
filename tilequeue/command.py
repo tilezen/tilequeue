@@ -399,6 +399,7 @@ def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
         total=total,
         hits=hits,
         misses=misses,
+        n_toi=len(tiles_of_interest),
     )
     return total_coord_ints, metrics
 
@@ -1587,6 +1588,7 @@ def tilequeue_rawr_process(cfg, peripherals):
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrTileGenerationPipeline
     from tilequeue.rawr import RawrToiIntersector
+    from tilequeue.stats import RawrTilePipelineStatsHandler
     import boto3
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
@@ -1618,9 +1620,11 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_osm_source = OsmSource(conn_ctx)
     rawr_formatter = Gzip(Msgpack())
     rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
+    stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            peripherals.queue_writer, rawr_toi_intersector, logger)
+            peripherals.queue_writer, rawr_toi_intersector, stats_handler,
+            logger)
     rawr_pipeline()
 
 

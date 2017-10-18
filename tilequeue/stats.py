@@ -32,5 +32,32 @@ class RawrTileEnqueueStatsHandler(object):
     def __call__(self, n_coords, n_payloads, n_msgs_sent):
         with self.stats.pipeline() as pipe:
             pipe.gauge('rawr.enqueue.coords', n_coords)
-            pipe.gauge('rawr.enqueue.grouped', n_payloads)
+            pipe.gauge('rawr.enqueue.groups', n_payloads)
             pipe.gauge('rawr.enqueue.calls', n_msgs_sent)
+
+
+class RawrTilePipelineStatsHandler(object):
+
+    def __init__(self, stats):
+        self.stats = stats
+
+    def __call__(self, intersect_metrics, n_enqueued, n_inflight, timing):
+        with self.stats.pipeline() as pipe:
+
+            pipe.incr('rawr.process.tiles', 1)
+
+            pipe.gauge('rawr.process.intersect.toi',
+                       intersect_metrics['n_toi'])
+            pipe.gauge('rawr.process.intersect.candidates',
+                       intersect_metrics['total'])
+            pipe.gauge('rawr.process.intersect.hits',
+                       intersect_metrics['hits'])
+            pipe.gauge('rawr.process.intersect.misses',
+                       intersect_metrics['misses'])
+
+            pipe.gauge('rawr.process.enqueued', n_enqueued)
+            pipe.gauge('rawr.process.in_flight', n_enqueued)
+
+            for timing_label, value in timing.items():
+                metric_name = 'rawr.process.time.%s' % timing_label
+                pipe.timing(metric_name, value)

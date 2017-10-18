@@ -216,10 +216,10 @@ class RawrToiIntersector(object):
     def __call__(self, coords):
         toi = self.tiles_of_interest()
         coord_ints = convert_to_coord_ints(coords)
-        intersected_coord_ints, _ = explode_and_intersect(coord_ints, toi)
-        for coord_int in intersected_coord_ints:
-            coord = coord_unmarshall_int(coord_int)
-            yield coord
+        intersected_coord_ints, intersect_metrics = \
+            explode_and_intersect(coord_ints, toi)
+        coords = map(coord_unmarshall_int, intersected_coord_ints)
+        return coords, intersect_metrics
 
 
 class RawrTileGenerationPipeline(object):
@@ -228,13 +228,14 @@ class RawrTileGenerationPipeline(object):
 
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            queue_writer, rawr_toi_intersector, logger=None):
+            queue_writer, rawr_toi_intersector, stats_handler, logger=None):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.rawr_gen = rawr_gen
         self.queue_writer = queue_writer
         self.rawr_toi_intersector = rawr_toi_intersector
+        self.stats_handler = stats_handler
         self.logger = logger
 
     def __call__(self):
@@ -245,6 +246,8 @@ class RawrTileGenerationPipeline(object):
                 rawr_tile_generated = False
                 coords_intersected = False
                 coords_enqueued = False
+                msg_done = False
+                logging_done = False
                 timing = {}
 
                 # NOTE: it's ok if reading from the queue takes a long time
@@ -260,26 +263,33 @@ class RawrTileGenerationPipeline(object):
                 rawr_tile_generated = True
 
                 with time_block(timing, 'toi-intersect'):
-                    # because this returns a generator, the timing is wrong
-                    # unless we realize immediately
-                    coords_to_enqueue = list(self.rawr_toi_intersector(coords))
+                    coords_to_enqueue, intersect_metrics = \
+                        self.rawr_toi_intersector(coords)
                 coords_intersected = True
 
                 with time_block(timing, 'queue-write'):
-                    self.queue_writer.enqueue_batch(coords_to_enqueue)
+                    n_enqueued, n_inflight = \
+                        self.queue_writer.enqueue_batch(coords_to_enqueue)
                 coords_enqueued = True
 
                 with time_block(timing, 'queue-done'):
                     self.rawr_queue.done(msg_handle)
+                msg_done = True
 
                 if self.logger:
                     self.logger.info(
                         'Rawr message processed: '
-                        'tile(%s) n-coords(%s) timing(%s)' % (
+                        'tile(%s) n-coords(%d) enqueued(%s) timing(%s)' % (
                             serialize_coord(parent),
                             len(coords),
+                            len(coords_to_enqueue),
                             json.dumps(timing),
                         ))
+                logging_done = True
+
+                self.stats_handler(
+                    intersect_metrics, n_enqueued, n_inflight, timing)
+
             except Exception:
                 stacktrace = format_stacktrace_one_line()
                 if self.logger:
@@ -291,8 +301,12 @@ class RawrTileGenerationPipeline(object):
                         msg = 'intersecting coords'
                     elif not coords_enqueued:
                         msg = 'enqueueing coords'
+                    elif not msg_done:
+                        msg = 'acknowledging message'
+                    elif not logging_done:
+                        msg = 'logging'
                     else:
-                        msg = 'acknowledging coord'
+                        msg = 'stats'
                     msg = 'Error: %s' % msg
                     if parent:
                         msg += ' for parent: %s' % serialize_coord(parent)
