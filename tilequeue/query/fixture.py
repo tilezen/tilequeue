@@ -6,6 +6,7 @@ from tilequeue.query.common import Relation
 from tilequeue.query.common import layer_properties
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import mz_is_interesting_transit_relation
+from tilequeue.query.common import name_keys
 from collections import defaultdict
 
 
@@ -228,12 +229,14 @@ class DataFetcher(object):
 
                 # add back name into whichever of the pois, landuse or
                 # buildings layers has claimed this feature.
-                name = props.get('name', None)
-                if name:
+                names = {}
+                for k in name_keys(props):
+                    names[k] = props[k]
+                if names:
                     for layer_name in ('pois', 'landuse', 'buildings'):
                         props_name = '__%s_properties__' % layer_name
                         if props_name in read_row:
-                            read_row[props_name]['name'] = name
+                            read_row[props_name].update(names)
                             break
 
                 read_row['__id__'] = fid

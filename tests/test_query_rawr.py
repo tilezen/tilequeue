@@ -460,7 +460,7 @@ class TestNameHandling(RawrTestCase):
             return {}
 
         shape = Point(0, 0)
-        props = {'name': 'Foo'}
+        props = {'name': 'Foo', 'name:en': 'Bar'}
 
         tables = TestGetTable({
             'planet_osm_point': [
@@ -495,17 +495,24 @@ class TestNameHandling(RawrTestCase):
                     self.assertFalse(key in all_props)
                     all_props[key] = val
 
-        all_names = set(expected_layer_names) | set(input_layer_names)
-        for name in all_names:
-            properties_name = '__%s_properties__' % name
+        all_layer_names = set(expected_layer_names) | set(input_layer_names)
+        for layer_name in all_layer_names:
+            properties_name = '__%s_properties__' % layer_name
             self.assertTrue(properties_name in all_props)
-            actual_name = all_props[properties_name].get('name')
-            if name in expected_layer_names:
-                expected_name = props.get('name')
-                self.assertEquals(expected_name, actual_name)
-            else:
-                # check the name doesn't appear anywhere else
-                self.assertEquals(None, actual_name)
+            for key in props.keys():
+                actual_name = all_props[properties_name].get(key)
+                if layer_name in expected_layer_names:
+                    expected_name = props.get(key)
+                    self.assertEquals(
+                        expected_name, actual_name,
+                        msg=('expected=%r, actual=%r for key=%r'
+                             % (expected_name, actual_name, key)))
+                else:
+                    # check the name doesn't appear anywhere else
+                    self.assertEquals(
+                        None, actual_name,
+                        msg=('got actual=%r for key=%r, expected no value'
+                             % (actual_name, key)))
 
     def test_name_single_layer(self):
         # in any oone of the pois, landuse or buildings layers, a name

@@ -249,6 +249,47 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id, rel_id):
                    railways=railways, trams=trams)
 
 
+_TAG_NAME_ALTERNATES = (
+    'name',
+    'int_name',
+    'loc_name',
+    'nat_name',
+    'official_name',
+    'old_name',
+    'reg_name',
+    'short_name',
+    'name_left',
+    'name_right',
+    'name:short',
+)
+
+
+_ALT_NAME_PREFIX_CANDIDATES = (
+    'name:left:', 'name:right:', 'name:', 'alt_name:', 'old_name:'
+)
+
+
+# given a dictionary of key-value properties, returns a list of all the keys
+# which represent names. this is used to assign all the names to a single
+# layer. this makes sure that when we generate multiple features from a single
+# database record, only one feature gets named and labelled.
+def name_keys(props):
+    name_keys = []
+    for k in props.keys():
+        is_name_key = k in _TAG_NAME_ALTERNATES
+
+        if not is_name_key:
+            for prefix in _ALT_NAME_PREFIX_CANDIDATES:
+                if k.startswith(prefix):
+                    is_name_key = True
+                    break
+
+        if is_name_key:
+            name_keys.append(k)
+
+    return name_keys
+
+
 # properties for a feature (fid, shape, props) in layer `layer_name` at zoom
 # level `zoom`. also takes an `osm` parameter, which is an object which can
 # be used to look up nodes, ways and relations and the relationships between
@@ -264,10 +305,9 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
     # need to make sure that the name is only applied to one of
     # the pois, landuse or buildings layers - in that order of
     # priority.
-    #
-    # TODO: do this for all name variants & translations
     if layer_name in ('pois', 'landuse', 'buildings'):
-        layer_props.pop('name', None)
+        for key in name_keys(layer_props):
+            layer_props.pop(key, None)
 
     # urgh, hack!
     if layer_name == 'water' and shape.geom_type == 'Point':

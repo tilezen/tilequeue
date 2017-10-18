@@ -7,6 +7,7 @@ from tilequeue.query.common import is_station_or_line
 from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
+from tilequeue.query.common import name_keys
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.utils import CoordsByParent
 from raw_tiles.tile import shape_tile_coverage
@@ -525,9 +526,11 @@ class RawrTile(object):
             read_row = {}
             generate_label_placement = False
 
-            # add name into whichever of the pois, landuse or buildings
+            # add names into whichever of the pois, landuse or buildings
             # layers has claimed this feature.
-            name = props.get('name', None)
+            names = {}
+            for k in name_keys(props):
+                names[k] = props[k]
             named_layer = self._named_layer(layer_min_zooms)
 
             for layer_name, min_zoom in layer_min_zooms.items():
@@ -542,8 +545,8 @@ class RawrTile(object):
                     fid, shape, props, layer_name, zoom, self.osm)
                 layer_props['min_zoom'] = min_zoom
 
-                if name and named_layer == layer_name:
-                    layer_props['name'] = name
+                if names and named_layer == layer_name:
+                    layer_props.update(names)
 
                 read_row['__' + layer_name + '_properties__'] = layer_props
 
