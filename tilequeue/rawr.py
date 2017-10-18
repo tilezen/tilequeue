@@ -87,11 +87,13 @@ class SqsQueue(object):
 class RawrEnqueuer(object):
     """enqueue coords from expiry grouped by parent zoom"""
 
-    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger):
+    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger,
+                 stats_handler):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.logger = logger
+        self.stats_handler = stats_handler
 
     def __call__(self, coords):
         grouped_by_zoom = defaultdict(list)
@@ -120,6 +122,8 @@ class RawrEnqueuer(object):
                 'Expiry processed: '
                 'coords(%d) payloads(%d) enqueue-calls(%d))' %
                 (n_coords, n_payloads, n_msgs_sent))
+
+        self.stats_handler(n_coords, n_payloads, n_msgs_sent)
 
 
 def common_parent(coords, parent_zoom):
@@ -334,8 +338,10 @@ def make_rawr_s3_path(tile, prefix, suffix):
     return path_with_hash
 
 
-def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger):
-    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger)
+def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
+                       stats_handler):
+    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
+                        stats_handler)
 
 
 class RawrS3Sink(object):

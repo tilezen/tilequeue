@@ -22,3 +22,15 @@ class TileProcessingStatsHandler(object):
                       coord_proc_data.store_info['stored'])
             pipe.incr('process.storage.skipped',
                       coord_proc_data.store_info['not_stored'])
+
+
+class RawrTileEnqueueStatsHandler(object):
+
+    def __init__(self, stats):
+        self.stats = stats
+
+    def __call__(self, n_coords, n_payloads, n_msgs_sent):
+        with self.stats.pipeline() as pipe:
+            pipe.gauge('rawr.enqueue.coords', n_coords)
+            pipe.gauge('rawr.enqueue.grouped', n_payloads)
+            pipe.gauge('rawr.enqueue.calls', n_msgs_sent)

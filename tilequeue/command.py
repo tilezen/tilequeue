@@ -1547,10 +1547,14 @@ def tilequeue_rawr_enqueue(cfg, args):
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
+    stats = make_statsd_client_from_cfg(cfg)
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    stats_handler = RawrTileEnqueueStatsHandler(stats)
+
     logger = make_logger(cfg, 'rawr_enqueue')
     from tilequeue.rawr import make_rawr_enqueuer
     rawr_enqueuer = make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger)
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
         rawr_enqueuer(coords)
@@ -1627,6 +1631,16 @@ Peripherals = namedtuple(
 )
 
 
+def make_statsd_client_from_cfg(cfg):
+    if cfg.statsd_host:
+        import statsd
+        stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
+                                   prefix=cfg.statsd_prefix)
+    else:
+        stats = FakeStatsd()
+    return stats
+
+
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -1689,12 +1703,7 @@ def tilequeue_main(argv_args=None):
         msg_tracker_yaml = cfg.yml.get('message-tracker')
         msg_tracker = make_msg_tracker(msg_tracker_yaml)
 
-        if cfg.statsd_host:
-            import statsd
-            stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
-                                       prefix=cfg.statsd_prefix)
-        else:
-            stats = FakeStatsd()
+        stats = make_statsd_client_from_cfg(cfg)
 
         peripherals = Peripherals(
             toi_helper, stats, redis_client, queue_mapper, msg_tracker,
