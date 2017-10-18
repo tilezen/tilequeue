@@ -168,7 +168,8 @@ class DataFetcher(object):
                 if not info.allows_shape_type(shape):
                     continue
 
-                source = lookup_source(props.get('source'))
+                orig_source = props.get('source')
+                source = lookup_source(orig_source)
                 meta = Metadata(source, ways, rels)
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
 
@@ -189,7 +190,7 @@ class DataFetcher(object):
                 # this removes larger cities at low zooms, and smaller cities
                 # as the zoom increases and as the OSM cities start to "fade
                 # in".
-                if props.get('source') == 'naturalearthdata.com':
+                if orig_source == 'naturalearthdata.com':
                     pop_max = int(props.get('pop_max', '0'))
                     remove = ((zoom >= 8 and zoom < 10 and pop_max > 50000) or
                               (zoom >= 10 and zoom < 11 and pop_max > 20000) or
@@ -206,6 +207,9 @@ class DataFetcher(object):
 
                 layer_props = layer_properties(
                     fid, shape, props, layer_name, zoom, self.osm)
+
+                if orig_source:
+                    layer_props['source'] = orig_source
 
                 layer_props['min_zoom'] = min_zoom
                 props_name = '__%s_properties__' % layer_name
