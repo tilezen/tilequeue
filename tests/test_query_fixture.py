@@ -93,15 +93,18 @@ class TestQueryFixture(FixtureTestCase):
         self.assertEquals(0, len(read_rows))
 
     def test_root_relation_id(self):
-        from shapely.geometry import Point
+        from shapely.geometry import Point, Polygon
 
         def min_zoom_fn(shape, props, fid, meta):
             return 0
 
-        def _test(rels, expected_root_id):
-            shape = Point(0, 0)
+        def _test(rels, expected_root_id, shape=None, feature_id=None):
+            if shape is None:
+                shape = Point(0, 0)
+            if feature_id is None:
+                feature_id = 1
             rows = [
-                (1, shape, {
+                (feature_id, shape, {
                     'railway': 'station',
                     'name': 'Foo Station',
                 }),
@@ -146,6 +149,13 @@ class TestQueryFixture(FixtureTestCase):
             _rel(4, rels=[3]),
             _rel(5, rels=[2, 4]),
         ], 5)
+
+        # test that a polygonal way feature is also traversed.
+        polygon = Polygon([(-1, -1), (-1, 1), (1, 1), (1, -1), (-1, -1)])
+        _test([_rel(2, ways=[1])], 2, shape=polygon)
+
+        # test that a multipolygon relation feature is also traversed.
+        _test([_rel(1), _rel(2, rels=[1])], 2, shape=polygon, feature_id=-1)
 
     def test_query_source(self):
         # check that the 'source' property is preserved for output features.

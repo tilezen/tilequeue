@@ -152,12 +152,14 @@ Transit = namedtuple(
     'trains subways light_rails trams railways')
 
 
-def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
+def mz_calculate_transit_routes_and_score(osm, node_id, way_id, rel_id):
     candidate_relations = set()
     if node_id:
         candidate_relations.update(osm.relations_using_node(node_id))
     if way_id:
         candidate_relations.update(osm.relations_using_way(way_id))
+    if rel_id:
+        candidate_relations.add(rel_id)
 
     seed_relations = set()
     for rel_id in candidate_relations:
@@ -165,8 +167,6 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
         if mz_is_interesting_transit_relation(rel.tags):
             seed_relations.add(rel_id)
     del candidate_relations
-
-    # TODO: if the station is also a multipolygon relation?
 
     # this complex query does two recursive sweeps of the relations
     # table starting from a seed set of relations which are or contain
@@ -318,16 +318,19 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
         'Point', 'MultiPoint', 'Polygon', 'MultiPolygon')
 
     if is_poi and is_railway_station and \
-       is_point_or_poly and fid >= 0:
+       is_point_or_poly:
         node_id = None
         way_id = None
+        rel_id = None
         if shape.geom_type in ('Point', 'MultiPoint'):
             node_id = fid
-        else:
+        elif fid >= 0:
             way_id = fid
+        else:
+            rel_id = -fid
 
         transit = mz_calculate_transit_routes_and_score(
-            osm, node_id, way_id)
+            osm, node_id, way_id, rel_id)
         layer_props['mz_transit_score'] = transit.score
         layer_props['mz_transit_root_relation_id'] = (
             transit.root_relation_id)
