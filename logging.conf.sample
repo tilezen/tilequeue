@@ -2,10 +2,10 @@
 keys=root,process,seed,prune_tiles_of_interest,enqueue_tiles_of_interest,dump_tiles_of_interest,load_tiles_of_interest,wof_process_neighbourhoods,query,consume_tile_traffic,tile_status,stuck_tiles,delete_stuck_tiles,rawr_enqueue,rawr_process
 
 [handlers]
-keys=consoleHandler
+keys=consoleHandler,jsonConsoleHandler
 
 [formatters]
-keys=simpleFormatter
+keys=simpleFormatter,jsonFormatter
 
 [logger_root]
 level=WARNING
@@ -37,7 +37,7 @@ propagate=0
 
 [logger_process]
 level=INFO
-handlers=consoleHandler
+handlers=jsonConsoleHandler
 qualName=process
 propagate=0
 
@@ -99,6 +99,15 @@ propagate=0
 class=StreamHandler
 formatter=simpleFormatter
 args=(sys.stdout,)
+
+[handler_jsonConsoleHandler]
+class=StreamHandler
+formatter=jsonFormatter
+args=(sys.stdout,)
+
+[formatter_jsonFormatter]
+format=%(asctime)s %(message)s
+datefmt=%Y-%m-%dT%H:%M:%S%z
 
 [formatter_simpleFormatter]
 format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
