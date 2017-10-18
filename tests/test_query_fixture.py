@@ -147,6 +147,32 @@ class TestQueryFixture(FixtureTestCase):
             _rel(5, rels=[2, 4]),
         ], 5)
 
+    def test_query_source(self):
+        # check that the 'source' property is preserved for output features.
+        from shapely.geometry import Point
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 5
+
+        shape = Point(0, 0)
+        rows = [
+            (0, shape, {'source': 'testdata'})
+        ]
+
+        fetch = self._make(rows, min_zoom_fn, None)
+
+        # first, check that it can get the original item back when both the
+        # min zoom filter and geometry filter are okay.
+        read_rows = fetch(5, (-1, -1, 1, 1))
+
+        self.assertEquals(1, len(read_rows))
+        read_row = read_rows[0]
+        self.assertEquals(0, read_row.get('__id__'))
+        # query processing code expects WKB bytes in the __geometry__ column
+        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
+        self.assertEquals({'min_zoom': 5, 'source': 'testdata'},
+                          read_row.get('__testlayer_properties__'))
+
 
 class TestLabelPlacement(FixtureTestCase):
 
