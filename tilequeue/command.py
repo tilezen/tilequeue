@@ -399,6 +399,7 @@ def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
         total=total,
         hits=hits,
         misses=misses,
+        n_toi=len(tiles_of_interest),
     )
     return total_coord_ints, metrics
 
@@ -675,10 +676,13 @@ def tilequeue_process(cfg, peripherals):
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            tile_proc_logger, cfg.metatile_size)
 
+    from tilequeue.stats import TileProcessingStatsHandler
+    stats_handler = TileProcessingStatsHandler(peripherals.stats)
     thread_tile_writer_stop = threading.Event()
     tile_queue_writer = TileQueueWriter(
         queue_mapper, s3_store_queue, peripherals.inflight_mgr,
-        peripherals.msg_tracker, tile_proc_logger, thread_tile_writer_stop)
+        peripherals.msg_tracker, tile_proc_logger, stats_handler,
+        thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
         t = threading.Thread(target=fn, args=args)
@@ -1452,6 +1456,15 @@ class FakeStatsd(object):
     def timer(self, *args, **kwargs):
         return FakeStatsTimer()
 
+    def pipeline(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
 
 class FakeStatsTimer(object):
     def __init__(self, *args, **kwargs):
@@ -1535,10 +1548,14 @@ def tilequeue_rawr_enqueue(cfg, args):
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
+    stats = make_statsd_client_from_cfg(cfg)
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    stats_handler = RawrTileEnqueueStatsHandler(stats)
+
     logger = make_logger(cfg, 'rawr_enqueue')
     from tilequeue.rawr import make_rawr_enqueuer
     rawr_enqueuer = make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger)
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
         rawr_enqueuer(coords)
@@ -1571,6 +1588,7 @@ def tilequeue_rawr_process(cfg, peripherals):
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrTileGenerationPipeline
     from tilequeue.rawr import RawrToiIntersector
+    from tilequeue.stats import RawrTilePipelineStatsHandler
     import boto3
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
@@ -1602,9 +1620,11 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_osm_source = OsmSource(conn_ctx)
     rawr_formatter = Gzip(Msgpack())
     rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
+    stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            peripherals.queue_writer, rawr_toi_intersector, logger)
+            peripherals.queue_writer, rawr_toi_intersector, stats_handler,
+            logger)
     rawr_pipeline()
 
 
@@ -1613,6 +1633,16 @@ Peripherals = namedtuple(
     'toi stats redis_client '
     'queue_mapper msg_tracker msg_marshaller inflight_mgr queue_writer'
 )
+
+
+def make_statsd_client_from_cfg(cfg):
+    if cfg.statsd_host:
+        import statsd
+        stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
+                                   prefix=cfg.statsd_prefix)
+    else:
+        stats = FakeStatsd()
+    return stats
 
 
 def tilequeue_main(argv_args=None):
@@ -1677,12 +1707,7 @@ def tilequeue_main(argv_args=None):
         msg_tracker_yaml = cfg.yml.get('message-tracker')
         msg_tracker = make_msg_tracker(msg_tracker_yaml)
 
-        if cfg.statsd_host:
-            import statsd
-            stats = statsd.StatsClient(cfg.statsd_host, cfg.statsd_port,
-                                       prefix=cfg.statsd_prefix)
-        else:
-            stats = FakeStatsd()
+        stats = make_statsd_client_from_cfg(cfg)
 
         peripherals = Peripherals(
             toi_helper, stats, redis_client, queue_mapper, msg_tracker,

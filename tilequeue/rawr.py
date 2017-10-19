@@ -16,6 +16,7 @@ from tilequeue.utils import grouper
 from tilequeue.utils import time_block
 from time import gmtime
 import json
+import sys
 import zipfile
 
 
@@ -87,11 +88,13 @@ class SqsQueue(object):
 class RawrEnqueuer(object):
     """enqueue coords from expiry grouped by parent zoom"""
 
-    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger):
+    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger,
+                 stats_handler):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.logger = logger
+        self.stats_handler = stats_handler
 
     def __call__(self, coords):
         grouped_by_zoom = defaultdict(list)
@@ -120,6 +123,8 @@ class RawrEnqueuer(object):
                 'Expiry processed: '
                 'coords(%d) payloads(%d) enqueue-calls(%d))' %
                 (n_coords, n_payloads, n_msgs_sent))
+
+        self.stats_handler(n_coords, n_payloads, n_msgs_sent)
 
 
 def common_parent(coords, parent_zoom):
@@ -212,10 +217,10 @@ class RawrToiIntersector(object):
     def __call__(self, coords):
         toi = self.tiles_of_interest()
         coord_ints = convert_to_coord_ints(coords)
-        intersected_coord_ints, _ = explode_and_intersect(coord_ints, toi)
-        for coord_int in intersected_coord_ints:
-            coord = coord_unmarshall_int(coord_int)
-            yield coord
+        intersected_coord_ints, intersect_metrics = \
+            explode_and_intersect(coord_ints, toi)
+        coords = map(coord_unmarshall_int, intersected_coord_ints)
+        return coords, intersect_metrics
 
 
 class RawrTileGenerationPipeline(object):
@@ -224,76 +229,103 @@ class RawrTileGenerationPipeline(object):
 
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            queue_writer, rawr_toi_intersector, logger=None):
+            queue_writer, rawr_toi_intersector, stats_handler, logger=None):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.rawr_gen = rawr_gen
         self.queue_writer = queue_writer
         self.rawr_toi_intersector = rawr_toi_intersector
+        self.stats_handler = stats_handler
         self.logger = logger
 
     def __call__(self):
         while True:
-            try:
-                msg_handle = None
-                parent = None
-                rawr_tile_generated = False
-                coords_intersected = False
-                coords_enqueued = False
-                timing = {}
+            timing = {}
 
+            try:
                 # NOTE: it's ok if reading from the queue takes a long time
                 with time_block(timing, 'queue-read'):
                     msg_handle = self.rawr_queue.read()
+            except Exception as e:
+                self.log_exception(e, 'queue read')
+                continue
 
+            try:
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-                parent = common_parent(coords, self.group_by_zoom)
-                rawr_tile_coord = convert_coord_object(parent)
+            except Exception as e:
+                self.log_exception(e, 'unmarshall payload')
+                continue
 
+            try:
+                parent = common_parent(coords, self.group_by_zoom)
+            except Exception as e:
+                self.log_exception(e, 'find parent')
+                continue
+
+            try:
+                rawr_tile_coord = convert_coord_object(parent)
+            except Exception as e:
+                self.log_exception(e, 'convert coord', parent)
+                continue
+
+            try:
                 with time_block(timing, 'rawr-gen'):
                     self.rawr_gen(rawr_tile_coord)
-                rawr_tile_generated = True
+            except Exception as e:
+                self.log_exception(e, 'rawr tile gen', parent)
+                continue
 
+            try:
                 with time_block(timing, 'toi-intersect'):
-                    # because this returns a generator, the timing is wrong
-                    # unless we realize immediately
-                    coords_to_enqueue = list(self.rawr_toi_intersector(coords))
-                coords_intersected = True
+                    coords_to_enqueue, intersect_metrics = \
+                        self.rawr_toi_intersector(coords)
+            except Exception as e:
+                self.log_exception(e, 'intersect coords', parent)
+                continue
 
+            try:
                 with time_block(timing, 'queue-write'):
-                    self.queue_writer.enqueue_batch(coords_to_enqueue)
-                coords_enqueued = True
+                    n_enqueued, n_inflight = \
+                        self.queue_writer.enqueue_batch(coords_to_enqueue)
+            except Exception as e:
+                self.log_exception(e, 'queue write', parent)
+                continue
 
+            try:
                 with time_block(timing, 'queue-done'):
                     self.rawr_queue.done(msg_handle)
+            except Exception as e:
+                self.log_exception(e, 'queue done', parent)
+                continue
 
-                if self.logger:
-                    self.logger.info(
-                        'Rawr message processed: '
-                        'tile(%s) n-coords(%s) timing(%s)' % (
-                            serialize_coord(parent),
-                            len(coords),
-                            json.dumps(timing),
-                        ))
-            except Exception:
-                stacktrace = format_stacktrace_one_line()
-                if self.logger:
-                    if not msg_handle:
-                        msg = 'could not read rawr tile from queue'
-                    elif not rawr_tile_generated:
-                        msg = 'generating rawr tile'
-                    elif not coords_intersected:
-                        msg = 'intersecting coords'
-                    elif not coords_enqueued:
-                        msg = 'enqueueing coords'
-                    else:
-                        msg = 'acknowledging coord'
-                    msg = 'Error: %s' % msg
-                    if parent:
-                        msg += ' for parent: %s' % serialize_coord(parent)
-                    msg += ' - %s' % stacktrace
-                    self.logger.info(msg)
+            if self.logger:
+                self.logger.info(
+                    'Rawr message processed: '
+                    'tile(%s) n-coords(%d) enqueued(%s) timing(%s)' % (
+                        serialize_coord(parent),
+                        len(coords),
+                        len(coords_to_enqueue),
+                        json.dumps(timing),
+                    ))
+
+            try:
+                self.stats_handler(
+                    intersect_metrics, n_enqueued, n_inflight, timing)
+            except Exception as e:
+                self.log_exception(e, 'stats', parent)
+
+    def log_exception(self, exception, msg, parent_coord=None):
+        stacktrace = format_stacktrace_one_line()
+        err_msg = 'Error %s: %s' % (msg, str(exception))
+        if parent_coord:
+            err_msg += ' for parent: %s' % serialize_coord(parent_coord)
+        err_msg += ' - %s' % stacktrace
+
+        if self.logger:
+            self.logger.error(err_msg)
+        else:
+            sys.stderr.write('%s\n' % err_msg)
 
 
 def make_rawr_zip_payload(rawr_tile, date_time=None):
@@ -334,8 +366,10 @@ def make_rawr_s3_path(tile, prefix, suffix):
     return path_with_hash
 
 
-def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger):
-    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger)
+def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
+                       stats_handler):
+    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
+                        stats_handler)
 
 
 class RawrS3Sink(object):
