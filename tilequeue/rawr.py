@@ -120,7 +120,7 @@ class RawrEnqueuer(object):
 
         if self.logger:
             self.logger.info(
-                'Expiry processed: '
+                'Rawr tiles enqueued: '
                 'coords(%d) payloads(%d) enqueue-calls(%d))' %
                 (n_coords, n_payloads, n_msgs_sent))
 

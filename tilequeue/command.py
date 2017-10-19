@@ -1628,6 +1628,47 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_pipeline()
 
 
+def tilequeue_rawr_seed_toi(cfg, peripherals):
+    """command to read the toi and enqueue the corresponding rawr tiles"""
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_name = rawr_yaml.get('queue')
+    assert rawr_queue_name, 'Missing rawr queue'
+    rawr_queue = make_rawr_queue(rawr_queue_name)
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    logger = make_logger(cfg, 'rawr_seed')
+    from tilequeue.rawr import make_rawr_enqueuer
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)
+    rawr_enqueuer = make_rawr_enqueuer(
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
+
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
+    # high zoom level coordinates get enqueued onto rawr queue
+    # low zoom get enqueued for tile processing directly
+    lo_zoom = []
+    hi_zoom = []
+    for coord_int in tiles_of_interest:
+        coord = coord_unmarshall_int(coord_int)
+        if coord.zoom >= group_by_zoom:
+            hi_zoom.append(coord)
+        else:
+            lo_zoom.append(coord)
+
+    rawr_enqueuer(hi_zoom)
+    peripherals.queue_writer.enqueue_batch(lo_zoom)
+    logger.info('%d coords enqueued for rawr tile processing', len(hi_zoom))
+    logger.info('%d coords enqueued for tilequeue processing', len(lo_zoom))
+
+
 Peripherals = namedtuple(
     'Peripherals',
     'toi stats redis_client '
@@ -1668,6 +1709,7 @@ def tilequeue_main(argv_args=None):
         ('stuck-tiles', tilequeue_stuck_tiles),
         ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
         ('rawr-process', tilequeue_rawr_process),
+        ('rawr-seed-toi', tilequeue_rawr_seed_toi),
     )
 
     def _make_peripherals(cfg):
