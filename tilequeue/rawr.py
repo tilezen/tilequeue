@@ -9,14 +9,11 @@ from tilequeue.queue.message import MessageHandle
 from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
-from tilequeue.tile import serialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from tilequeue.utils import time_block
 from time import gmtime
-import json
-import sys
 import zipfile
 
 
@@ -229,7 +226,8 @@ class RawrTileGenerationPipeline(object):
 
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            queue_writer, rawr_toi_intersector, stats_handler, logger=None):
+            queue_writer, rawr_toi_intersector, stats_handler,
+            rawr_proc_logger):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
@@ -237,7 +235,7 @@ class RawrTileGenerationPipeline(object):
         self.queue_writer = queue_writer
         self.rawr_toi_intersector = rawr_toi_intersector
         self.stats_handler = stats_handler
-        self.logger = logger
+        self.rawr_proc_logger = rawr_proc_logger
 
     def __call__(self):
         while True:
@@ -299,15 +297,12 @@ class RawrTileGenerationPipeline(object):
                 self.log_exception(e, 'queue done', parent)
                 continue
 
-            if self.logger:
-                self.logger.info(
-                    'Rawr message processed: '
-                    'tile(%s) n-coords(%d) enqueued(%s) timing(%s)' % (
-                        serialize_coord(parent),
-                        len(coords),
-                        len(coords_to_enqueue),
-                        json.dumps(timing),
-                    ))
+            try:
+                self.rawr_proc_logger.processed(
+                    intersect_metrics, n_enqueued, n_inflight, timing, parent)
+            except Exception as e:
+                self.log_exception(e, 'log', parent)
+                continue
 
             try:
                 self.stats_handler(
@@ -317,15 +312,7 @@ class RawrTileGenerationPipeline(object):
 
     def log_exception(self, exception, msg, parent_coord=None):
         stacktrace = format_stacktrace_one_line()
-        err_msg = 'Error %s: %s' % (msg, str(exception))
-        if parent_coord:
-            err_msg += ' for parent: %s' % serialize_coord(parent_coord)
-        err_msg += ' - %s' % stacktrace
-
-        if self.logger:
-            self.logger.error(err_msg)
-        else:
-            sys.stderr.write('%s\n' % err_msg)
+        self.rawr_proc_logger.error(msg, exception, stacktrace, parent_coord)
 
 
 def make_rawr_zip_payload(rawr_tile, date_time=None):

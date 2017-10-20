@@ -91,7 +91,7 @@ propagate=0
 
 [logger_rawr_process]
 level=INFO
-handlers=consoleHandler
+handlers=jsonConsoleHandler
 qualName=rawr_process
 propagate=0
 

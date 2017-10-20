@@ -24,6 +24,7 @@ class LogCategory(Enum):
     PROCESS = 1
     LIFECYCLE = 2
     QUEUE_SIZES = 3
+    RAWR_PROCESS = 4
 
 
 def log_level_name(log_level):
@@ -103,6 +104,44 @@ class JsonTileProcessingLogger(object):
             category=log_category_name(LogCategory.QUEUE_SIZES),
             type=log_level_name(LogLevel.INFO),
             sizes=sizes,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+
+class JsonRawrProcessingLogger(object):
+
+    def __init__(self, logger):
+        self.logger = logger
+
+    def error(self, msg, exception, stacktrace, parent_coord):
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.RAWR_PROCESS),
+            msg=msg,
+            exception=str(exception),
+            stacktrace=stacktrace,
+        )
+        if parent_coord:
+            json_obj['coord'] = make_coord_dict(parent_coord)
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
+    def processed(self, intersect_metrics, n_enqueued, n_inflight, timing,
+                  parent_coord):
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.RAWR_PROCESS),
+            intersect=dict(
+                toi=intersect_metrics['n_toi'],
+                total=intersect_metrics['total'],
+                hits=intersect_metrics['hits'],
+                misses=intersect_metrics['misses'],
+            ),
+            enqueued=n_enqueued,
+            inflight=n_inflight,
+            coord=make_coord_dict(parent_coord),
+            time=timing,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)

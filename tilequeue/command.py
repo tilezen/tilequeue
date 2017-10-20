@@ -1580,6 +1580,7 @@ def tilequeue_rawr_process(cfg, peripherals):
     from raw_tiles.gen import RawrGenerator
     from raw_tiles.source.conn import ConnectionContextManager
     from raw_tiles.source.osm import OsmSource
+    from tilequeue.log import JsonRawrProcessingLogger
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrTileGenerationPipeline
     from tilequeue.rawr import RawrToiIntersector
@@ -1616,10 +1617,11 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_formatter = Gzip(Msgpack())
     rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
     stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
+    rawr_proc_logger = JsonRawrProcessingLogger(logger)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
             peripherals.queue_writer, rawr_toi_intersector, stats_handler,
-            logger)
+            rawr_proc_logger)
     rawr_pipeline()
 
 
