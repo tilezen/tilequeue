@@ -56,7 +56,7 @@ class RawrTilePipelineStatsHandler(object):
                        intersect_metrics['misses'])
 
             pipe.gauge('rawr.process.enqueued', n_enqueued)
-            pipe.gauge('rawr.process.in_flight', n_enqueued)
+            pipe.gauge('rawr.process.inflight', n_inflight)
 
             for timing_label, value in timing.items():
                 metric_name = 'rawr.process.time.%s' % timing_label
