@@ -1208,27 +1208,13 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
 
 def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
-    from tilequeue.rawr import make_rawr_enqueuer
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
     from tilequeue.wof import make_wof_model
     from tilequeue.wof import make_wof_url_neighbourhood_fetcher
     from tilequeue.wof import make_wof_processor
 
     wof_cfg = cfg.wof
     assert wof_cfg, 'Missing wof config'
-
-    rawr_yaml = cfg.yml.get('rawr')
-    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
-
-    group_by_zoom = rawr_yaml.get('group-zoom')
-    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-
-    rawr_queue_name = rawr_yaml.get('queue')
-    assert rawr_queue_name, 'Missing rawr queue'
-    rawr_queue = make_rawr_queue(rawr_queue_name)
-
-    msg_marshall_yaml = cfg.yml.get('message-marshall')
-    assert msg_marshall_yaml, 'Missing message-marshall config'
-    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
     logger = make_logger(cfg, 'wof_process_neighbourhoods')
     logger.info('WOF process neighbourhoods run started')
@@ -1246,8 +1232,10 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     model = make_wof_model(wof_cfg['postgresql'])
 
     current_date = datetime.date.today()
-    rawr_enqueuer = make_rawr_enqueuer(
-            rawr_queue, msg_marshaller, group_by_zoom, logger)
+    stats = make_statsd_client_from_cfg(cfg)
+    stats_handler = RawrTileEnqueueStatsHandler(stats)
+    rawr_enqueuer = make_rawr_enqueuer_from_cfg(
+        cfg, logger, stats_handler)
     processor = make_wof_processor(
         fetcher, model, peripherals.toi, rawr_enqueuer, logger, current_date)
 
@@ -1532,8 +1520,9 @@ def make_rawr_queue(rawr_queue_name):
     return rawr_queue
 
 
-def tilequeue_rawr_enqueue(cfg, args):
-    """command to take tile expiry path and enqueue for rawr tile generation"""
+def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler):
+    from tilequeue.rawr import make_rawr_enqueuer
+
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
@@ -1548,14 +1537,20 @@ def tilequeue_rawr_enqueue(cfg, args):
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    stats = make_statsd_client_from_cfg(cfg)
+    return make_rawr_enqueuer(
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
+
+
+def tilequeue_rawr_enqueue(cfg, args):
+    """command to take tile expiry path and enqueue for rawr tile generation"""
     from tilequeue.stats import RawrTileEnqueueStatsHandler
-    stats_handler = RawrTileEnqueueStatsHandler(stats)
 
     logger = make_logger(cfg, 'rawr_enqueue')
-    from tilequeue.rawr import make_rawr_enqueuer
-    rawr_enqueuer = make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
+    stats = make_statsd_client_from_cfg(cfg)
+    stats_handler = RawrTileEnqueueStatsHandler(stats)
+    rawr_enqueuer = make_rawr_enqueuer_from_cfg(
+        cfg, logger, stats_handler)
+
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
         rawr_enqueuer(coords)
@@ -1628,6 +1623,33 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_pipeline()
 
 
+def tilequeue_rawr_seed_toi(cfg, peripherals):
+    """command to read the toi and enqueue the corresponding rawr tiles"""
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+
+    logger = make_logger(cfg, 'rawr_seed')
+    stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)
+    rawr_enqueuer = make_rawr_enqueuer_from_cfg(
+        cfg, logger, stats_handler)
+
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
+    # high zoom level coordinates get enqueued onto rawr queue
+    # low zoom get enqueued for tile processing directly
+    lo_zoom = []
+    hi_zoom = []
+    for coord_int in tiles_of_interest:
+        coord = coord_unmarshall_int(coord_int)
+        if coord.zoom >= rawr_enqueuer.group_by_zoom:
+            hi_zoom.append(coord)
+        else:
+            lo_zoom.append(coord)
+
+    rawr_enqueuer(hi_zoom)
+    peripherals.queue_writer.enqueue_batch(lo_zoom)
+    logger.info('%d coords enqueued for rawr tile processing', len(hi_zoom))
+    logger.info('%d coords enqueued for tilequeue processing', len(lo_zoom))
+
+
 Peripherals = namedtuple(
     'Peripherals',
     'toi stats redis_client '
@@ -1668,6 +1690,7 @@ def tilequeue_main(argv_args=None):
         ('stuck-tiles', tilequeue_stuck_tiles),
         ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
         ('rawr-process', tilequeue_rawr_process),
+        ('rawr-seed-toi', tilequeue_rawr_seed_toi),
     )
 
     def _make_peripherals(cfg):
