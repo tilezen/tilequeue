@@ -297,10 +297,11 @@ def make_redis_client(cfg):
     return redis_client
 
 
-def make_logger(cfg, logger_name):
+def make_logger(cfg, logger_name, loglevel=logging.INFO):
     if getattr(cfg, 'logconfig') is not None:
         logging.config.fileConfig(cfg.logconfig)
     logger = logging.getLogger(logger_name)
+    logger.setLevel(loglevel)
     return logger
 
 
