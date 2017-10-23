@@ -8,6 +8,10 @@ v1.9.0
 * Reduce default queue buffer size. See [#214](https://github.com/tilezen/tilequeue/pull/214).
 * Remove temporary Redis TOI dump command. See [#196](https://github.com/tilezen/tilequeue/pull/196).
 
+v1.8.1
+------
+* Backport fix for including VERSION file in package. See [#265](https://github.com/tilezen/tilequeue/pull/265).
+
 v1.8.0
 ------
 * Move TOI from redis to s3.
