@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+v1.8.1
+------
+* Backport fix for including VERSION file in package. See [#265](https://github.com/tilezen/tilequeue/pull/265).
+
 v1.8.0
 ------
 * Move TOI from redis to s3.
