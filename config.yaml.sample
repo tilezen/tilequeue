@@ -263,7 +263,9 @@ toi-prune:
 rawr:
   # this is the parent zoom level that coordinates are expected to be grouped under
   group-zoom: 10
-  queue: <sqs-queue-name>
+  queue:
+    name: <sqs-queue-name>
+    region: us-east-1
   postgresql:
     host: localhost
     port: 5432
@@ -272,5 +274,6 @@ rawr:
     password: dbpassword
   sink:
     bucket: s3-bucket-name
+    region: us-east-1
     prefix: s3-bucket-prefix
     suffix: .zip
