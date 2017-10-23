@@ -45,14 +45,14 @@ class JsonTileProcessingLogger(object):
         try:
             log_level_str = log_level_name(log_level)
             logging_log_level = log_level.value
-        except:
+        except Exception:
             sys.stderr.write('ERROR: code error: invalid log level: %s\n' %
                              log_level)
             log_level_str = log_level_name(LogLevel.ERROR)
             logging_log_level = logging.ERROR
         try:
             log_category_str = log_category_name(log_category)
-        except:
+        except Exception:
             sys.stderr.write('ERROR: code error: invalid log category: %s\n' %
                              log_category)
             log_category_str = log_category_name(LogCategory.PROCESS)

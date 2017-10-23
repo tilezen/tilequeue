@@ -188,7 +188,7 @@ def _normalize_edtf(s):
     if s and s != 'u':
         try:
             return edtf.EDTF(s)
-        except:
+        except Exception:
             pass
 
     # when all else fails, return the "most unknown" EDTF.
@@ -223,7 +223,7 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
 
     try:
         shape_lnglat = shapely.geometry.shape(geometry)
-    except:
+    except Exception:
         return failure('Unexpected geometry')
 
     shape_mercator = shapely.ops.transform(

@@ -457,7 +457,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
         try:
             fn = resolve(init_fn_name)
 
-        except:
+        except Exception:
             raise Exception('Unable to init resource %r with function %r due '
                             'to %s' % (resource_name, init_fn_name,
                                        "".join(traceback.format_exception(

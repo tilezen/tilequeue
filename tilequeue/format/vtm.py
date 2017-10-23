@@ -177,9 +177,9 @@ class VectorTile:
 
     def getLayer(self, val):
         try:
-            l = max(min(10, int(val)) + 5, 0)
-            if l != 0:
-                return l
+            layer = max(min(10, int(val)) + 5, 0)
+            if layer != 0:
+                return layer
         except ValueError:
             logging.debug("layer invalid %s" % val)
 

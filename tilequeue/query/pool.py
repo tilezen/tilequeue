@@ -20,7 +20,7 @@ class ConnectionsContextManager(object):
         for conn in self.conns:
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         suppress_exception = False
         return suppress_exception
