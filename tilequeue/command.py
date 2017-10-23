@@ -1510,14 +1510,23 @@ def tilequeue_process_tile(cfg, peripherals, args):
     print tile_data
 
 
-def make_rawr_queue(rawr_queue_name):
+def make_rawr_queue(rawr_queue_name, rawr_queue_region):
     import boto3
-    sqs_client = boto3.client('sqs')
+    sqs_client = boto3.client('sqs', region_name=rawr_queue_region)
     resp = sqs_client.get_queue_url(QueueName=rawr_queue_name)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
     queue_url = resp['QueueUrl']
     from tilequeue.rawr import SqsQueue
     rawr_queue = SqsQueue(sqs_client, queue_url)
+    return rawr_queue
+
+
+def make_rawr_queue_from_yaml(rawr_queue_yaml):
+    rawr_queue_name = rawr_queue_yaml.get('name')
+    assert rawr_queue_name, 'Missing rawr queue name'
+    rawr_queue_region = rawr_queue_yaml.get('region')
+    assert rawr_queue_region, 'Missing rawr queue region'
+    rawr_queue = make_rawr_queue(rawr_queue_name, rawr_queue_region)
     return rawr_queue
 
 
@@ -1530,9 +1539,9 @@ def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler):
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
 
-    rawr_queue_name = rawr_yaml.get('queue')
-    assert rawr_queue_name, 'Missing rawr queue'
-    rawr_queue = make_rawr_queue(rawr_queue_name)
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
 
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
@@ -1565,9 +1574,9 @@ def tilequeue_rawr_process(cfg, peripherals):
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
 
-    rawr_queue_name = rawr_yaml.get('queue')
-    assert rawr_queue_name, 'Missing rawr queue'
-    rawr_queue = make_rawr_queue(rawr_queue_name)
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
 
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
@@ -1594,12 +1603,14 @@ def tilequeue_rawr_process(cfg, peripherals):
     assert rawr_sink_yaml, 'Missing rawr sink config'
     bucket = rawr_sink_yaml.get('bucket')
     assert bucket, 'Missing rawr sink bucket'
+    sink_region = rawr_sink_yaml.get('region')
+    assert sink_region, 'Missing rawr sink region'
     prefix = rawr_sink_yaml.get('prefix')
     assert prefix, 'Missing rawr sink prefix'
     suffix = rawr_sink_yaml.get('suffix')
     assert suffix, 'Missing rawr sink suffix'
 
-    s3_client = boto3.client('s3')
+    s3_client = boto3.client('s3', region_name=sink_region)
     rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
     toi_yaml = cfg.yml.get('toi-store')
