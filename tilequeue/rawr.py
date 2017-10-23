@@ -200,7 +200,7 @@ class RawrToiIntersector(object):
             finally:
                 try:
                     body.close()
-                except:
+                except Exception:
                     pass
             gzip_file_obj = StringIO(gzip_payload)
             toi = load_set_from_gzipped_fp(gzip_file_obj)

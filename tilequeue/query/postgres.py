@@ -132,7 +132,7 @@ def execute_query(conn, query):
         rows = list(cursor.fetchall())
 
         return rows
-    except:
+    except Exception:
         # TODO this kind of thing is only necessary if we re-use connections
 
         # If any exception occurs during query execution, close the
@@ -141,7 +141,7 @@ def execute_query(conn, query):
         # those that are closed
         try:
             conn.close()
-        except:
+        except Exception:
             pass
         raise
 
@@ -195,7 +195,7 @@ class DataFetcher(object):
                     # TODO can all the source rows just be smashed together?
                     # seems like it because the data allows discrimination
                     all_source_rows.extend(source_rows)
-                except:
+                except Exception:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     async_exception = exc_value
                     async_exceptions.append(async_exception)
