@@ -118,7 +118,7 @@ class RawrEnqueuer(object):
         if self.logger:
             self.logger.info(
                 'Rawr tiles enqueued: '
-                'coords(%d) payloads(%d) enqueue-calls(%d))' %
+                'coords(%d) payloads(%d) enqueue_calls(%d))' %
                 (n_coords, n_payloads, n_msgs_sent))
 
         self.stats_handler(n_coords, n_payloads, n_msgs_sent)
@@ -243,7 +243,7 @@ class RawrTileGenerationPipeline(object):
 
             try:
                 # NOTE: it's ok if reading from the queue takes a long time
-                with time_block(timing, 'queue-read'):
+                with time_block(timing, 'queue_read'):
                     msg_handle = self.rawr_queue.read()
             except Exception as e:
                 self.log_exception(e, 'queue read')
@@ -268,14 +268,14 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'rawr-gen'):
+                with time_block(timing, 'rawr_gen'):
                     self.rawr_gen(rawr_tile_coord)
             except Exception as e:
                 self.log_exception(e, 'rawr tile gen', parent)
                 continue
 
             try:
-                with time_block(timing, 'toi-intersect'):
+                with time_block(timing, 'toi_intersect'):
                     coords_to_enqueue, intersect_metrics = \
                         self.rawr_toi_intersector(coords)
             except Exception as e:
@@ -283,7 +283,7 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'queue-write'):
+                with time_block(timing, 'queue_write'):
                     n_enqueued, n_inflight = \
                         self.queue_writer.enqueue_batch(coords_to_enqueue)
             except Exception as e:
@@ -291,7 +291,7 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'queue-done'):
+                with time_block(timing, 'queue_done'):
                     self.rawr_queue.done(msg_handle)
             except Exception as e:
                 self.log_exception(e, 'queue done', parent)
