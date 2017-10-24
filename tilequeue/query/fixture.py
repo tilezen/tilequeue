@@ -1,5 +1,6 @@
 from shapely.geometry import box
 from tilequeue.process import lookup_source
+from tilequeue.process import Source
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.query.common import Metadata
 from tilequeue.query.common import Relation
@@ -169,8 +170,15 @@ class DataFetcher(object):
                 if not info.allows_shape_type(shape):
                     continue
 
-                orig_source = props.get('source')
-                source = lookup_source(orig_source)
+                source_value = props.get('source')
+                source = lookup_source(source_value)
+
+                # this is a bit of a hack to ensure that custom source values,
+                # as used in the tests, get passed though the fixture data
+                # fetcher intact.
+                if source is None and source_value is not None:
+                    source = Source(source_value, source_value)
+
                 meta = Metadata(source, ways, rels)
                 min_zoom = info.min_zoom_fn(shape, props, fid, meta)
 
@@ -191,7 +199,7 @@ class DataFetcher(object):
                 # this removes larger cities at low zooms, and smaller cities
                 # as the zoom increases and as the OSM cities start to "fade
                 # in".
-                if orig_source == 'naturalearthdata.com':
+                if source and source.name == 'ne':
                     pop_max = int(props.get('pop_max', '0'))
                     remove = ((zoom >= 8 and zoom < 10 and pop_max > 50000) or
                               (zoom >= 10 and zoom < 11 and pop_max > 20000) or
@@ -209,8 +217,8 @@ class DataFetcher(object):
                 layer_props = layer_properties(
                     fid, shape, props, layer_name, zoom, self.osm)
 
-                if orig_source:
-                    layer_props['source'] = orig_source
+                if source:
+                    layer_props['source'] = source.value
 
                 layer_props['min_zoom'] = min_zoom
                 props_name = '__%s_properties__' % layer_name

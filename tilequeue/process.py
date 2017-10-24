@@ -215,20 +215,34 @@ def _accumulate_props(dest_props, src_props):
 Metadata = namedtuple('Metadata', 'source')
 
 
+# source ties together a short name for a source of data and a longer tag
+# value to use on features from that source.
+#
+# note that this isn't an Enum, since we want sources to be extended for
+# testing and 3rd party re-use with additional data sources.
+#
+# for example:
+#   osm = Source('osm', 'openstreetmap.org'),
+#   wof = Source('wof', 'whosonfirst.mapzen.com'),
+Source = namedtuple('Source', 'name value')
+
+
 def make_metadata(source):
-    return Metadata(source)
+    assert source is None or isinstance(source, Source)
+    return Metadata(source and source.name)
 
 
 def lookup_source(source):
     result = None
     if source == 'openstreetmap.org':
-        result = 'osm'
+        result = Source('osm', source)
     elif source == 'naturalearthdata.com':
-        result = 'ne'
+        result = Source('ne', source)
     elif source == 'openstreetmapdata.com':
-        result = 'shp'
+        result = Source('shp', source)
     elif source == 'whosonfirst.mapzen.com':
-        result = 'wof'
+        result = Source('wof', source)
+
     return result
 
 

@@ -3,6 +3,7 @@ from tilequeue.query.pool import DBConnectionPool
 from tilequeue.query.postgres import make_db_data_fetcher
 from tilequeue.query.rawr import make_rawr_data_fetcher
 from tilequeue.query.split import make_split_data_fetcher
+from tilequeue.process import Source
 
 
 __all__ = [
@@ -33,18 +34,21 @@ def make_data_fetcher(cfg, layer_data, query_cfg, io_pool):
 
 class _NullRawrStorage(object):
 
-    def __init__(self, source):
-        self.source = source
+    def __init__(self, data_source, table_sources):
+        self.data_source = data_source
+        self.table_sources = table_sources
 
     def __call__(self, tile):
         # returns a "tables" object, which responds to __call__(table_name)
         # with tuples for that table.
         data = {}
-        for location in self.source(tile):
+        for location in self.data_source(tile):
             data[location.name] = location.records
 
         def _tables(table_name):
-            return data.get(table_name, [])
+            from tilequeue.query.common import Table
+            source = self.table_sources[table_name]
+            return Table(source, data.get(table_name, []))
 
         return _tables
 
@@ -58,6 +62,15 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
 
     rawr_source_yaml = rawr_yaml.get('source')
     assert rawr_source_yaml, 'Missing rawr source config'
+
+    table_sources = rawr_source_yaml.get('table-sources')
+    assert table_sources, 'Missing definitions of source per table'
+
+    # map text for table source onto Source objects
+    for tbl, data in table_sources.items():
+        source_name = data['name']
+        source_value = data['value']
+        table_sources[tbl] = Source(source_name, source_value)
 
     # set this flag, and provide a postgresql subkey, to generate RAWR tiles
     # directly, rather than trying to load them from S3. this can be useful
@@ -77,8 +90,8 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         import boto3
         from tilequeue.rawr import RawrS3Source
         s3_client = boto3.client('s3')
-        storage = RawrS3Source(s3_client, bucket, prefix, suffix, io_pool,
-                               allow_missing_tiles)
+        storage = RawrS3Source(s3_client, bucket, prefix, suffix,
+                               table_sources, io_pool, allow_missing_tiles)
 
     else:
         from raw_tiles.source.conn import ConnectionContextManager
@@ -89,13 +102,10 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
 
         conn_ctx = ConnectionContextManager(postgresql_cfg)
         rawr_osm_source = OsmSource(conn_ctx)
-        storage = _NullRawrStorage(rawr_osm_source)
+        storage = _NullRawrStorage(rawr_osm_source, table_sources)
 
     # TODO: this needs to be configurable, everywhere!
     max_z = 16
-
-    # TODO: this is just wrong - need to refactor this per-"table"?
-    source = 'osm'
 
     # TODO: put this in the config!
     label_placement_layers = {
@@ -107,7 +117,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
     layers = _make_layer_info(layer_data, cfg.process_yaml_cfg)
 
     return make_rawr_data_fetcher(
-        group_by_zoom, max_z, storage, layers, source, label_placement_layers)
+        group_by_zoom, max_z, storage, layers, label_placement_layers)
 
 
 def _make_layer_info(layer_data, process_yaml_cfg):

@@ -325,18 +325,7 @@ def _make_meta(source, fid, shape_type, osm):
             tags.append(v)
         rel_dicts.append(dict(tags=tags))
 
-    return _Metadata(source, ways, rel_dicts)
-
-
-_EXPANDED_SOURCES = {
-    'osm': 'openstreetmap.org',
-}
-
-
-# horrible little hack, as in some places we use source="osm" and in other
-# places use source="openstreetmap.org", and so on for other sources.
-def _expand_source(source):
-    return _EXPANDED_SOURCES.get(source, source)
+    return _Metadata(source.name, ways, rel_dicts)
 
 
 class _LayersIndex(object):
@@ -349,11 +338,10 @@ class _LayersIndex(object):
     pyramid.
     """
 
-    def __init__(self, layers, tile_pyramid, source):
+    def __init__(self, layers, tile_pyramid):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.tile_index = defaultdict(list)
-        self.source = source
         self.delayed_features = []
 
     def add_row(self, fid, shape_wkb, props):
@@ -367,12 +355,15 @@ class _LayersIndex(object):
         # the ways and relations using a particular feature.
         self.delayed_features.append(feature)
 
-    def index(self, osm):
+    def index(self, osm, source):
         for feature in self.delayed_features:
-            self._index_feature(feature, osm)
+            self._index_feature(feature, osm, source)
         del self.delayed_features
 
-    def _index_feature(self, feature, osm):
+    def _index_feature(self, feature, osm, source):
+        # stash this for later, so that it's accessible when the index is read.
+        self.source = source
+
         fid = feature.fid
         shape = feature.shape
         props = feature.properties
@@ -381,7 +372,7 @@ class _LayersIndex(object):
         # grab the shape type without decoding the WKB to save time.
         shape_type = _wkb_shape(shape.wkb)
 
-        meta = _make_meta(self.source, fid, shape_type, osm)
+        meta = _make_meta(source, fid, shape_type, osm)
         for layer_name, info in self.layers.items():
             shape_type_str = shape_type.name
             if info.shape_types and shape_type_str not in info.shape_types:
@@ -432,12 +423,12 @@ class _LayersIndex(object):
 
 class RawrTile(object):
 
-    def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
-                 source):
+    def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
         """
         Expect layers to be a dict of layer name to LayerInfo (see fixture.py).
-        Tables should be a callable which returns a generator over the rows in
-        the table when called with that table's name.
+        Tables should be a callable which returns a Table object (namedtuple
+        of a source and iterator over the rows in the table) when called with
+        that table's name.
         """
 
         from raw_tiles.index.index import index_table
@@ -445,16 +436,17 @@ class RawrTile(object):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.label_placement_layers = label_placement_layers
-        self.source = source
         self.layer_indexes = {}
 
         table_indexes = defaultdict(list)
 
-        self.layers_index = _LayersIndex(
-            self.layers, self.tile_pyramid, self.source)
+        self.layers_index = _LayersIndex(self.layers, self.tile_pyramid)
         for shape_type in ('point', 'line', 'polygon'):
             table_name = 'planet_osm_' + shape_type
             table_indexes[table_name].append(self.layers_index)
+
+        # source for all these layers has to be the same
+        source = None
 
         self.osm = OsmRawrLookup()
         # NOTE: order here is different from that in raw_tiles index()
@@ -462,9 +454,17 @@ class RawrTile(object):
         # "interesting" feature IDs before we look at the ways/rels tables.
         for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
             table_name = 'planet_osm_' + typ
-            source = tables(table_name)
+            table = tables(table_name)
             extra_indexes = table_indexes[table_name]
-            index_table(source, self.osm, *extra_indexes)
+            index_table(table.rows, self.osm, *extra_indexes)
+
+            if source is None:
+                source = table.source
+            else:
+                assert source == table.source, 'Mismatched sources'
+
+        assert source
+        self.layers_index_source = source
 
         # there's a chicken and egg problem with the indexes: we want to know
         # which features to index, but also calculate the feature's min zoom,
@@ -475,7 +475,7 @@ class RawrTile(object):
         # might mean we buffer more information in memory than we technically
         # need if many of the features are not visible, but means we get one
         # single set of _Feature objects.
-        self.layers_index.index(self.osm)
+        self.layers_index.index(self.osm, self.layers_index_source)
 
     def _named_layer(self, layer_min_zooms):
         # we want only one layer from ('pois', 'landuse', 'buildings') for
@@ -501,7 +501,7 @@ class RawrTile(object):
                     seen_ids.add(feature_id)
                     features.append(feature)
 
-        return features
+        return {self.layers_index_source: features}.iteritems()
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []
@@ -516,82 +516,87 @@ class RawrTile(object):
         assert zoom >= self.tile_pyramid.z
         assert bbox.within(self.tile_pyramid.bbox())
 
-        for (fid, shape, props, layer_min_zooms) in self._lookup(
-                zoom, unpadded_bounds):
-            # reject any feature which doesn't intersect the given bounds
-            if bbox.disjoint(shape):
-                continue
-
-            # place for assembing the read row as if from postgres
-            read_row = {}
-            generate_label_placement = False
-
-            # add names into whichever of the pois, landuse or buildings
-            # layers has claimed this feature.
-            names = {}
-            for k in name_keys(props):
-                names[k] = props[k]
-            named_layer = self._named_layer(layer_min_zooms)
-
-            for layer_name, min_zoom in layer_min_zooms.items():
-                # we need to keep fractional zooms, e.g: 4.999 should appear
-                # in tiles at zoom level 4, but not 3. also, tiles at zooms
-                # past the max zoom should be clamped to the max zoom.
-                tile_zoom = min(self.tile_pyramid.max_z, floor(min_zoom))
-                if tile_zoom > zoom:
-                    continue
-
-                layer_props = layer_properties(
-                    fid, shape, props, layer_name, zoom, self.osm)
-                layer_props['min_zoom'] = min_zoom
-
-                if names and named_layer == layer_name:
-                    layer_props.update(names)
-
-                read_row['__' + layer_name + '_properties__'] = layer_props
-
-                # if the feature exists in any label placement layer, then we
-                # should consider generating a centroid
-                label_layers = self.label_placement_layers.get(
-                    shape_type_lookup(shape), {})
-                if layer_name in label_layers:
-                    generate_label_placement = True
-
-            if read_row:
-                read_row['__id__'] = fid
-
-                # if this is a water layer feature, then clip to an expanded
-                # bounding box to avoid tile-edge artefacts.
-                clip_box = bbox
-                if layer_name == 'water':
-                    pad_factor = 1.1
-                    clip_box = calculate_padded_bounds(
-                        pad_factor, unpadded_bounds)
-                clip_shape = clip_box.intersection(shape)
-                read_row['__geometry__'] = bytes(clip_shape.wkb)
-
-                if generate_label_placement:
-                    read_row['__label__'] = bytes(
-                        shape.representative_point().wkb)
-
-                if self.source:
-                    source = _expand_source(self.source)
-                    read_row['__properties__'] = {'source': source}
-
-                read_rows.append(read_row)
+        for source, features in self._lookup(zoom, unpadded_bounds):
+            for (fid, shape, props, layer_min_zooms) in features:
+                read_row = self._parse_row(
+                    zoom, unpadded_bounds, bbox, source, fid, shape, props,
+                    layer_min_zooms)
+                if read_row:
+                    read_rows.append(read_row)
 
         return read_rows
+
+    def _parse_row(self, zoom, unpadded_bounds, bbox, source, fid, shape,
+                   props, layer_min_zooms):
+        # reject any feature which doesn't intersect the given bounds
+        if bbox.disjoint(shape):
+            return None
+
+        # place for assembing the read row as if from postgres
+        read_row = {}
+        generate_label_placement = False
+
+        # add names into whichever of the pois, landuse or buildings
+        # layers has claimed this feature.
+        names = {}
+        for k in name_keys(props):
+            names[k] = props[k]
+        named_layer = self._named_layer(layer_min_zooms)
+
+        for layer_name, min_zoom in layer_min_zooms.items():
+            # we need to keep fractional zooms, e.g: 4.999 should appear
+            # in tiles at zoom level 4, but not 3. also, tiles at zooms
+            # past the max zoom should be clamped to the max zoom.
+            tile_zoom = min(self.tile_pyramid.max_z, floor(min_zoom))
+            if tile_zoom > zoom:
+                continue
+
+            layer_props = layer_properties(
+                fid, shape, props, layer_name, zoom, self.osm)
+            layer_props['min_zoom'] = min_zoom
+
+            if names and named_layer == layer_name:
+                layer_props.update(names)
+
+            read_row['__' + layer_name + '_properties__'] = layer_props
+
+            # if the feature exists in any label placement layer, then we
+            # should consider generating a centroid
+            label_layers = self.label_placement_layers.get(
+                shape_type_lookup(shape), {})
+            if layer_name in label_layers:
+                generate_label_placement = True
+
+        if read_row:
+            read_row['__id__'] = fid
+
+            # if this is a water layer feature, then clip to an expanded
+            # bounding box to avoid tile-edge artefacts.
+            clip_box = bbox
+            if layer_name == 'water':
+                pad_factor = 1.1
+                clip_box = calculate_padded_bounds(
+                    pad_factor, unpadded_bounds)
+            clip_shape = clip_box.intersection(shape)
+            read_row['__geometry__'] = bytes(clip_shape.wkb)
+
+            if generate_label_placement:
+                read_row['__label__'] = bytes(
+                    shape.representative_point().wkb)
+
+            if source:
+                read_row['__properties__'] = {'source': source.value}
+
+        return read_row
 
 
 class DataFetcher(object):
 
-    def __init__(self, min_z, max_z, storage, layers, source,
-                 label_placement_layers):
+    def __init__(self, min_z, max_z, storage, layers, label_placement_layers):
         self.min_z = min_z
         self.max_z = max_z
         self.storage = storage
         self.layers = layers
-        self.source = source
         self.label_placement_layers = label_placement_layers
 
     def fetch_tiles(self, all_data):
@@ -613,7 +618,7 @@ class DataFetcher(object):
             tables = self.storage(tile_pyramid.tile())
 
             fetcher = RawrTile(self.layers, tables, tile_pyramid,
-                               self.label_placement_layers, self.source)
+                               self.label_placement_layers)
 
             for coord, data in coord_group:
                 yield fetcher, data
@@ -627,13 +632,11 @@ class DataFetcher(object):
 #             returning a "tables" callable. The "tables" callable returns a
 #             list of rows given the table name as its only argument.
 #  - layers:  A dict of layer name to LayerInfo (see fixture.py).
-#  - source:  String indicating the source of the data (e.g: 'osm').
 #  - label_placement_layers:
 #             A dict of geometry type ('point', 'linestring', 'polygon') to
 #             set (or other in-supporting collection) of layer names.
 #             Geometries of that type in that layer will have a label
 #             placement generated for them.
-def make_rawr_data_fetcher(min_z, max_z, storage, layers, source,
+def make_rawr_data_fetcher(min_z, max_z, storage, layers,
                            label_placement_layers={}):
-    return DataFetcher(min_z, max_z, storage, layers, source,
-                       label_placement_layers)
+    return DataFetcher(min_z, max_z, storage, layers, label_placement_layers)

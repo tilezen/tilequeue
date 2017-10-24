@@ -1,6 +1,7 @@
 from collections import namedtuple
 from collections import defaultdict
 from itertools import izip
+from tilequeue.process import Source
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -41,7 +42,18 @@ def deassoc(x):
 # fixtures extend metadata to include ways and relations for the feature.
 # this is unnecessary for SQL, as the ways and relations tables are
 # "ambiently available" and do not need to be passed in arguments.
-Metadata = namedtuple('Metadata', 'source ways relations')
+class Metadata(object):
+    def __init__(self, source, ways, relations):
+        assert source is None or isinstance(source, Source)
+        self.source = source and source.name
+        self.ways = ways
+        self.relations = relations
+
+
+class Table(namedtuple('Table', 'source rows')):
+    def __init__(self, source, rows):
+        super(Table, self).__init__(source, rows)
+        assert isinstance(source, Source)
 
 
 def shape_type_lookup(shape):
