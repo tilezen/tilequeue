@@ -4,12 +4,22 @@ import logging
 import sys
 
 
+def int_if_exact(x):
+    try:
+        i = int(x)
+        return i if i == x else x
+    except ValueError:
+        # shouldn't practically happen, but prefer to just log the original
+        # instead of explode
+        return x
+
+
 def make_coord_dict(coord):
     """helper function to make a dict from a coordinate for logging"""
     return dict(
-        z=int(coord.zoom),
-        x=int(coord.column),
-        y=int(coord.row),
+        z=int_if_exact(coord.zoom),
+        x=int_if_exact(coord.column),
+        y=int_if_exact(coord.row),
     )
 
 
