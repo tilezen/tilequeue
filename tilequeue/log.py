@@ -7,9 +7,9 @@ import sys
 def make_coord_dict(coord):
     """helper function to make a dict from a coordinate for logging"""
     return dict(
-        z=coord.zoom,
-        x=coord.column,
-        y=coord.row,
+        z=int(coord.zoom),
+        x=int(coord.column),
+        y=int(coord.row),
     )
 
 
