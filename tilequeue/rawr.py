@@ -525,7 +525,9 @@ def make_rawr_queue(name, region, wait_time_secs):
     return rawr_queue
 
 
-class RawrMemQueue(object):
+class RawrFileQueue(object):
+
+    """A source of RAWR tile jobs loaded from a text file."""
 
     Handle = namedtuple('Handle', 'payload')
 
@@ -556,10 +558,10 @@ class RawrMemQueue(object):
 def make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller):
     rawr_queue_type = rawr_queue_yaml.get('type', 'sqs')
 
-    if rawr_queue_type == 'mem':
+    if rawr_queue_type == 'file':
         input_file = rawr_queue_yaml.get('input-file')
         assert input_file, 'Missing input-file for memory RAWR queue'
-        rawr_queue = RawrMemQueue(input_file, msg_marshaller)
+        rawr_queue = RawrFileQueue(input_file, msg_marshaller)
 
     else:
         name = rawr_queue_yaml.get('name')
