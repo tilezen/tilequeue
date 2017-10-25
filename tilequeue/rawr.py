@@ -449,16 +449,15 @@ def _empty_table(table_name):
 
 class RawrS3Source(object):
 
-    """Rawr source to read from S3. Uses a thread pool for I/O if provided."""
+    """Rawr source to read from S3."""
 
     def __init__(self, s3_client, bucket, prefix, suffix, table_sources,
-                 io_pool=None, allow_missing_tiles=False):
+                 allow_missing_tiles=False):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
         self.suffix = suffix
         self.table_sources = table_sources
-        self.io_pool = io_pool
         self.allow_missing_tiles = allow_missing_tiles
 
     def _get_object(self, tile):
@@ -483,11 +482,7 @@ class RawrS3Source(object):
 
     def __call__(self, tile):
         # throws an exception if the object is missing - RAWR tiles
-        if self.io_pool:
-            response = self.thread_pool.apply(
-                self._get_object, (tile,))
-        else:
-            response = self._get_object(tile)
+        response = self._get_object(tile)
 
         if response is None:
             return _empty_table
@@ -503,10 +498,9 @@ class RawrStoreSource(object):
 
     """Rawr source to read from a tilequeue store."""
 
-    def __init__(self, store, table_sources, io_pool=None):
+    def __init__(self, store, table_sources):
         self.store = store
         self.table_sources = table_sources
-        self.io_pool = io_pool
 
     def _get_object(self, tile):
         coord = unconvert_coord_object(tile)
@@ -516,12 +510,7 @@ class RawrStoreSource(object):
         return payload
 
     def __call__(self, tile):
-        if self.io_pool:
-            payload = self.thread_pool.apply(
-                self._get_object, (tile,))
-        else:
-            payload = self._get_object(tile)
-
+        payload = self._get_object(tile)
         return unpack_rawr_zip_payload(self.table_sources, StringIO(payload))
 
 

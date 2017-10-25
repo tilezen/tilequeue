@@ -95,7 +95,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         from tilequeue.rawr import RawrS3Source
         s3_client = boto3.client('s3')
         storage = RawrS3Source(s3_client, bucket, prefix, suffix,
-                               table_sources, io_pool, allow_missing_tiles)
+                               table_sources, allow_missing_tiles)
 
     elif source_type == 'generate':
         from raw_tiles.source.conn import ConnectionContextManager
