@@ -264,9 +264,13 @@ rawr:
   # this is the parent zoom level that coordinates are expected to be grouped under
   group-zoom: 10
   queue:
+    type: sqs
     name: <sqs-queue-name>
     wait-seconds: 20
     region: us-east-1
+    # alternatively, can use a file-backed queue
+    #type: file
+    #input-file: <file containing z/x/y per line>
   postgresql:
     host: localhost
     port: 5432
@@ -278,3 +282,26 @@ rawr:
     region: us-east-1
     prefix: s3-bucket-prefix
     suffix: .zip
+  # alternatively, provide a "store" config - same as elsewhere, can be s3 or directory
+  #store:
+  #  type: directory
+  #  path: rawr_tiles
+  source:
+    type: store # type can also be "generate" or "s3"
+    store:
+      type: directory
+      name: rawr_tiles
+    # add a postgresql section if you're using "generate"
+    #postgresql:
+    #  host: null
+    #  port: null
+    #  dbname: osm
+    #  user: osm
+    table-sources:
+      planet_osm_line: &osm { name: osm, value: openstreetmap.org }
+      planet_osm_point: *osm
+      planet_osm_polygon: *osm
+      planet_osm_ways: *osm
+      planet_osm_rels: *osm
+# uncomment this to use RAWR tiles rather than go direct to the database.
+#use-rawr-tiles: true

@@ -72,12 +72,16 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         source_value = data['value']
         table_sources[tbl] = Source(source_name, source_value)
 
-    # set this flag, and provide a postgresql subkey, to generate RAWR tiles
-    # directly, rather than trying to load them from S3. this can be useful
-    # for standalone use and testing.
-    is_s3_storage = not rawr_source_yaml.get('generate-from-scratch')
+    # source types are:
+    #   s3       - to fetch RAWR tiles from S3
+    #   store    - to fetch RAWR tiles from any tilequeue tile source
+    #   generate - to generate RAWR tiles directly, rather than trying to load
+    #              them from S3. this can be useful for standalone use and
+    #              testing. provide a postgresql subkey for database connection
+    #              settings.
+    source_type = rawr_source_yaml.get('type')
 
-    if is_s3_storage:
+    if source_type == 's3':
         bucket = rawr_source_yaml.get('bucket')
         assert bucket, 'Missing rawr sink bucket'
         prefix = rawr_source_yaml.get('prefix')
@@ -91,9 +95,9 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         from tilequeue.rawr import RawrS3Source
         s3_client = boto3.client('s3')
         storage = RawrS3Source(s3_client, bucket, prefix, suffix,
-                               table_sources, io_pool, allow_missing_tiles)
+                               table_sources, allow_missing_tiles)
 
-    else:
+    elif source_type == 'generate':
         from raw_tiles.source.conn import ConnectionContextManager
         from raw_tiles.source.osm import OsmSource
 
@@ -103,6 +107,19 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         conn_ctx = ConnectionContextManager(postgresql_cfg)
         rawr_osm_source = OsmSource(conn_ctx)
         storage = _NullRawrStorage(rawr_osm_source, table_sources)
+
+    elif source_type == 'store':
+        from tilequeue.store import make_store
+        from tilequeue.rawr import RawrStoreSource
+
+        store_cfg = rawr_source_yaml.get('store')
+        store = make_store(store_cfg,
+                           credentials=cfg.subtree('aws credentials'))
+        storage = RawrStoreSource(store, table_sources)
+
+    else:
+        assert False, 'Source type %r not understood. ' \
+            'Options are s3, generate and store.' % (source_type,)
 
     # TODO: this needs to be configurable, everywhere!
     max_z = 16

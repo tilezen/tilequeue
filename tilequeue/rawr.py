@@ -1,14 +1,17 @@
 from botocore.exceptions import ClientError
 from collections import defaultdict
+from collections import namedtuple
 from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
 from tilequeue.command import explode_and_intersect
+from tilequeue.format import zip_format
 from tilequeue.queue.message import MessageHandle
 from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import deserialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
@@ -153,6 +156,12 @@ def convert_coord_object(coord):
     return Tile(int(coord.zoom), int(coord.column), int(coord.row))
 
 
+def unconvert_coord_object(tile):
+    """Convert rawr_tiles.tile.Tile -> ModestMaps.Core.Coordinate"""
+    assert isinstance(tile, Tile)
+    return Coordinate(zoom=tile.z, column=tile.x, row=tile.y)
+
+
 def convert_to_coord_ints(coords):
     for coord in coords:
         coord_int = coord_marshall_int(coord)
@@ -222,6 +231,27 @@ class RawrToiIntersector(object):
             explode_and_intersect(coord_ints, toi)
         coords = map(coord_unmarshall_int, intersected_coord_ints)
         return coords, intersect_metrics
+
+
+class EmptyToiIntersector(object):
+
+    """
+    A RawrToiIntersector which contains no tiles of interest.
+
+    Useful for testing and running locally.
+    """
+
+    def tiles_of_interest(self):
+        return set([])
+
+    def __call__(self, coords):
+        metrics = dict(
+            total=len(coords),
+            hits=0,
+            misses=len(coords),
+            n_toi=0,
+        )
+        return [], metrics
 
 
 class RawrTileGenerationPipeline(object):
@@ -336,19 +366,25 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
-def unpack_rawr_zip_payload(table_sources, io):
+def unpack_rawr_zip_payload(table_sources, filelike):
     """unpack a zipfile and turn it into a callable "tables" object."""
     # the io we get from S3 is streaming, so we can't seek on it, but zipfile
     # seems to require that. so we buffer it all in memory. RAWR tiles are
     # generally up to around 100MB in size, which should be safe to store in
     # RAM.
     from tilequeue.query.common import Table
-    buf = io.BytesIO(io.read())
+    from io import BytesIO
+    from gzip import GzipFile
+
+    buf = BytesIO(filelike.read())
     zfh = zipfile.ZipFile(buf, 'r')
 
     def get_table(table_name):
-        fh = zfh.open(table_name, 'r')
-        unpacker = Unpacker(file_like=fh)
+        # need to extract the whole compressed file from zip reader, as it
+        # doesn't support .tell() on the filelike, which gzip requires.
+        data = zfh.open(table_name, 'r').read()
+        ungzip = GzipFile(table_name, 'rb', 0, BytesIO(data))
+        unpacker = Unpacker(file_like=ungzip)
         source = table_sources[table_name]
         return Table(source, unpacker)
 
@@ -390,6 +426,21 @@ class RawrS3Sink(object):
         )
 
 
+class RawrStoreSink(object):
+
+    """Rawr sink to write to tilequeue store."""
+
+    def __init__(self, store):
+        self.store = store
+
+    def __call__(self, rawr_tile):
+        payload = make_rawr_zip_payload(rawr_tile)
+        coord = unconvert_coord_object(rawr_tile.tile)
+        format = zip_format
+        layer = 'rawr'
+        self.store.write_tile(payload, coord, format, layer)
+
+
 # implement the "get_table" interface, but always return an empty list. this
 # allows us to fake an empty tile that might not be backed by any real data.
 def _empty_table(table_name):
@@ -398,16 +449,15 @@ def _empty_table(table_name):
 
 class RawrS3Source(object):
 
-    """Rawr source to read from S3. Uses a thread pool for I/O if provided."""
+    """Rawr source to read from S3."""
 
     def __init__(self, s3_client, bucket, prefix, suffix, table_sources,
-                 io_pool=None, allow_missing_tiles=False):
+                 allow_missing_tiles=False):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
         self.suffix = suffix
         self.table_sources = table_sources
-        self.io_pool = io_pool
         self.allow_missing_tiles = allow_missing_tiles
 
     def _get_object(self, tile):
@@ -432,11 +482,7 @@ class RawrS3Source(object):
 
     def __call__(self, tile):
         # throws an exception if the object is missing - RAWR tiles
-        if self.io_pool:
-            response = self.thread_pool.apply(
-                self._get_object, (tile,))
-        else:
-            response = self._get_object(tile)
+        response = self._get_object(tile)
 
         if response is None:
             return _empty_table
@@ -446,3 +492,101 @@ class RawrS3Source(object):
 
         body = response['Body']
         return unpack_rawr_zip_payload(self.table_sources, body)
+
+
+class RawrStoreSource(object):
+
+    """Rawr source to read from a tilequeue store."""
+
+    def __init__(self, store, table_sources):
+        self.store = store
+        self.table_sources = table_sources
+
+    def _get_object(self, tile):
+        coord = unconvert_coord_object(tile)
+        format = zip_format
+        layer = 'rawr'
+        payload = self.store.read_tile(coord, format, layer)
+        return payload
+
+    def __call__(self, tile):
+        payload = self._get_object(tile)
+        return unpack_rawr_zip_payload(self.table_sources, StringIO(payload))
+
+
+def make_rawr_queue(name, region, wait_time_secs):
+    import boto3
+    sqs_client = boto3.client('sqs', region_name=region)
+    resp = sqs_client.get_queue_url(QueueName=name)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+    queue_url = resp['QueueUrl']
+    from tilequeue.rawr import SqsQueue
+    rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)
+    return rawr_queue
+
+
+class RawrFileQueue(object):
+
+    """A source of RAWR tile jobs loaded from a text file."""
+
+    Handle = namedtuple('Handle', 'payload')
+
+    def __init__(self, filename, msg_marshaller):
+        self.queue = []
+        with open(filename, 'r') as fh:
+            for line in fh:
+                coord = deserialize_coord(line)
+                payload = msg_marshaller.marshall([coord])
+                self.queue.append(payload)
+
+    def read(self):
+        if len(self.queue) > 0:
+            payload = self.queue.pop()
+            return self.Handle(payload)
+        else:
+            # nothing left in the queue, and nothing is going to be added to
+            # the file (although it would be cool if it could `tail` the file,
+            # that's something for a rainy day...), then rather than block
+            # forever, we'll just exit.
+            import sys
+            sys.exit('RawrMemQueue is empty, all work finished!')
+
+    def done(self, handle):
+        pass
+
+
+def make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller):
+    rawr_queue_type = rawr_queue_yaml.get('type', 'sqs')
+
+    if rawr_queue_type == 'file':
+        input_file = rawr_queue_yaml.get('input-file')
+        assert input_file, 'Missing input-file for memory RAWR queue'
+        rawr_queue = RawrFileQueue(input_file, msg_marshaller)
+
+    else:
+        name = rawr_queue_yaml.get('name')
+        assert name, 'Missing rawr queue name'
+        region = rawr_queue_yaml.get('region')
+        assert region, 'Missing rawr queue region'
+        wait_time_secs = rawr_queue_yaml.get('wait-seconds')
+        assert wait_time_secs is not None, 'Missing rawr queue wait-seconds'
+        rawr_queue = make_rawr_queue(name, region, wait_time_secs)
+
+    return rawr_queue
+
+
+def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller):
+    from tilequeue.rawr import make_rawr_enqueuer
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
+
+    return make_rawr_enqueuer(
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)

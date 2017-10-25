@@ -14,6 +14,7 @@ from tilequeue.process import process_coord
 from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
+from tilequeue.store import make_store
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
@@ -424,23 +425,6 @@ def coord_ints_from_paths(paths):
     return result
 
 
-def make_store(store_type, store_name, cfg):
-    if store_type == 'directory':
-        from tilequeue.store import make_tile_file_store
-        return make_tile_file_store(cfg.s3_path or store_name)
-
-    elif store_type == 's3':
-        from tilequeue.store import make_s3_store
-        return make_s3_store(
-            cfg.s3_bucket, cfg.aws_access_key_id, cfg.aws_secret_access_key,
-            path=cfg.s3_path, reduced_redundancy=cfg.s3_reduced_redundancy,
-            date_prefix=cfg.s3_date_prefix,
-            delete_retry_interval=cfg.s3_delete_retry_interval)
-
-    else:
-        raise ValueError('Unrecognized store type: `{}`'.format(store_type))
-
-
 def _parse_postprocess_resources(post_process_item, cfg_path):
     resources_cfg = post_process_item.get('resources', {})
     resources = {}
@@ -589,7 +573,8 @@ def tilequeue_process(cfg, peripherals):
 
     formats = lookup_formats(cfg.output_formats)
 
-    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    store = make_store(cfg.yml['store'],
+                       credentials=cfg.subtree('aws credentials'))
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
@@ -1213,6 +1198,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     from tilequeue.wof import make_wof_model
     from tilequeue.wof import make_wof_url_neighbourhood_fetcher
     from tilequeue.wof import make_wof_processor
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     wof_cfg = cfg.wof
     assert wof_cfg, 'Missing wof config'
@@ -1510,58 +1496,20 @@ def tilequeue_process_tile(cfg, peripherals, args):
     print tile_data
 
 
-def make_rawr_queue(name, region, wait_time_secs):
-    import boto3
-    sqs_client = boto3.client('sqs', region_name=region)
-    resp = sqs_client.get_queue_url(QueueName=name)
-    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    queue_url = resp['QueueUrl']
-    from tilequeue.rawr import SqsQueue
-    rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)
-    return rawr_queue
-
-
-def make_rawr_queue_from_yaml(rawr_queue_yaml):
-    name = rawr_queue_yaml.get('name')
-    assert name, 'Missing rawr queue name'
-    region = rawr_queue_yaml.get('region')
-    assert region, 'Missing rawr queue region'
-    wait_time_secs = rawr_queue_yaml.get('wait-seconds')
-    assert wait_time_secs is not None, 'Missing rawr queue wait-seconds'
-    rawr_queue = make_rawr_queue(name, region, wait_time_secs)
-    return rawr_queue
-
-
-def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler):
-    from tilequeue.rawr import make_rawr_enqueuer
-
-    rawr_yaml = cfg.yml.get('rawr')
-    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
-
-    group_by_zoom = rawr_yaml.get('group-zoom')
-    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-
-    rawr_queue_yaml = rawr_yaml.get('queue')
-    assert rawr_queue_yaml, 'Missing rawr queue config'
-    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
+def tilequeue_rawr_enqueue(cfg, args):
+    """command to take tile expiry path and enqueue for rawr tile generation"""
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    return make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
-
-
-def tilequeue_rawr_enqueue(cfg, args):
-    """command to take tile expiry path and enqueue for rawr tile generation"""
-    from tilequeue.stats import RawrTileEnqueueStatsHandler
-
     logger = make_logger(cfg, 'rawr_enqueue')
     stats = make_statsd_client_from_cfg(cfg)
     stats_handler = RawrTileEnqueueStatsHandler(stats)
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
-        cfg, logger, stats_handler)
+        cfg, logger, stats_handler, msg_marshaller)
 
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
@@ -1570,19 +1518,21 @@ def tilequeue_rawr_enqueue(cfg, args):
 
 def tilequeue_rawr_process(cfg, peripherals):
     """command to read from rawr queue and generate rawr tiles"""
+    from tilequeue.rawr import make_rawr_queue_from_yaml
+
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
 
-    rawr_queue_yaml = rawr_yaml.get('queue')
-    assert rawr_queue_yaml, 'Missing rawr queue config'
-    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
-
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller)
 
     rawr_postgresql_yaml = rawr_yaml.get('postgresql')
     assert rawr_postgresql_yaml, 'Missing rawr postgresql config'
@@ -1594,42 +1544,60 @@ def tilequeue_rawr_process(cfg, peripherals):
     from raw_tiles.source.osm import OsmSource
     from tilequeue.log import JsonRawrProcessingLogger
     from tilequeue.rawr import RawrS3Sink
+    from tilequeue.rawr import RawrStoreSink
     from tilequeue.rawr import RawrTileGenerationPipeline
     from tilequeue.rawr import RawrToiIntersector
+    from tilequeue.rawr import EmptyToiIntersector
     from tilequeue.stats import RawrTilePipelineStatsHandler
     import boto3
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
 
-    rawr_sink_yaml = rawr_yaml.get('sink')
-    assert rawr_sink_yaml, 'Missing rawr sink config'
-    bucket = rawr_sink_yaml.get('bucket')
-    assert bucket, 'Missing rawr sink bucket'
-    sink_region = rawr_sink_yaml.get('region')
-    assert sink_region, 'Missing rawr sink region'
-    prefix = rawr_sink_yaml.get('prefix')
-    assert prefix, 'Missing rawr sink prefix'
-    suffix = rawr_sink_yaml.get('suffix')
-    assert suffix, 'Missing rawr sink suffix'
+    rawr_store = rawr_yaml.get('store')
+    if rawr_store:
+        store = make_store(rawr_store,
+                           credentials=cfg.subtree('aws credentials'))
+        rawr_sink = RawrStoreSink(store)
 
-    s3_client = boto3.client('s3', region_name=sink_region)
-    rawr_s3_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
+    else:
+        rawr_sink_yaml = rawr_yaml.get('sink')
+        assert rawr_sink_yaml, 'Missing rawr sink config'
+        bucket = rawr_sink_yaml.get('bucket')
+        assert bucket, 'Missing rawr sink bucket'
+        sink_region = rawr_sink_yaml.get('region')
+        assert sink_region, 'Missing rawr sink region'
+        prefix = rawr_sink_yaml.get('prefix')
+        assert prefix, 'Missing rawr sink prefix'
+        suffix = rawr_sink_yaml.get('suffix')
+        assert suffix, 'Missing rawr sink suffix'
+
+        s3_client = boto3.client('s3', region_name=sink_region)
+        rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
     toi_yaml = cfg.yml.get('toi-store')
-    assert toi_yaml.get('type') == 's3', 'Only s3 toi store supported'
-    toi_s3_yaml = toi_yaml.get('s3')
-    assert toi_s3_yaml, 'Missing toi-store s3 config'
-    toi_bucket = toi_s3_yaml.get('bucket')
-    toi_key = toi_s3_yaml.get('key')
-    assert toi_bucket, 'Missing toi-store s3 bucket'
-    assert toi_key, 'Missing toi-store s3 key'
+    toi_type = toi_yaml.get('type')
+    if toi_type == 's3':
+        toi_s3_yaml = toi_yaml.get('s3')
+        assert toi_s3_yaml, 'Missing toi-store s3 config'
+        toi_bucket = toi_s3_yaml.get('bucket')
+        toi_key = toi_s3_yaml.get('key')
+        assert toi_bucket, 'Missing toi-store s3 bucket'
+        assert toi_key, 'Missing toi-store s3 key'
 
-    rawr_toi_intersector = RawrToiIntersector(s3_client, toi_bucket, toi_key)
+        rawr_toi_intersector = RawrToiIntersector(
+            s3_client, toi_bucket, toi_key)
+
+    elif toi_type == 'none':
+        rawr_toi_intersector = EmptyToiIntersector()
+
+    else:
+        assert False, 'TOI type %r is not known. Options are s3 or none.' \
+            % (toi_type,)
 
     logger = make_logger(cfg, 'rawr_process')
     rawr_osm_source = OsmSource(conn_ctx)
     rawr_formatter = Gzip(Msgpack())
-    rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_s3_sink)
+    rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_sink)
     stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_proc_logger = JsonRawrProcessingLogger(logger)
     rawr_pipeline = RawrTileGenerationPipeline(
@@ -1642,6 +1610,7 @@ def tilequeue_rawr_process(cfg, peripherals):
 def tilequeue_rawr_seed_toi(cfg, peripherals):
     """command to read the toi and enqueue the corresponding rawr tiles"""
     from tilequeue.stats import RawrTileEnqueueStatsHandler
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     logger = make_logger(cfg, 'rawr_seed')
     stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)

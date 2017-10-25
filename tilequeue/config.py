@@ -137,6 +137,15 @@ class Configuration(object):
             yamlval = yamlval[subkey]
         return yamlval
 
+    def subtree(self, yamlkeys_str):
+        yamlkeys = yamlkeys_str.split()
+        yamlval = self.yml
+        for subkey in yamlkeys:
+            yamlval = yamlval.get(subkey)
+            if yamlval is None:
+                break
+        return yamlval
+
 
 def default_yml_config():
     return {
