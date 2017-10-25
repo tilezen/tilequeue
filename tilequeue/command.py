@@ -1510,23 +1510,25 @@ def tilequeue_process_tile(cfg, peripherals, args):
     print tile_data
 
 
-def make_rawr_queue(rawr_queue_name, rawr_queue_region):
+def make_rawr_queue(name, region, wait_time_secs):
     import boto3
-    sqs_client = boto3.client('sqs', region_name=rawr_queue_region)
-    resp = sqs_client.get_queue_url(QueueName=rawr_queue_name)
+    sqs_client = boto3.client('sqs', region_name=region)
+    resp = sqs_client.get_queue_url(QueueName=name)
     assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
     queue_url = resp['QueueUrl']
     from tilequeue.rawr import SqsQueue
-    rawr_queue = SqsQueue(sqs_client, queue_url)
+    rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)
     return rawr_queue
 
 
 def make_rawr_queue_from_yaml(rawr_queue_yaml):
-    rawr_queue_name = rawr_queue_yaml.get('name')
-    assert rawr_queue_name, 'Missing rawr queue name'
-    rawr_queue_region = rawr_queue_yaml.get('region')
-    assert rawr_queue_region, 'Missing rawr queue region'
-    rawr_queue = make_rawr_queue(rawr_queue_name, rawr_queue_region)
+    name = rawr_queue_yaml.get('name')
+    assert name, 'Missing rawr queue name'
+    region = rawr_queue_yaml.get('region')
+    assert region, 'Missing rawr queue region'
+    wait_time_secs = rawr_queue_yaml.get('wait-seconds')
+    assert wait_time_secs is not None, 'Missing rawr queue wait-seconds'
+    rawr_queue = make_rawr_queue(name, region, wait_time_secs)
     return rawr_queue
 
 

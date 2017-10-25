@@ -19,9 +19,10 @@ import zipfile
 
 class SqsQueue(object):
 
-    def __init__(self, sqs_client, queue_url):
+    def __init__(self, sqs_client, queue_url, recv_wait_time_seconds):
         self.sqs_client = sqs_client
         self.queue_url = queue_url
+        self.recv_wait_time_seconds = recv_wait_time_seconds
 
     def send(self, payloads):
         """
@@ -60,6 +61,7 @@ class SqsQueue(object):
             QueueUrl=self.queue_url,
             MaxNumberOfMessages=1,
             AttributeNames=('SentTimestamp',),
+            WaitTimeSeconds=self.recv_wait_time_seconds,
         )
         if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
             raise Exception('Invalid status code from sqs: %s' %
@@ -253,7 +255,6 @@ class RawrTileGenerationPipeline(object):
 
             if not msg_handle:
                 # this gets triggered when no messages are returned
-                # TODO do we want to sleep here for a small amount of time?
                 continue
 
             try:

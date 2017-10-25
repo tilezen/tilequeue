@@ -265,6 +265,7 @@ rawr:
   group-zoom: 10
   queue:
     name: <sqs-queue-name>
+    wait-seconds: 20
     region: us-east-1
   postgresql:
     host: localhost
