@@ -5,6 +5,7 @@ from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
 from tilequeue.command import explode_and_intersect
+from tilequeue.format import zip_format
 from tilequeue.queue.message import MessageHandle
 from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
@@ -153,6 +154,12 @@ def convert_coord_object(coord):
     return Tile(int(coord.zoom), int(coord.column), int(coord.row))
 
 
+def unconvert_coord_object(tile):
+    """Convert rawr_tiles.tile.Tile -> ModestMaps.Core.Coordinate"""
+    assert isinstance(tile, Tile)
+    return Coordinate(zoom=tile.z, column=tile.x, row=tile.y)
+
+
 def convert_to_coord_ints(coords):
     for coord in coords:
         coord_int = coord_marshall_int(coord)
@@ -222,6 +229,27 @@ class RawrToiIntersector(object):
             explode_and_intersect(coord_ints, toi)
         coords = map(coord_unmarshall_int, intersected_coord_ints)
         return coords, intersect_metrics
+
+
+class EmptyToiIntersector(object):
+
+    """
+    A RawrToiIntersector which contains no tiles of interest.
+
+    Useful for testing and running locally.
+    """
+
+    def tiles_of_interest(self):
+        return set([])
+
+    def __call__(self, coords):
+        metrics = dict(
+            total=len(coords),
+            hits=0,
+            misses=len(coords),
+            n_toi=0,
+        )
+        return [], metrics
 
 
 class RawrTileGenerationPipeline(object):
@@ -336,19 +364,25 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
-def unpack_rawr_zip_payload(table_sources, io):
+def unpack_rawr_zip_payload(table_sources, filelike):
     """unpack a zipfile and turn it into a callable "tables" object."""
     # the io we get from S3 is streaming, so we can't seek on it, but zipfile
     # seems to require that. so we buffer it all in memory. RAWR tiles are
     # generally up to around 100MB in size, which should be safe to store in
     # RAM.
     from tilequeue.query.common import Table
-    buf = io.BytesIO(io.read())
+    from io import BytesIO
+    from gzip import GzipFile
+
+    buf = BytesIO(filelike.read())
     zfh = zipfile.ZipFile(buf, 'r')
 
     def get_table(table_name):
-        fh = zfh.open(table_name, 'r')
-        unpacker = Unpacker(file_like=fh)
+        # need to extract the whole compressed file from zip reader, as it
+        # doesn't support .tell() on the filelike, which gzip requires.
+        data = zfh.open(table_name, 'r').read()
+        ungzip = GzipFile(table_name, 'rb', 0, BytesIO(data))
+        unpacker = Unpacker(file_like=ungzip)
         source = table_sources[table_name]
         return Table(source, unpacker)
 
@@ -388,6 +422,21 @@ class RawrS3Sink(object):
                 ContentLength=len(payload),
                 Key=location,
         )
+
+
+class RawrStoreSink(object):
+
+    """Rawr sink to write to tilequeue store."""
+
+    def __init__(self, store):
+        self.store = store
+
+    def __call__(self, rawr_tile):
+        payload = make_rawr_zip_payload(rawr_tile)
+        coord = unconvert_coord_object(rawr_tile.tile)
+        format = zip_format
+        layer = 'rawr'
+        self.store.write_tile(payload, coord, format, layer)
 
 
 # implement the "get_table" interface, but always return an empty list. this
@@ -446,3 +495,29 @@ class RawrS3Source(object):
 
         body = response['Body']
         return unpack_rawr_zip_payload(self.table_sources, body)
+
+
+class RawrStoreSource(object):
+
+    """Rawr source to read from a tilequeue store."""
+
+    def __init__(self, store, table_sources, io_pool=None):
+        self.store = store
+        self.table_sources = table_sources
+        self.io_pool = io_pool
+
+    def _get_object(self, tile):
+        coord = unconvert_coord_object(tile)
+        format = zip_format
+        layer = 'rawr'
+        payload = self.store.read_tile(coord, format, layer)
+        return payload
+
+    def __call__(self, tile):
+        if self.io_pool:
+            payload = self.thread_pool.apply(
+                self._get_object, (tile,))
+        else:
+            payload = self._get_object(tile)
+
+        return unpack_rawr_zip_payload(self.table_sources, StringIO(payload))

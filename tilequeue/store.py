@@ -352,3 +352,31 @@ def write_tile_if_changed(store, tile_data, coord, format, layer):
         return True
     else:
         return False
+
+
+def make_store(yml, credentials={}):
+    store_type = yml.get('type')
+
+    if store_type == 'directory':
+        path = yml.get('path')
+        name = yml.get('name')
+        return make_tile_file_store(path or name)
+
+    elif store_type == 's3':
+        bucket = yml.get('name')
+        reduced_redundancy = yml.get('reduced-redundancy')
+        date_prefix = yml.get('date-prefix')
+        delete_retry_interval = yml.get('delete-retry-interval')
+
+        assert credentials, 'S3 store configured, but no AWS credentials ' \
+            'provided. AWS credentials are required to use S3.'
+        aws_access_key_id = credentials.get('aws_access_key_id')
+        aws_secret_access_key = credentials.get('aws_secret_access_key')
+
+        return make_s3_store(
+            bucket, aws_access_key_id, aws_secret_access_key, path=path,
+            reduced_redundancy=reduced_redundancy, date_prefix=date_prefix,
+            delete_retry_interval=delete_retry_interval)
+
+    else:
+        raise ValueError('Unrecognized store type: `{}`'.format(store_type))
