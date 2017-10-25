@@ -328,20 +328,21 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
-def unpack_rawr_zip_payload(io):
+def unpack_rawr_zip_payload(table_sources, io):
     """unpack a zipfile and turn it into a callable "tables" object."""
     # the io we get from S3 is streaming, so we can't seek on it, but zipfile
     # seems to require that. so we buffer it all in memory. RAWR tiles are
     # generally up to around 100MB in size, which should be safe to store in
     # RAM.
+    from tilequeue.query.common import Table
     buf = io.BytesIO(io.read())
     zfh = zipfile.ZipFile(buf, 'r')
 
     def get_table(table_name):
         fh = zfh.open(table_name, 'r')
         unpacker = Unpacker(file_like=fh)
-        for obj in unpacker:
-            yield obj
+        source = table_sources[table_name]
+        return Table(source, unpacker)
 
     return get_table
 
@@ -391,12 +392,13 @@ class RawrS3Source(object):
 
     """Rawr source to read from S3. Uses a thread pool for I/O if provided."""
 
-    def __init__(self, s3_client, bucket, prefix, suffix, io_pool=None,
-                 allow_missing_tiles=False):
+    def __init__(self, s3_client, bucket, prefix, suffix, table_sources,
+                 io_pool=None, allow_missing_tiles=False):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
         self.suffix = suffix
+        self.table_sources = table_sources
         self.io_pool = io_pool
         self.allow_missing_tiles = allow_missing_tiles
 
@@ -435,4 +437,4 @@ class RawrS3Source(object):
         assert not response['DeleteMarker']
 
         body = response['Body']
-        return unpack_rawr_zip_payload(body)
+        return unpack_rawr_zip_payload(self.table_sources, body)

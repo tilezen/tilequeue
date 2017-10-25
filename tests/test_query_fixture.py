@@ -93,15 +93,18 @@ class TestQueryFixture(FixtureTestCase):
         self.assertEquals(0, len(read_rows))
 
     def test_root_relation_id(self):
-        from shapely.geometry import Point
+        from shapely.geometry import Point, Polygon
 
         def min_zoom_fn(shape, props, fid, meta):
             return 0
 
-        def _test(rels, expected_root_id):
-            shape = Point(0, 0)
+        def _test(rels, expected_root_id, shape=None, feature_id=None):
+            if shape is None:
+                shape = Point(0, 0)
+            if feature_id is None:
+                feature_id = 1
             rows = [
-                (1, shape, {
+                (feature_id, shape, {
                     'railway': 'station',
                     'name': 'Foo Station',
                 }),
@@ -146,6 +149,13 @@ class TestQueryFixture(FixtureTestCase):
             _rel(4, rels=[3]),
             _rel(5, rels=[2, 4]),
         ], 5)
+
+        # test that a polygonal way feature is also traversed.
+        polygon = Polygon([(-1, -1), (-1, 1), (1, 1), (1, -1), (-1, -1)])
+        _test([_rel(2, ways=[1])], 2, shape=polygon)
+
+        # test that a multipolygon relation feature is also traversed.
+        _test([_rel(1), _rel(2, rels=[1])], 2, shape=polygon, feature_id=-1)
 
     def test_query_source(self):
         # check that the 'source' property is preserved for output features.
@@ -301,7 +311,7 @@ class TestNameHandling(FixtureTestCase):
             return {}
 
         shape = Point(0, 0)
-        props = {'name': 'Foo'}
+        props = {'name': 'Foo', 'name:en': 'Bar'}
 
         rows = [
             (1, shape, props),
@@ -316,17 +326,24 @@ class TestNameHandling(FixtureTestCase):
         read_rows = fetch(16, coord_to_mercator_bounds(feature_coord))
         self.assertEqual(1, len(read_rows))
 
-        all_names = set(expected_layer_names) | set(input_layer_names)
-        for name in all_names:
-            properties_name = '__%s_properties__' % name
+        all_layer_names = set(expected_layer_names) | set(input_layer_names)
+        for layer_name in all_layer_names:
+            properties_name = '__%s_properties__' % layer_name
             self.assertTrue(properties_name in read_rows[0])
-            actual_name = read_rows[0][properties_name].get('name')
-            if name in expected_layer_names:
-                expected_name = props.get('name')
-                self.assertEquals(expected_name, actual_name)
-            else:
-                # check the name doesn't appear anywhere else
-                self.assertEquals(None, actual_name)
+            for key in props.keys():
+                actual_name = read_rows[0][properties_name].get(key)
+                if layer_name in expected_layer_names:
+                    expected_name = props.get(key)
+                    self.assertEquals(
+                        expected_name, actual_name,
+                        msg=('expected=%r, actual=%r for key=%r'
+                             % (expected_name, actual_name, key)))
+                else:
+                    # check the name doesn't appear anywhere else
+                    self.assertEquals(
+                        None, actual_name,
+                        msg=('got actual=%r for key=%r, expected no value'
+                             % (actual_name, key)))
 
     def test_name_single_layer(self):
         # in any oone of the pois, landuse or buildings layers, a name

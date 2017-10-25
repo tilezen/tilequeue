@@ -8,11 +8,17 @@ class TestGetTable(object):
     previously set up in the test.
     """
 
-    def __init__(self, tables):
+    def __init__(self, tables, source='test'):
+        from tilequeue.process import lookup_source, Source
         self.tables = tables
+        # first look up source, in case it's a real one that we're testing.
+        # if not, then set it to a test value
+        self.source = lookup_source(source) or Source(source, source)
+        assert isinstance(self.source, Source)
 
     def __call__(self, table_name):
-        return self.tables.get(table_name, [])
+        from tilequeue.query.common import Table
+        return Table(self.source, self.tables.get(table_name, []))
 
 
 class ConstantStorage(object):
@@ -32,14 +38,14 @@ class RawrTestCase(unittest.TestCase):
 
     def _make(self, min_zoom_fn, props_fn, tables, tile_pyramid,
               layer_name='testlayer', label_placement_layers={},
-              source='test', min_z=10, max_z=16):
+              min_z=10, max_z=16):
         from tilequeue.query.common import LayerInfo
         from tilequeue.query.rawr import make_rawr_data_fetcher
 
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
         storage = ConstantStorage(tables)
         return make_rawr_data_fetcher(
-            min_z, max_z, storage, layers, source,
+            min_z, max_z, storage, layers,
             label_placement_layers=label_placement_layers)
 
 
@@ -271,15 +277,14 @@ class TestQueryRawr(RawrTestCase):
         tables = TestGetTable({
             'planet_osm_point': [(0, shape.wkb,
                                   {'source': 'originalrowsource'})],
-        })
+        }, source='testingquerysource')
 
         zoom = 10
         max_zoom = zoom + 5
         coord = mercator_point_to_coord(zoom, shape.x, shape.y)
         tile_pyramid = TilePyramid(zoom, coord.column, coord.row, max_zoom)
 
-        fetch = self._make(min_zoom_fn, None, tables, tile_pyramid,
-                           source='testingquerysource')
+        fetch = self._make(min_zoom_fn, None, tables, tile_pyramid)
 
         # first, check that it can get the original item back when both the
         # min zoom filter and geometry filter are okay.
@@ -460,13 +465,14 @@ class TestNameHandling(RawrTestCase):
             return {}
 
         shape = Point(0, 0)
-        props = {'name': 'Foo'}
+        props = {'name': 'Foo', 'name:en': 'Bar'}
 
+        source = 'test'
         tables = TestGetTable({
             'planet_osm_point': [
                 (1, shape.wkb, props),
             ],
-        })
+        }, source)
 
         tile = mercator_point_to_coord(max_zoom, shape.x, shape.y)
         top_tile = tile.zoomTo(top_zoom).container()
@@ -474,10 +480,9 @@ class TestNameHandling(RawrTestCase):
         layers = {}
         for name in input_layer_names:
             layers[name] = LayerInfo(min_zoom_fn, props_fn)
-        source = 'test'
         storage = ConstantStorage(tables)
         fetch = make_rawr_data_fetcher(
-            top_zoom, max_zoom, storage, layers, source)
+            top_zoom, max_zoom, storage, layers)
 
         for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
@@ -495,17 +500,24 @@ class TestNameHandling(RawrTestCase):
                     self.assertFalse(key in all_props)
                     all_props[key] = val
 
-        all_names = set(expected_layer_names) | set(input_layer_names)
-        for name in all_names:
-            properties_name = '__%s_properties__' % name
+        all_layer_names = set(expected_layer_names) | set(input_layer_names)
+        for layer_name in all_layer_names:
+            properties_name = '__%s_properties__' % layer_name
             self.assertTrue(properties_name in all_props)
-            actual_name = all_props[properties_name].get('name')
-            if name in expected_layer_names:
-                expected_name = props.get('name')
-                self.assertEquals(expected_name, actual_name)
-            else:
-                # check the name doesn't appear anywhere else
-                self.assertEquals(None, actual_name)
+            for key in props.keys():
+                actual_name = all_props[properties_name].get(key)
+                if layer_name in expected_layer_names:
+                    expected_name = props.get(key)
+                    self.assertEquals(
+                        expected_name, actual_name,
+                        msg=('expected=%r, actual=%r for key=%r'
+                             % (expected_name, actual_name, key)))
+                else:
+                    # check the name doesn't appear anywhere else
+                    self.assertEquals(
+                        None, actual_name,
+                        msg=('got actual=%r for key=%r, expected no value'
+                             % (actual_name, key)))
 
     def test_name_single_layer(self):
         # in any oone of the pois, landuse or buildings layers, a name

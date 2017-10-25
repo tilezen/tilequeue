@@ -1,6 +1,7 @@
 from collections import namedtuple
 from collections import defaultdict
 from itertools import izip
+from tilequeue.process import Source
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -41,7 +42,18 @@ def deassoc(x):
 # fixtures extend metadata to include ways and relations for the feature.
 # this is unnecessary for SQL, as the ways and relations tables are
 # "ambiently available" and do not need to be passed in arguments.
-Metadata = namedtuple('Metadata', 'source ways relations')
+class Metadata(object):
+    def __init__(self, source, ways, relations):
+        assert source is None or isinstance(source, Source)
+        self.source = source and source.name
+        self.ways = ways
+        self.relations = relations
+
+
+class Table(namedtuple('Table', 'source rows')):
+    def __init__(self, source, rows):
+        super(Table, self).__init__(source, rows)
+        assert isinstance(source, Source)
 
 
 def shape_type_lookup(shape):
@@ -152,12 +164,14 @@ Transit = namedtuple(
     'trains subways light_rails trams railways')
 
 
-def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
+def mz_calculate_transit_routes_and_score(osm, node_id, way_id, rel_id):
     candidate_relations = set()
     if node_id:
         candidate_relations.update(osm.relations_using_node(node_id))
     if way_id:
         candidate_relations.update(osm.relations_using_way(way_id))
+    if rel_id:
+        candidate_relations.add(rel_id)
 
     seed_relations = set()
     for rel_id in candidate_relations:
@@ -165,8 +179,6 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
         if mz_is_interesting_transit_relation(rel.tags):
             seed_relations.add(rel_id)
     del candidate_relations
-
-    # TODO: if the station is also a multipolygon relation?
 
     # this complex query does two recursive sweeps of the relations
     # table starting from a seed set of relations which are or contain
@@ -249,6 +261,47 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id):
                    railways=railways, trams=trams)
 
 
+_TAG_NAME_ALTERNATES = (
+    'name',
+    'int_name',
+    'loc_name',
+    'nat_name',
+    'official_name',
+    'old_name',
+    'reg_name',
+    'short_name',
+    'name_left',
+    'name_right',
+    'name:short',
+)
+
+
+_ALT_NAME_PREFIX_CANDIDATES = (
+    'name:left:', 'name:right:', 'name:', 'alt_name:', 'old_name:'
+)
+
+
+# given a dictionary of key-value properties, returns a list of all the keys
+# which represent names. this is used to assign all the names to a single
+# layer. this makes sure that when we generate multiple features from a single
+# database record, only one feature gets named and labelled.
+def name_keys(props):
+    name_keys = []
+    for k in props.keys():
+        is_name_key = k in _TAG_NAME_ALTERNATES
+
+        if not is_name_key:
+            for prefix in _ALT_NAME_PREFIX_CANDIDATES:
+                if k.startswith(prefix):
+                    is_name_key = True
+                    break
+
+        if is_name_key:
+            name_keys.append(k)
+
+    return name_keys
+
+
 # properties for a feature (fid, shape, props) in layer `layer_name` at zoom
 # level `zoom`. also takes an `osm` parameter, which is an object which can
 # be used to look up nodes, ways and relations and the relationships between
@@ -264,10 +317,9 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
     # need to make sure that the name is only applied to one of
     # the pois, landuse or buildings layers - in that order of
     # priority.
-    #
-    # TODO: do this for all name variants & translations
     if layer_name in ('pois', 'landuse', 'buildings'):
-        layer_props.pop('name', None)
+        for key in name_keys(layer_props):
+            layer_props.pop(key, None)
 
     # urgh, hack!
     if layer_name == 'water' and shape.geom_type == 'Point':
@@ -318,16 +370,19 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
         'Point', 'MultiPoint', 'Polygon', 'MultiPolygon')
 
     if is_poi and is_railway_station and \
-       is_point_or_poly and fid >= 0:
+       is_point_or_poly:
         node_id = None
         way_id = None
+        rel_id = None
         if shape.geom_type in ('Point', 'MultiPoint'):
             node_id = fid
-        else:
+        elif fid >= 0:
             way_id = fid
+        else:
+            rel_id = -fid
 
         transit = mz_calculate_transit_routes_and_score(
-            osm, node_id, way_id)
+            osm, node_id, way_id, rel_id)
         layer_props['mz_transit_score'] = transit.score
         layer_props['mz_transit_root_relation_id'] = (
             transit.root_relation_id)
