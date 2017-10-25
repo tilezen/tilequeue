@@ -1198,6 +1198,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     from tilequeue.wof import make_wof_model
     from tilequeue.wof import make_wof_url_neighbourhood_fetcher
     from tilequeue.wof import make_wof_processor
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     wof_cfg = cfg.wof
     assert wof_cfg, 'Missing wof config'
@@ -1495,95 +1496,20 @@ def tilequeue_process_tile(cfg, peripherals, args):
     print tile_data
 
 
-def make_rawr_queue(name, region, wait_time_secs):
-    import boto3
-    sqs_client = boto3.client('sqs', region_name=region)
-    resp = sqs_client.get_queue_url(QueueName=name)
-    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
-    queue_url = resp['QueueUrl']
-    from tilequeue.rawr import SqsQueue
-    rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)
-    return rawr_queue
-
-
-class RawrMemQueue(object):
-
-    Handle = namedtuple('Handle', 'payload')
-
-    def __init__(self, filename, msg_marshaller):
-        self.queue = []
-        with open(filename, 'r') as fh:
-            for line in fh:
-                coord = deserialize_coord(line)
-                payload = msg_marshaller.marshall([coord])
-                self.queue.append(payload)
-
-    def read(self):
-        if len(self.queue) > 0:
-            payload = self.queue.pop()
-            return self.Handle(payload)
-        else:
-            # nothing left in the queue, and nothing is going to be added to
-            # the file (although it would be cool if it could `tail` the file,
-            # that's something for a rainy day...), then rather than block
-            # forever, we'll just exit.
-            import sys
-            sys.exit('RawrMemQueue is empty, all work finished!')
-
-    def done(self, handle):
-        pass
-
-
-def make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller):
-    rawr_queue_type = rawr_queue_yaml.get('type', 'sqs')
-
-    if rawr_queue_type == 'mem':
-        input_file = rawr_queue_yaml.get('input-file')
-        assert input_file, 'Missing input-file for memory RAWR queue'
-        rawr_queue = RawrMemQueue(input_file, msg_marshaller)
-
-    else:
-        name = rawr_queue_yaml.get('name')
-        assert name, 'Missing rawr queue name'
-        region = rawr_queue_yaml.get('region')
-        assert region, 'Missing rawr queue region'
-        wait_time_secs = rawr_queue_yaml.get('wait-seconds')
-        assert wait_time_secs is not None, 'Missing rawr queue wait-seconds'
-        rawr_queue = make_rawr_queue(name, region, wait_time_secs)
-
-    return rawr_queue
-
-
-def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler):
-    from tilequeue.rawr import make_rawr_enqueuer
-
-    rawr_yaml = cfg.yml.get('rawr')
-    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
-
-    group_by_zoom = rawr_yaml.get('group-zoom')
-    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-
-    rawr_queue_yaml = rawr_yaml.get('queue')
-    assert rawr_queue_yaml, 'Missing rawr queue config'
-    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
+def tilequeue_rawr_enqueue(cfg, args):
+    """command to take tile expiry path and enqueue for rawr tile generation"""
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     msg_marshall_yaml = cfg.yml.get('message-marshall')
     assert msg_marshall_yaml, 'Missing message-marshall config'
     msg_marshaller = make_message_marshaller(msg_marshall_yaml)
 
-    return make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
-
-
-def tilequeue_rawr_enqueue(cfg, args):
-    """command to take tile expiry path and enqueue for rawr tile generation"""
-    from tilequeue.stats import RawrTileEnqueueStatsHandler
-
     logger = make_logger(cfg, 'rawr_enqueue')
     stats = make_statsd_client_from_cfg(cfg)
     stats_handler = RawrTileEnqueueStatsHandler(stats)
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
-        cfg, logger, stats_handler)
+        cfg, logger, stats_handler, msg_marshaller)
 
     with open(args.expiry_path) as fh:
         coords = create_coords_generator_from_tiles_file(fh)
@@ -1592,6 +1518,8 @@ def tilequeue_rawr_enqueue(cfg, args):
 
 def tilequeue_rawr_process(cfg, peripherals):
     """command to read from rawr queue and generate rawr tiles"""
+    from tilequeue.rawr import make_rawr_queue_from_yaml
+
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
@@ -1682,6 +1610,7 @@ def tilequeue_rawr_process(cfg, peripherals):
 def tilequeue_rawr_seed_toi(cfg, peripherals):
     """command to read the toi and enqueue the corresponding rawr tiles"""
     from tilequeue.stats import RawrTileEnqueueStatsHandler
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
 
     logger = make_logger(cfg, 'rawr_seed')
     stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)

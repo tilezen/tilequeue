@@ -1,5 +1,6 @@
 from botocore.exceptions import ClientError
 from collections import defaultdict
+from collections import namedtuple
 from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
@@ -10,6 +11,7 @@ from tilequeue.queue.message import MessageHandle
 from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import deserialize_coord
 from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
@@ -521,3 +523,79 @@ class RawrStoreSource(object):
             payload = self._get_object(tile)
 
         return unpack_rawr_zip_payload(self.table_sources, StringIO(payload))
+
+
+def make_rawr_queue(name, region, wait_time_secs):
+    import boto3
+    sqs_client = boto3.client('sqs', region_name=region)
+    resp = sqs_client.get_queue_url(QueueName=name)
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+    queue_url = resp['QueueUrl']
+    from tilequeue.rawr import SqsQueue
+    rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)
+    return rawr_queue
+
+
+class RawrMemQueue(object):
+
+    Handle = namedtuple('Handle', 'payload')
+
+    def __init__(self, filename, msg_marshaller):
+        self.queue = []
+        with open(filename, 'r') as fh:
+            for line in fh:
+                coord = deserialize_coord(line)
+                payload = msg_marshaller.marshall([coord])
+                self.queue.append(payload)
+
+    def read(self):
+        if len(self.queue) > 0:
+            payload = self.queue.pop()
+            return self.Handle(payload)
+        else:
+            # nothing left in the queue, and nothing is going to be added to
+            # the file (although it would be cool if it could `tail` the file,
+            # that's something for a rainy day...), then rather than block
+            # forever, we'll just exit.
+            import sys
+            sys.exit('RawrMemQueue is empty, all work finished!')
+
+    def done(self, handle):
+        pass
+
+
+def make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller):
+    rawr_queue_type = rawr_queue_yaml.get('type', 'sqs')
+
+    if rawr_queue_type == 'mem':
+        input_file = rawr_queue_yaml.get('input-file')
+        assert input_file, 'Missing input-file for memory RAWR queue'
+        rawr_queue = RawrMemQueue(input_file, msg_marshaller)
+
+    else:
+        name = rawr_queue_yaml.get('name')
+        assert name, 'Missing rawr queue name'
+        region = rawr_queue_yaml.get('region')
+        assert region, 'Missing rawr queue region'
+        wait_time_secs = rawr_queue_yaml.get('wait-seconds')
+        assert wait_time_secs is not None, 'Missing rawr queue wait-seconds'
+        rawr_queue = make_rawr_queue(name, region, wait_time_secs)
+
+    return rawr_queue
+
+
+def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller):
+    from tilequeue.rawr import make_rawr_enqueuer
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
+
+    return make_rawr_enqueuer(
+        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
