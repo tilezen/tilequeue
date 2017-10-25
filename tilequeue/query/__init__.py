@@ -72,13 +72,13 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         source_value = data['value']
         table_sources[tbl] = Source(source_name, source_value)
 
-    # set type to "generate", and provide a postgresql subkey, to generate
-    # RAWR tiles directly, rather than trying to load them from S3. this can
-    # be useful for standalone use and testing.
-    #
-    # other types are:
-    #   s3 - to fetch RAWR tiles from S3
-    #   source - to fetch RAWR tiles from any tilequeue tile source
+    # source types are:
+    #   s3       - to fetch RAWR tiles from S3
+    #   store    - to fetch RAWR tiles from any tilequeue tile source
+    #   generate - to generate RAWR tiles directly, rather than trying to load
+    #              them from S3. this can be useful for standalone use and
+    #              testing. provide a postgresql subkey for database connection
+    #              settings.
     source_type = rawr_source_yaml.get('type')
 
     if source_type == 's3':
@@ -97,7 +97,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         storage = RawrS3Source(s3_client, bucket, prefix, suffix,
                                table_sources, io_pool, allow_missing_tiles)
 
-    elif source_type == 'generate-from-scratch':
+    elif source_type == 'generate':
         from raw_tiles.source.conn import ConnectionContextManager
         from raw_tiles.source.osm import OsmSource
 
