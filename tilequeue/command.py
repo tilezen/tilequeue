@@ -1727,9 +1727,6 @@ def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
 
-    #from flamegraph.flamegraph import start_profile_thread
-    #start_profile_thread(fd=open("./perf.log", "w"), interval=0.0007)
-
     parser = TileArgumentParser()
     subparsers = parser.add_subparsers()
 
