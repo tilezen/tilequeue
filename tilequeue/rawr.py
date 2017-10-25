@@ -64,7 +64,9 @@ class SqsQueue(object):
         if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
             raise Exception('Invalid status code from sqs: %s' %
                             resp['ResponseMetadata']['HTTPStatusCode'])
-        msgs = resp['Messages']
+        msgs = resp.get('Messages')
+        if not msgs:
+            return None
         assert len(msgs) == 1
         msg = msgs[0]
         payload = msg['Body']
@@ -247,6 +249,11 @@ class RawrTileGenerationPipeline(object):
                     msg_handle = self.rawr_queue.read()
             except Exception as e:
                 self.log_exception(e, 'queue read')
+                continue
+
+            if not msg_handle:
+                # this gets triggered when no messages are returned
+                # TODO do we want to sleep here for a small amount of time?
                 continue
 
             try:
