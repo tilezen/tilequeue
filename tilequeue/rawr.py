@@ -306,8 +306,12 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'rawr_gen'):
-                    self.rawr_gen(rawr_tile_coord)
+                rawr_gen_timing = {}
+                with time_block(rawr_gen_timing, 'total'):
+                    rawr_gen_specific_timing = self.rawr_gen(rawr_tile_coord)
+                rawr_gen_timing.update(rawr_gen_specific_timing)
+                timing['rawr_gen'] = rawr_gen_timing
+
             except Exception as e:
                 self.log_exception(e, 'rawr tile gen', parent)
                 continue

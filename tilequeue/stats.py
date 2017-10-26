@@ -41,6 +41,14 @@ class RawrTilePipelineStatsHandler(object):
     def __init__(self, stats):
         self.stats = stats
 
+    def emit_time_dict(self, pipe, timing, prefix):
+        for timing_label, value in timing.items():
+            metric_name = '%s.%s' % (prefix, timing_label)
+            if isinstance(value, dict):
+                self.emit_time_dict(pipe, value, metric_name)
+            else:
+                pipe.timing(metric_name, value)
+
     def __call__(self, intersect_metrics, n_enqueued, n_inflight, timing):
         with self.stats.pipeline() as pipe:
 
@@ -58,6 +66,5 @@ class RawrTilePipelineStatsHandler(object):
             pipe.gauge('rawr.process.enqueued', n_enqueued)
             pipe.gauge('rawr.process.inflight', n_inflight)
 
-            for timing_label, value in timing.items():
-                metric_name = 'rawr.process.time.%s' % timing_label
-                pipe.timing(metric_name, value)
+            prefix = 'rawr.process.time'
+            self.emit_time_dict(pipe, timing, prefix)
