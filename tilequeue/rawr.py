@@ -187,6 +187,11 @@ class RawrToiIntersector(object):
 
     def tiles_of_interest(self):
         """conditionally get the toi from s3"""
+
+        # also return back whether the response was cached
+        # useful for metrics
+        is_cached = False
+
         get_options = dict(
             Bucket=self.bucket,
             Key=self.key,
@@ -206,6 +211,7 @@ class RawrToiIntersector(object):
         if status_code == 304:
             assert self.prev_toi
             toi = self.prev_toi
+            is_cached = True
         elif status_code == 200:
             body = resp['Body']
             try:
@@ -222,17 +228,18 @@ class RawrToiIntersector(object):
         else:
             assert 0, 'Unknown status code from toi get: %s' % status_code
 
-        return toi
+        return toi, is_cached
 
     def __call__(self, coords):
         timing = {}
         with time_block(timing, 'fetch'):
-            toi = self.tiles_of_interest()
+            toi, is_toi_cached = self.tiles_of_interest()
         with time_block(timing, 'intersect'):
             coord_ints = convert_to_coord_ints(coords)
             intersected_coord_ints, intersect_metrics = \
                 explode_and_intersect(coord_ints, toi)
             coords = map(coord_unmarshall_int, intersected_coord_ints)
+        intersect_metrics['cached'] = is_toi_cached
         return coords, intersect_metrics,  timing
 
 
@@ -245,7 +252,7 @@ class EmptyToiIntersector(object):
     """
 
     def tiles_of_interest(self):
-        return set([])
+        return set([]), False
 
     def __call__(self, coords):
         metrics = dict(
