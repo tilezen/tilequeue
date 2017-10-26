@@ -225,12 +225,15 @@ class RawrToiIntersector(object):
         return toi
 
     def __call__(self, coords):
-        toi = self.tiles_of_interest()
-        coord_ints = convert_to_coord_ints(coords)
-        intersected_coord_ints, intersect_metrics = \
-            explode_and_intersect(coord_ints, toi)
-        coords = map(coord_unmarshall_int, intersected_coord_ints)
-        return coords, intersect_metrics
+        timing = {}
+        with time_block(timing, 'fetch'):
+            toi = self.tiles_of_interest()
+        with time_block(timing, 'intersect'):
+            coord_ints = convert_to_coord_ints(coords)
+            intersected_coord_ints, intersect_metrics = \
+                explode_and_intersect(coord_ints, toi)
+            coords = map(coord_unmarshall_int, intersected_coord_ints)
+        return coords, intersect_metrics,  timing
 
 
 class EmptyToiIntersector(object):
@@ -317,9 +320,12 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'toi_intersect'):
-                    coords_to_enqueue, intersect_metrics = \
+                intersect_timing = {}
+                with time_block(intersect_timing, 'total'):
+                    coords_to_enqueue, intersect_metrics, int_spec_timing = \
                         self.rawr_toi_intersector(coords)
+                intersect_timing.update(int_spec_timing)
+                timing['toi'] = intersect_timing
             except Exception as e:
                 self.log_exception(e, 'intersect coords', parent)
                 continue
