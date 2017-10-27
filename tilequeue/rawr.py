@@ -281,7 +281,14 @@ class RawrTileGenerationPipeline(object):
         self.stats_handler = stats_handler
         self.rawr_proc_logger = rawr_proc_logger
 
+    def _atexit_log(self):
+        self.rawr_proc_logger.lifecycle('Processing stopped')
+
     def __call__(self):
+        self.rawr_proc_logger.lifecycle('Processing started')
+        import atexit
+        atexit.register(self._atexit_log)
+
         while True:
             timing = {}
 
