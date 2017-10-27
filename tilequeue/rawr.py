@@ -610,7 +610,7 @@ def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller):
 
     rawr_queue_yaml = rawr_yaml.get('queue')
     assert rawr_queue_yaml, 'Missing rawr queue config'
-    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml)
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller)
 
     return make_rawr_enqueuer(
         rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
