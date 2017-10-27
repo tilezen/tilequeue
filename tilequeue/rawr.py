@@ -187,6 +187,11 @@ class RawrToiIntersector(object):
 
     def tiles_of_interest(self):
         """conditionally get the toi from s3"""
+
+        # also return back whether the response was cached
+        # useful for metrics
+        is_cached = False
+
         get_options = dict(
             Bucket=self.bucket,
             Key=self.key,
@@ -206,6 +211,7 @@ class RawrToiIntersector(object):
         if status_code == 304:
             assert self.prev_toi
             toi = self.prev_toi
+            is_cached = True
         elif status_code == 200:
             body = resp['Body']
             try:
@@ -222,15 +228,19 @@ class RawrToiIntersector(object):
         else:
             assert 0, 'Unknown status code from toi get: %s' % status_code
 
-        return toi
+        return toi, is_cached
 
     def __call__(self, coords):
-        toi = self.tiles_of_interest()
-        coord_ints = convert_to_coord_ints(coords)
-        intersected_coord_ints, intersect_metrics = \
-            explode_and_intersect(coord_ints, toi)
-        coords = map(coord_unmarshall_int, intersected_coord_ints)
-        return coords, intersect_metrics
+        timing = {}
+        with time_block(timing, 'fetch'):
+            toi, is_toi_cached = self.tiles_of_interest()
+        with time_block(timing, 'intersect'):
+            coord_ints = convert_to_coord_ints(coords)
+            intersected_coord_ints, intersect_metrics = \
+                explode_and_intersect(coord_ints, toi)
+            coords = map(coord_unmarshall_int, intersected_coord_ints)
+        intersect_metrics['cached'] = is_toi_cached
+        return coords, intersect_metrics,  timing
 
 
 class EmptyToiIntersector(object):
@@ -242,7 +252,7 @@ class EmptyToiIntersector(object):
     """
 
     def tiles_of_interest(self):
-        return set([])
+        return set([]), False
 
     def __call__(self, coords):
         metrics = dict(
@@ -306,16 +316,23 @@ class RawrTileGenerationPipeline(object):
                 continue
 
             try:
-                with time_block(timing, 'rawr_gen'):
-                    self.rawr_gen(rawr_tile_coord)
+                rawr_gen_timing = {}
+                with time_block(rawr_gen_timing, 'total'):
+                    rawr_gen_specific_timing = self.rawr_gen(rawr_tile_coord)
+                rawr_gen_timing.update(rawr_gen_specific_timing)
+                timing['rawr_gen'] = rawr_gen_timing
+
             except Exception as e:
                 self.log_exception(e, 'rawr tile gen', parent)
                 continue
 
             try:
-                with time_block(timing, 'toi_intersect'):
-                    coords_to_enqueue, intersect_metrics = \
+                intersect_timing = {}
+                with time_block(intersect_timing, 'total'):
+                    coords_to_enqueue, intersect_metrics, int_spec_timing = \
                         self.rawr_toi_intersector(coords)
+                intersect_timing.update(int_spec_timing)
+                timing['toi'] = intersect_timing
             except Exception as e:
                 self.log_exception(e, 'intersect coords', parent)
                 continue

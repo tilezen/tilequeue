@@ -147,6 +147,7 @@ class JsonRawrProcessingLogger(object):
                 total=intersect_metrics['total'],
                 hits=intersect_metrics['hits'],
                 misses=intersect_metrics['misses'],
+                cached=intersect_metrics['cached'],
             ),
             enqueued=n_enqueued,
             inflight=n_inflight,
