@@ -1222,7 +1222,7 @@ def tilequeue_process_wof_neighbourhoods(cfg, peripherals):
     stats = make_statsd_client_from_cfg(cfg)
     stats_handler = RawrTileEnqueueStatsHandler(stats)
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
-        cfg, logger, stats_handler)
+        cfg, logger, stats_handler, peripherals.msg_marshaller)
     processor = make_wof_processor(
         fetcher, model, peripherals.toi, rawr_enqueuer, logger, current_date)
 
@@ -1615,7 +1615,7 @@ def tilequeue_rawr_seed_toi(cfg, peripherals):
     logger = make_logger(cfg, 'rawr_seed')
     stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
-        cfg, logger, stats_handler)
+        cfg, logger, stats_handler, peripherals.msg_marshaller)
 
     tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
     # high zoom level coordinates get enqueued onto rawr queue
