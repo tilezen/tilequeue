@@ -156,3 +156,12 @@ class JsonRawrProcessingLogger(object):
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
+
+    def lifecycle(self, msg):
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.LIFECYCLE),
+            msg=msg,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
