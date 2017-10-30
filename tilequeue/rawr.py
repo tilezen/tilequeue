@@ -512,7 +512,7 @@ class RawrS3Source(object):
             return _empty_table
 
         # check that the response isn't a delete marker.
-        assert not response['DeleteMarker']
+        assert 'DeleteMarker' not in response
 
         body = response['Body']
         return unpack_rawr_zip_payload(self.table_sources, body)
