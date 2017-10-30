@@ -82,18 +82,21 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
     source_type = rawr_source_yaml.get('type')
 
     if source_type == 's3':
-        bucket = rawr_source_yaml.get('bucket')
-        assert bucket, 'Missing rawr sink bucket'
-        prefix = rawr_source_yaml.get('prefix')
-        assert prefix, 'Missing rawr sink prefix'
-        suffix = rawr_source_yaml.get('suffix')
-        assert suffix, 'Missing rawr sink suffix'
-        allow_missing_tiles = rawr_source_yaml.get(
+        rawr_source_s3_yaml = rawr_source_yaml.get('s3')
+        bucket = rawr_source_s3_yaml.get('bucket')
+        assert bucket, 'Missing rawr source s3 bucket'
+        region = rawr_source_s3_yaml.get('region')
+        assert region, 'Missing rawr source s3 region'
+        prefix = rawr_source_s3_yaml.get('prefix')
+        assert prefix, 'Missing rawr source s3 prefix'
+        suffix = rawr_source_s3_yaml.get('suffix')
+        assert suffix, 'Missing rawr source s3 suffix'
+        allow_missing_tiles = rawr_source_s3_yaml.get(
             'allow-missing-tiles', False)
 
         import boto3
         from tilequeue.rawr import RawrS3Source
-        s3_client = boto3.client('s3')
+        s3_client = boto3.client('s3', region_name=region)
         storage = RawrS3Source(s3_client, bucket, prefix, suffix,
                                table_sources, allow_missing_tiles)
 
