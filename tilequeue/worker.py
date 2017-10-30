@@ -509,7 +509,7 @@ class TileQueueWriter(object):
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
-                    'Unmarking in-flight error', e, coord, stacktrace)
+                    'Unmarking in-flight error', e, stacktrace, coord)
                 continue
 
             try:
@@ -524,7 +524,7 @@ class TileQueueWriter(object):
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
-                    'Acknowledgment error', e, coord, stacktrace)
+                    'Acknowledgment error', e, stacktrace, coord)
                 continue
 
             timing = metadata['timing']
