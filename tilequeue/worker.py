@@ -171,9 +171,10 @@ class TileQueueReader(object):
 
                     all_coords_data.append(data)
 
+                coord_input_spec = all_coords_data, top_tile
                 msg = "group of %d tiles below %s" \
                       % (len(all_coords_data), serialize_coord(top_tile))
-                if self.output(msg, all_coords_data):
+                if self.output(msg, coord_input_spec):
                     break
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
@@ -224,14 +225,16 @@ class DataFetch(object):
 
         while not stop.is_set():
             try:
-                all_data = self.input_queue.get(timeout=timeout_seconds)
+                coord_input_spec = self.input_queue.get(
+                    timeout=timeout_seconds)
             except Queue.Empty:
                 continue
-            if all_data is None:
+            if coord_input_spec is None:
                 saw_sentinel = True
                 break
 
             try:
+                all_data, parent = coord_input_spec
                 for fetch, data in self.fetcher.fetch_tiles(all_data):
                     metadata = data['metadata']
                     coord = data['coord']
@@ -239,9 +242,8 @@ class DataFetch(object):
                         break
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
-                coord = all_data['coord']
                 self.tile_proc_logger.error(
-                    'Fetch error', e, stacktrace, coord)
+                    'Fetch error', e, stacktrace, parent)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
