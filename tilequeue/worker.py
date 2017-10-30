@@ -231,11 +231,17 @@ class DataFetch(object):
                 saw_sentinel = True
                 break
 
-            for fetch, data in self.fetcher.fetch_tiles(all_data):
-                metadata = data['metadata']
-                coord = data['coord']
-                if self._fetch_and_output(fetch, coord, metadata, output):
-                    break
+            try:
+                for fetch, data in self.fetcher.fetch_tiles(all_data):
+                    metadata = data['metadata']
+                    coord = data['coord']
+                    if self._fetch_and_output(fetch, coord, metadata, output):
+                        break
+            except Exception as e:
+                stacktrace = format_stacktrace_one_line()
+                coord = all_data['coord']
+                self.tile_proc_logger.error(
+                    'Fetch error', e, stacktrace, coord)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
