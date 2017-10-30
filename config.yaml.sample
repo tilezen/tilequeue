@@ -188,13 +188,24 @@ wof:
     user: osm
     password:
 
-# Set the metatile size to 1 to have tilequeue save metatiles to storage rather
-# than individual tiles. This can have major benefits for reducing the number of
-# writes to disk. Set the size to null, or omit the entry, to disable metatile
-# writing and store individual tiles.
+# A metatile is a .zip package of multiple tiles. Storing multiple, related 
+# tiles together can be beneficial by reducing the number of writes to disk when
+# storing and loading them.
 metatile:
-  # Only metatiles of size 1 are currently supported, although other sizes may
-  # be available in the future.
+  # The metatile size setting has the following effects:
+  #
+  #   - null or omitted entry: Individual tiles, one for each format, will be 
+  #     saved on disk. This can be a good choice for local development use, or to 
+  #     save files to be served directly from storage (i.e: without tapalcatl).
+  #
+  #   - 1: Tiles with the same coordinate will be saved together in a .zip file,
+  #     which will require using tapalcatl to serve the individual files to users.
+  #     This is a good choice to reduce the number of writes to disk.
+  #
+  #   - 2: A "512px" tile and the 4 "256px" tiles covering the same geographical
+  #     area will be saved together, with all their formats. The filename of the
+  #     tile will be based on the coordinate of the "512px" tile, but the zoom
+  #     level used for styling will be one higher; that of the "256px" tiles.
   size: null
 
 # Configuration for where to store the tiles of interest set
