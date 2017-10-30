@@ -1,5 +1,6 @@
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
+import threading
 
 
 class MessageHandle(object):
@@ -104,39 +105,43 @@ class MultipleMessagesPerCoordTracker(object):
         # TODO we might want to have a way to purge this, or risk
         # running out of memory if a coordinate never completes
         self.handle_id_to_coords = {}
+        self.lock = threading.Lock()
 
     def track(self, queue_msg_handle, coords):
+        with self.lock:
+            handle_id = id(queue_msg_handle)
+            self.handle_id_to_msg_handle.setdefault(
+                handle_id, queue_msg_handle)
 
-        handle_id = id(queue_msg_handle)
-        self.handle_id_to_msg_handle.setdefault(handle_id, queue_msg_handle)
+            coord_id_set = set()
+            coord_handles = []
+            for coord in coords:
+                coord_id = id(coord)
+                self.coord_id_to_handle_id[coord_id] = handle_id
+                coord_id_set.add(coord_id)
+                coord_handles.append(coord_id)
 
-        coord_id_set = set()
-        coord_handles = []
-        for coord in coords:
-            coord_id = id(coord)
-            self.coord_id_to_handle_id[coord_id] = handle_id
-            coord_id_set.add(coord_id)
-            coord_handles.append(coord_id)
-
-        self.handle_id_to_coords[handle_id] = coord_id_set
+            self.handle_id_to_coords[handle_id] = coord_id_set
 
         return coord_handles
 
     def done(self, coord_handle):
-        handle_id = self.coord_id_to_handle_id.get(coord_handle)
-        assert handle_id
-        coord_id_set = self.handle_id_to_coords.get(handle_id)
-        assert coord_id_set is not None
-        coord_id_set.remove(coord_handle)
-        queue_msg_handle = self.handle_id_to_msg_handle.get(handle_id, None)
-        assert queue_msg_handle
-        all_done = False
-        if not coord_id_set:
-            # we're done with all coordinates in this set, and can ask
-            # the queue to complete the message
-            # clear the state first, so in case of exception we don't
-            # leak them
-            del self.handle_id_to_msg_handle[handle_id]
-            del self.handle_id_to_coords[handle_id]
-            all_done = True
+        with self.lock:
+            handle_id = self.coord_id_to_handle_id.get(coord_handle)
+            assert handle_id
+            coord_id_set = self.handle_id_to_coords.get(handle_id)
+            assert coord_id_set is not None
+            coord_id_set.remove(coord_handle)
+            queue_msg_handle = self.handle_id_to_msg_handle.get(
+                handle_id, None)
+            assert queue_msg_handle
+            all_done = False
+            if not coord_id_set:
+                # we're done with all coordinates in this set, and can ask
+                # the queue to complete the message
+                # clear the state first, so in case of exception we don't
+                # leak them
+                del self.handle_id_to_msg_handle[handle_id]
+                del self.handle_id_to_coords[handle_id]
+                all_done = True
         return queue_msg_handle, all_done
