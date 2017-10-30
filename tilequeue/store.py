@@ -364,6 +364,7 @@ def make_store(yml, credentials={}):
 
     elif store_type == 's3':
         bucket = yml.get('name')
+        path = yml.get('path')
         reduced_redundancy = yml.get('reduced-redundancy')
         date_prefix = yml.get('date-prefix')
         delete_retry_interval = yml.get('delete-retry-interval')
