@@ -1537,7 +1537,6 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_postgresql_yaml = rawr_yaml.get('postgresql')
     assert rawr_postgresql_yaml, 'Missing rawr postgresql config'
 
-    from raw_tiles.formatter.gzip import Gzip
     from raw_tiles.formatter.msgpack import Msgpack
     from raw_tiles.gen import RawrGenerator
     from raw_tiles.source.conn import ConnectionContextManager
@@ -1596,7 +1595,7 @@ def tilequeue_rawr_process(cfg, peripherals):
 
     logger = make_logger(cfg, 'rawr_process')
     rawr_osm_source = OsmSource(conn_ctx)
-    rawr_formatter = Gzip(Msgpack())
+    rawr_formatter = Msgpack()
     rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_sink)
     stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_proc_logger = JsonRawrProcessingLogger(logger)

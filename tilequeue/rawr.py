@@ -398,7 +398,6 @@ def unpack_rawr_zip_payload(table_sources, filelike):
     # RAM.
     from tilequeue.query.common import Table
     from io import BytesIO
-    from gzip import GzipFile
 
     buf = BytesIO(filelike.read())
     zfh = zipfile.ZipFile(buf, 'r')
@@ -407,8 +406,7 @@ def unpack_rawr_zip_payload(table_sources, filelike):
         # need to extract the whole compressed file from zip reader, as it
         # doesn't support .tell() on the filelike, which gzip requires.
         data = zfh.open(table_name, 'r').read()
-        ungzip = GzipFile(table_name, 'rb', 0, BytesIO(data))
-        unpacker = Unpacker(file_like=ungzip)
+        unpacker = Unpacker(file_like=BytesIO(data))
         source = table_sources[table_name]
         return Table(source, unpacker)
 
