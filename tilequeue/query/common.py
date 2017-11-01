@@ -292,11 +292,11 @@ def mz_calculate_transit_routes_and_score(osm, node_id, way_id, rel_id):
         if route:
             route_name = mz_transit_route_name(rel.tags)
             routes_lookup[route].add(route_name)
-    trains = routes_lookup['train']
-    subways = routes_lookup['subway']
-    light_rails = routes_lookup['light_rail']
-    trams = routes_lookup['tram']
-    railways = routes_lookup['railway']
+    trains = list(sorted(routes_lookup['train']))
+    subways = list(sorted(routes_lookup['subway']))
+    light_rails = list(sorted(routes_lookup['light_rail']))
+    trams = list(sorted(routes_lookup['tram']))
+    railways = list(sorted(routes_lookup['railway']))
     del routes_lookup
 
     # if a station is an interchange between mainline rail and subway or
