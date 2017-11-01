@@ -1,6 +1,7 @@
 from botocore.exceptions import ClientError
 from collections import defaultdict
 from collections import namedtuple
+from contextlib import closing
 from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
@@ -390,7 +391,7 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     return buf.getvalue()
 
 
-def unpack_rawr_zip_payload(table_sources, filelike):
+def unpack_rawr_zip_payload(table_sources, payload):
     """unpack a zipfile and turn it into a callable "tables" object."""
     # the io we get from S3 is streaming, so we can't seek on it, but zipfile
     # seems to require that. so we buffer it all in memory. RAWR tiles are
@@ -398,17 +399,14 @@ def unpack_rawr_zip_payload(table_sources, filelike):
     # RAM.
     from tilequeue.query.common import Table
     from io import BytesIO
-    from gzip import GzipFile
 
-    buf = BytesIO(filelike.read())
-    zfh = zipfile.ZipFile(buf, 'r')
+    zfh = zipfile.ZipFile(BytesIO(payload), 'r')
 
     def get_table(table_name):
         # need to extract the whole compressed file from zip reader, as it
         # doesn't support .tell() on the filelike, which gzip requires.
         data = zfh.open(table_name, 'r').read()
-        ungzip = GzipFile(table_name, 'rb', 0, BytesIO(data))
-        unpacker = Unpacker(file_like=ungzip)
+        unpacker = Unpacker(file_like=BytesIO(data))
         source = table_sources[table_name]
         return Table(source, unpacker)
 
@@ -514,7 +512,8 @@ class RawrS3Source(object):
         # check that the response isn't a delete marker.
         assert 'DeleteMarker' not in response
 
-        body = response['Body']
+        with closing(response['Body']) as body_fp:
+            body = body_fp.read()
         return unpack_rawr_zip_payload(self.table_sources, body)
 
 
@@ -535,7 +534,7 @@ class RawrStoreSource(object):
 
     def __call__(self, tile):
         payload = self._get_object(tile)
-        return unpack_rawr_zip_payload(self.table_sources, StringIO(payload))
+        return unpack_rawr_zip_payload(self.table_sources, payload)
 
 
 def make_rawr_queue(name, region, wait_time_secs):
