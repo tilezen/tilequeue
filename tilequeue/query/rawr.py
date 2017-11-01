@@ -287,11 +287,20 @@ class _LazyShape(object):
     def __init__(self, wkb):
         self.wkb = wkb
         self.obj = None
+        self._bounds = None
 
     def __getattr__(self, name):
         if self.obj is None:
             self.obj = wkb_loads(self.wkb)
         return getattr(self.obj, name)
+
+    @property
+    def bounds(self):
+        if self.obj is None:
+            self.obj = wkb_loads(self.wkb)
+        if self._bounds is None:
+            self._bounds = self.obj.bounds
+        return self._bounds
 
 
 _Metadata = namedtuple('_Metadata', 'source ways relations')
@@ -581,7 +590,11 @@ class RawrTile(object):
                 pad_factor = 1.1
                 clip_box = calculate_padded_bounds(
                     pad_factor, unpadded_bounds)
-            clip_shape = clip_box.intersection(shape)
+            # don't need to clip if geom is fully within the clipping box
+            if box(*shape.bounds).within(clip_box):
+                clip_shape = shape
+            else:
+                clip_shape = clip_box.intersection(shape)
             read_row['__geometry__'] = bytes(clip_shape.wkb)
 
             if generate_label_placement:
