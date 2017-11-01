@@ -671,3 +671,63 @@ class TestMeta(RawrTestCase):
         self.assertEquals(1, read_row.get('__id__'))
         self.assertEquals({'min_zoom': 11, 'highway': 'secondary'},
                           read_row.get('__testlayer_properties__'))
+
+
+class TestTileFootprint(unittest.TestCase):
+
+    def test_single_tile(self):
+        from tilequeue.query.rawr import _tiles
+        from raw_tiles.tile import Tile
+        from raw_tiles.util import bbox_for_tile
+
+        tile = Tile(15, 5241, 12665)
+
+        zoom = tile.z
+        unpadded_bounds = bbox_for_tile(tile.z, tile.x, tile.y)
+        tiles = _tiles(zoom, unpadded_bounds)
+
+        self.assertEquals([tile], list(tiles))
+
+    def test_multiple_tiles(self):
+        from tilequeue.query.rawr import _tiles
+        from raw_tiles.tile import Tile
+        from raw_tiles.util import bbox_for_tile
+
+        tile = Tile(15, 5241, 12665)
+
+        # query at one zoom higher - should get 4 child tiles.
+        zoom = tile.z + 1
+        unpadded_bounds = bbox_for_tile(tile.z, tile.x, tile.y)
+        tiles = list(_tiles(zoom, unpadded_bounds))
+
+        self.assertEquals(4, len(tiles))
+        for child in tiles:
+            self.assertEquals(tile, child.parent())
+
+    def test_corner_overlap(self):
+        # a box around the corner of a tile should return the four
+        # neighbours of that tile.
+        from tilequeue.query.rawr import _tiles
+        from raw_tiles.tile import Tile
+        from raw_tiles.util import bbox_for_tile
+
+        tile = Tile(15, 5241, 12665)
+
+        zoom = tile.z
+        tile_bbox = bbox_for_tile(tile.z, tile.x, tile.y)
+
+        # extract the top left corner
+        x = tile_bbox[0]
+        y = tile_bbox[3]
+        # make a small bounding box around that
+        w = 10
+        unpadded_bounds = (x - w, y - w,
+                           x + w, y + w)
+        tiles = set(_tiles(zoom, unpadded_bounds))
+
+        expected = set()
+        for dx in (0, -1):
+            for dy in (0, -1):
+                expected.add(Tile(tile.z, tile.x + dx, tile.y + dy))
+
+        self.assertEquals(expected, tiles)

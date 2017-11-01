@@ -246,25 +246,47 @@ class OsmRawrLookup(object):
         return set(self.relations_using_rel(rel_id))
 
 
+def _snapping_round(num, eps, resolution):
+    """
+    Return num snapped to within eps of an integer, or int(resolution(num)).
+    """
+
+    rounded = round(num)
+    delta = abs(num - rounded)
+    if delta < eps:
+        return int(rounded)
+    else:
+        return int(resolution(num))
+
+
 # yield all the tiles at the given zoom level which intersect the given bounds.
 def _tiles(zoom, unpadded_bounds):
-    from tilequeue.tile import mercator_point_to_coord
+    from tilequeue.tile import mercator_point_to_coord_fractional
     from raw_tiles.tile import Tile
+    import math
 
     minx, miny, maxx, maxy = unpadded_bounds
-    topleft = mercator_point_to_coord(zoom, minx, miny)
-    bottomright = mercator_point_to_coord(zoom, maxx, maxy)
+    topleft = mercator_point_to_coord_fractional(zoom, minx, maxy)
+    bottomright = mercator_point_to_coord_fractional(zoom, maxx, miny)
 
     # make sure that the bottom right coordinate is below and to the right
     # of the top left coordinate. it can happen that the coordinates are
     # mixed up due to small numerical precision artefacts being enlarged
     # by the conversion to integer and y-coordinate flip.
     assert topleft.zoom == bottomright.zoom
-    bottomright.column = max(bottomright.column, topleft.column)
-    bottomright.row = max(bottomright.row, topleft.row)
+    minx = min(topleft.column, bottomright.column)
+    maxx = max(topleft.column, bottomright.column)
+    miny = min(topleft.row, bottomright.row)
+    maxy = max(topleft.row, bottomright.row)
 
-    for x in range(int(topleft.column), int(bottomright.column) + 1):
-        for y in range(int(topleft.row), int(bottomright.row) + 1):
+    eps = 1.0e-5
+    minx = _snapping_round(minx, eps, math.floor)
+    maxx = _snapping_round(maxx, eps, math.ceil)
+    miny = _snapping_round(miny, eps, math.floor)
+    maxy = _snapping_round(maxy, eps, math.ceil)
+
+    for x in range(minx, maxx):
+        for y in range(miny, maxy):
             tile = Tile(zoom, x, y)
             yield tile
 

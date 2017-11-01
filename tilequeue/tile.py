@@ -104,13 +104,18 @@ coord_mercator_point_zoom = math.log(earth_circum) / math.log(2)
 half_earth_circum = earth_circum / 2
 
 
-def mercator_point_to_coord(z, x, y):
+def mercator_point_to_coord_fractional(z, x, y):
     coord = Coordinate(
         column=x + half_earth_circum,
         row=half_earth_circum - y,
         zoom=coord_mercator_point_zoom,
     )
-    coord = coord.zoomTo(z).container()
+    coord = coord.zoomTo(z)
+    return coord
+
+
+def mercator_point_to_coord(z, x, y):
+    coord = mercator_point_to_coord_fractional(z, x, y).container()
     return coord
 
 
