@@ -8,11 +8,12 @@ from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import name_keys
+from tilequeue.query.common import wkb_shape_type
+from tilequeue.query.common import ShapeType
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.utils import CoordsByParent
 from raw_tiles.tile import shape_tile_coverage
 from math import floor
-from enum import Enum
 
 
 class Relation(object):
@@ -53,30 +54,6 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
 
     def bbox(self):
         return box(*self.bounds())
-
-
-class ShapeType(Enum):
-    point = 1
-    line = 2
-    polygon = 3
-
-
-# determine the shape type from the raw WKB bytes. this means we don't have to
-# parse the WKB, which can be an expensive operation for large polygons.
-def _wkb_shape(wkb):
-    reverse = ord(wkb[0]) == 1
-    type_bytes = map(ord, wkb[1:5])
-    if reverse:
-        type_bytes.reverse()
-    typ = type_bytes[3]
-    if typ == 1 or typ == 4:
-        return ShapeType.point
-    elif typ == 2 or typ == 5:
-        return ShapeType.line
-    elif typ == 3 or typ == 6:
-        return ShapeType.polygon
-    else:
-        assert False, "WKB shape type %d not understood." % (typ,)
 
 
 # return true if the tuple of values corresponds to, and each is an instance
@@ -151,7 +128,7 @@ class OsmRawrLookup(object):
         if fid < 0:
             return
 
-        shape_type = _wkb_shape(shape_wkb)
+        shape_type = wkb_shape_type(shape_wkb)
         if is_station_or_stop(fid, None, props) and \
            shape_type == ShapeType.point:
             # must be a station or stop node
@@ -392,12 +369,11 @@ class _LayersIndex(object):
         layer_min_zooms = feature.layer_min_zooms
 
         # grab the shape type without decoding the WKB to save time.
-        shape_type = _wkb_shape(shape.wkb)
+        shape_type = wkb_shape_type(shape.wkb)
 
         meta = _make_meta(source, fid, shape_type, osm)
         for layer_name, info in self.layers.items():
-            shape_type_str = shape_type.name
-            if info.shape_types and shape_type_str not in info.shape_types:
+            if info.shape_types and shape_type not in info.shape_types:
                 continue
             min_zoom = info.min_zoom_fn(shape, props, fid, meta)
             if min_zoom is not None:

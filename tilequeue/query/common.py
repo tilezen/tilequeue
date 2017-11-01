@@ -2,6 +2,7 @@ from collections import namedtuple
 from collections import defaultdict
 from itertools import izip
 from tilequeue.process import Source
+from enum import Enum
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -18,6 +19,49 @@ class LayerInfo(namedtuple_with_defaults(
             return True
         typ = shape_type_lookup(shape)
         return typ in self.shape_types
+
+
+class ShapeType(Enum):
+    point = 1
+    line = 2
+    polygon = 3
+
+
+# determine the shape type from the raw WKB bytes. this means we don't have to
+# parse the WKB, which can be an expensive operation for large polygons.
+def wkb_shape_type(wkb):
+    reverse = ord(wkb[0]) == 1
+    type_bytes = map(ord, wkb[1:5])
+    if reverse:
+        type_bytes.reverse()
+    typ = type_bytes[3]
+    if typ == 1 or typ == 4:
+        return ShapeType.point
+    elif typ == 2 or typ == 5:
+        return ShapeType.line
+    elif typ == 3 or typ == 6:
+        return ShapeType.polygon
+    else:
+        assert False, "WKB shape type %d not understood." % (typ,)
+
+
+def parse_shape_types(inputs):
+    lookup = {
+        'point': ShapeType.point,
+        'multipoint': ShapeType.point,
+        'linestring': ShapeType.line,
+        'multilinestring': ShapeType.line,
+        'polygon': ShapeType.polygon,
+        'multipolygon': ShapeType.polygon,
+    }
+    outputs = set()
+    for value in inputs:
+        t = lookup.get(value.lower())
+        if t is None:
+            raise ValueError("%r not understood as shape type" % value)
+        outputs.add(t)
+
+    return outputs or None
 
 
 def deassoc(x):
