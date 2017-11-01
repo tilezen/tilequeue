@@ -199,7 +199,7 @@ class OsmRawrLookup(object):
     def relation(self, rel_id):
         "Returns the Relation object with the given ID."
 
-        return self.relations[rel_id]
+        return self.relations.get(rel_id)
 
     def way(self, way_id):
         """
@@ -207,7 +207,7 @@ class OsmRawrLookup(object):
         given way.
         """
 
-        return self.ways[way_id]
+        return self.ways.get(way_id)
 
     def node(self, node_id):
         """
@@ -215,7 +215,7 @@ class OsmRawrLookup(object):
         given node.
         """
 
-        return self.nodes[node_id]
+        return self.nodes.get(node_id)
 
     def transit_relations(self, rel_id):
         "Return transit relations containing the relation with the given ID."
@@ -304,14 +304,20 @@ def _make_meta(source, fid, shape_type, osm):
     # fetch ways and relations for any node
     if fid >= 0 and shape_type == ShapeType.point:
         for way_id in osm.ways_using_node(fid):
-            ways.append(osm.way(way_id))
+            way = osm.way(way_id)
+            if way:
+                ways.append(way)
         for rel_id in osm.relations_using_node(fid):
-            rels.append(osm.relation(rel_id))
+            rel = osm.relation(rel_id)
+            if rel:
+                rels.append(rel)
 
     # and relations for any way
     if fid >= 0 and shape_type == ShapeType.line:
         for rel_id in osm.relations_using_way(fid):
-            rels.append(osm.relation(rel_id))
+            rel = osm.relation(rel_id)
+            if rel:
+                rels.append(rel)
 
     # have to transform the Relation object into a dict, which is
     # what the functions called on this data expect.
