@@ -141,7 +141,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
 
 
 def _make_layer_info(layer_data, process_yaml_cfg):
-    from tilequeue.query.common import LayerInfo, parse_shape_types
+    from tilequeue.query.common import LayerInfo, ShapeType
 
     layers = {}
     functions = _parse_yaml_functions(process_yaml_cfg)
@@ -149,7 +149,7 @@ def _make_layer_info(layer_data, process_yaml_cfg):
     for layer_datum in layer_data:
         name = layer_datum['name']
         min_zoom_fn, props_fn = functions[name]
-        shape_types = parse_shape_types(layer_datum['geometry_types'])
+        shape_types = ShapeType.parse_set(layer_datum['geometry_types'])
         layer_info = LayerInfo(min_zoom_fn, props_fn, shape_types)
         layers[name] = layer_info
 

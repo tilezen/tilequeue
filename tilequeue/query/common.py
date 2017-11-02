@@ -26,6 +26,21 @@ class ShapeType(Enum):
     line = 2
     polygon = 3
 
+    # aliases, don't use these directly!
+    multipoint = 1
+    linestring = 2
+    multilinestring = 2
+    multipolygon = 3
+
+    @classmethod
+    def parse_set(cls, inputs):
+        outputs = set()
+        for value in inputs:
+            t = cls[value.lower()]
+            outputs.add(t)
+
+        return outputs or None
+
 
 # determine the shape type from the raw WKB bytes. this means we don't have to
 # parse the WKB, which can be an expensive operation for large polygons.
@@ -43,25 +58,6 @@ def wkb_shape_type(wkb):
         return ShapeType.polygon
     else:
         assert False, "WKB shape type %d not understood." % (typ,)
-
-
-def parse_shape_types(inputs):
-    lookup = {
-        'point': ShapeType.point,
-        'multipoint': ShapeType.point,
-        'linestring': ShapeType.line,
-        'multilinestring': ShapeType.line,
-        'polygon': ShapeType.polygon,
-        'multipolygon': ShapeType.polygon,
-    }
-    outputs = set()
-    for value in inputs:
-        t = lookup.get(value.lower())
-        if t is None:
-            raise ValueError("%r not understood as shape type" % value)
-        outputs.add(t)
-
-    return outputs or None
 
 
 def deassoc(x):
