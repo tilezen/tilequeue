@@ -261,8 +261,13 @@ class EmptyToiIntersector(object):
             hits=0,
             misses=len(coords),
             n_toi=0,
+            cached=False,
         )
-        return [], metrics
+        timing = dict(
+            fetch=0,
+            intersect=0,
+        )
+        return [], metrics, timing
 
 
 class RawrTileGenerationPipeline(object):

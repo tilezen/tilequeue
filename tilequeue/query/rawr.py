@@ -8,11 +8,12 @@ from tilequeue.query.common import deassoc
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import name_keys
+from tilequeue.query.common import wkb_shape_type
+from tilequeue.query.common import ShapeType
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.utils import CoordsByParent
 from raw_tiles.tile import shape_tile_coverage
 from math import floor
-from enum import Enum
 
 
 class Relation(object):
@@ -53,30 +54,6 @@ class TilePyramid(namedtuple('TilePyramid', 'z x y max_z')):
 
     def bbox(self):
         return box(*self.bounds())
-
-
-class ShapeType(Enum):
-    point = 1
-    line = 2
-    polygon = 3
-
-
-# determine the shape type from the raw WKB bytes. this means we don't have to
-# parse the WKB, which can be an expensive operation for large polygons.
-def _wkb_shape(wkb):
-    reverse = ord(wkb[0]) == 1
-    type_bytes = map(ord, wkb[1:5])
-    if reverse:
-        type_bytes.reverse()
-    typ = type_bytes[3]
-    if typ == 1 or typ == 4:
-        return ShapeType.point
-    elif typ == 2 or typ == 5:
-        return ShapeType.line
-    elif typ == 3 or typ == 6:
-        return ShapeType.polygon
-    else:
-        assert False, "WKB shape type %d not understood." % (typ,)
 
 
 # return true if the tuple of values corresponds to, and each is an instance
@@ -151,7 +128,7 @@ class OsmRawrLookup(object):
         if fid < 0:
             return
 
-        shape_type = _wkb_shape(shape_wkb)
+        shape_type = wkb_shape_type(shape_wkb)
         if is_station_or_stop(fid, None, props) and \
            shape_type == ShapeType.point:
             # must be a station or stop node
@@ -222,7 +199,7 @@ class OsmRawrLookup(object):
     def relation(self, rel_id):
         "Returns the Relation object with the given ID."
 
-        return self.relations[rel_id]
+        return self.relations.get(rel_id)
 
     def way(self, way_id):
         """
@@ -230,7 +207,7 @@ class OsmRawrLookup(object):
         given way.
         """
 
-        return self.ways[way_id]
+        return self.ways.get(way_id)
 
     def node(self, node_id):
         """
@@ -238,7 +215,7 @@ class OsmRawrLookup(object):
         given node.
         """
 
-        return self.nodes[node_id]
+        return self.nodes.get(node_id)
 
     def transit_relations(self, rel_id):
         "Return transit relations containing the relation with the given ID."
@@ -246,25 +223,47 @@ class OsmRawrLookup(object):
         return set(self.relations_using_rel(rel_id))
 
 
+def _snapping_round(num, eps, resolution):
+    """
+    Return num snapped to within eps of an integer, or int(resolution(num)).
+    """
+
+    rounded = round(num)
+    delta = abs(num - rounded)
+    if delta < eps:
+        return int(rounded)
+    else:
+        return int(resolution(num))
+
+
 # yield all the tiles at the given zoom level which intersect the given bounds.
 def _tiles(zoom, unpadded_bounds):
-    from tilequeue.tile import mercator_point_to_coord
+    from tilequeue.tile import mercator_point_to_coord_fractional
     from raw_tiles.tile import Tile
+    import math
 
     minx, miny, maxx, maxy = unpadded_bounds
-    topleft = mercator_point_to_coord(zoom, minx, miny)
-    bottomright = mercator_point_to_coord(zoom, maxx, maxy)
+    topleft = mercator_point_to_coord_fractional(zoom, minx, maxy)
+    bottomright = mercator_point_to_coord_fractional(zoom, maxx, miny)
 
     # make sure that the bottom right coordinate is below and to the right
     # of the top left coordinate. it can happen that the coordinates are
     # mixed up due to small numerical precision artefacts being enlarged
     # by the conversion to integer and y-coordinate flip.
     assert topleft.zoom == bottomright.zoom
-    bottomright.column = max(bottomright.column, topleft.column)
-    bottomright.row = max(bottomright.row, topleft.row)
+    minx = min(topleft.column, bottomright.column)
+    maxx = max(topleft.column, bottomright.column)
+    miny = min(topleft.row, bottomright.row)
+    maxy = max(topleft.row, bottomright.row)
 
-    for x in range(int(topleft.column), int(bottomright.column) + 1):
-        for y in range(int(topleft.row), int(bottomright.row) + 1):
+    eps = 1.0e-5
+    minx = _snapping_round(minx, eps, math.floor)
+    maxx = _snapping_round(maxx, eps, math.ceil)
+    miny = _snapping_round(miny, eps, math.floor)
+    maxy = _snapping_round(maxy, eps, math.ceil)
+
+    for x in range(minx, maxx):
+        for y in range(miny, maxy):
             tile = Tile(zoom, x, y)
             yield tile
 
@@ -288,11 +287,20 @@ class _LazyShape(object):
     def __init__(self, wkb):
         self.wkb = wkb
         self.obj = None
+        self._bounds = None
 
     def __getattr__(self, name):
         if self.obj is None:
             self.obj = wkb_loads(self.wkb)
         return getattr(self.obj, name)
+
+    @property
+    def bounds(self):
+        if self.obj is None:
+            self.obj = wkb_loads(self.wkb)
+        if self._bounds is None:
+            self._bounds = self.obj.bounds
+        return self._bounds
 
 
 _Metadata = namedtuple('_Metadata', 'source ways relations')
@@ -305,14 +313,20 @@ def _make_meta(source, fid, shape_type, osm):
     # fetch ways and relations for any node
     if fid >= 0 and shape_type == ShapeType.point:
         for way_id in osm.ways_using_node(fid):
-            ways.append(osm.way(way_id))
+            way = osm.way(way_id)
+            if way:
+                ways.append(way)
         for rel_id in osm.relations_using_node(fid):
-            rels.append(osm.relation(rel_id))
+            rel = osm.relation(rel_id)
+            if rel:
+                rels.append(rel)
 
     # and relations for any way
     if fid >= 0 and shape_type == ShapeType.line:
         for rel_id in osm.relations_using_way(fid):
-            rels.append(osm.relation(rel_id))
+            rel = osm.relation(rel_id)
+            if rel:
+                rels.append(rel)
 
     # have to transform the Relation object into a dict, which is
     # what the functions called on this data expect.
@@ -370,12 +384,11 @@ class _LayersIndex(object):
         layer_min_zooms = feature.layer_min_zooms
 
         # grab the shape type without decoding the WKB to save time.
-        shape_type = _wkb_shape(shape.wkb)
+        shape_type = wkb_shape_type(shape.wkb)
 
         meta = _make_meta(source, fid, shape_type, osm)
         for layer_name, info in self.layers.items():
-            shape_type_str = shape_type.name
-            if info.shape_types and shape_type_str not in info.shape_types:
+            if info.shape_types and shape_type not in info.shape_types:
                 continue
             min_zoom = info.min_zoom_fn(shape, props, fid, meta)
             if min_zoom is not None:
@@ -577,7 +590,11 @@ class RawrTile(object):
                 pad_factor = 1.1
                 clip_box = calculate_padded_bounds(
                     pad_factor, unpadded_bounds)
-            clip_shape = clip_box.intersection(shape)
+            # don't need to clip if geom is fully within the clipping box
+            if box(*shape.bounds).within(clip_box):
+                clip_shape = shape
+            else:
+                clip_shape = clip_box.intersection(shape)
             read_row['__geometry__'] = bytes(clip_shape.wkb)
 
             if generate_label_placement:
