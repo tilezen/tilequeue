@@ -75,7 +75,7 @@ A great way to get a high level view of the time consumed by the code is to run 
 
 ```
 python -m flamegraph -o perf.log `which tilequeue` tile --config config.yaml 10/163/395
-flamegraph.pl --title pyramid perf.log > perf.svg
+flamegraph.pl --title "Tilequeue 10/163/395" perf.log > perf.svg
 ```
 
 Note that you may need to add the path to `flamegraph.pl` from Brendan Gregg's repository if you haven't installed it in your `$PATH`.
