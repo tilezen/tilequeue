@@ -1,4 +1,3 @@
-from tilequeue.tile import coord_to_mercator_bounds
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
@@ -15,9 +14,11 @@ from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.store import make_store
+from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
@@ -923,6 +924,71 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('%d tiles of interest processed' % n_toi)
 
 
+def coord_pyramids(coords, zoom_start, zoom_stop):
+    """
+    generate full pyramid for coords
+
+    Generate the full pyrmaid for the list of coords. Note that zoom_stop is
+    exclusive.
+    """
+    for coord in coords:
+        if zoom_start <= coord.zoom:
+            yield coord
+        for child_coord in coord_children_range(coord, zoom_stop):
+            if zoom_start <= child_coord.zoom:
+                yield child_coord
+
+
+def tilequeue_enqueue_full_pyramid_from_toi(cfg, peripherals, args):
+    """enqueue a full pyramid from the z10 toi"""
+    logger = make_logger(cfg, 'enqueue_tiles_of_interest')
+    logger.info('Enqueueing tiles of interest')
+
+    logger.info('Fetching tiles of interest ...')
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
+    n_toi = len(tiles_of_interest)
+    logger.info('Fetching tiles of interest ... done')
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml, 'Missing rawr yaml'
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom, 'Missing rawr group-zoom'
+    assert isinstance(group_by_zoom, int), 'Invalid rawr group-zoom'
+
+    if args.zoom_start is None:
+        zoom_start = group_by_zoom
+    else:
+        zoom_start = args.zoom_start
+
+    if args.zoom_stop is None:
+        zoom_stop = cfg.max_zoom + 1  # +1 because exclusive
+    else:
+        zoom_stop = args.zoom_stop
+
+    assert zoom_start >= group_by_zoom
+    assert zoom_stop > zoom_start
+
+    ungrouped = []
+    coords_at_group_zoom = set()
+    for coord_int in tiles_of_interest:
+        coord = coord_unmarshall_int(coord_int)
+        if coord.zoom < zoom_start:
+            ungrouped.append(coord)
+        if coord.zoom >= group_by_zoom:
+            coord_at_group_zoom = coord.zoomTo(group_by_zoom).container()
+            coords_at_group_zoom.add(coord_at_group_zoom)
+
+    pyramid = coord_pyramids(coords_at_group_zoom, zoom_start, zoom_stop)
+
+    coords_to_enqueue = chain(ungrouped, pyramid)
+
+    queue_writer = peripherals.queue_writer
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords_to_enqueue)
+
+    logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
+    logger.info('%d tiles of interest processed' % n_toi)
+
+
 def tilequeue_consume_tile_traffic(cfg, peripherals):
     logger = make_logger(cfg, 'consume_tile_traffic')
     logger.info('Consuming tile traffic logs ...')
@@ -1760,6 +1826,17 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.set_defaults(
             func=_make_peripherals_with_args_command(tilequeue_process_tile))
+
+    subparser = subparsers.add_parser('enqueue-tiles-of-interest-pyramids')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--zoom-start', type=int, required=False,
+                           default=None, help='Zoom start')
+    subparser.add_argument('--zoom-stop', type=int, required=False,
+                           default=None, help='Zoom stop, exclusive')
+    subparser.set_defaults(
+            func=_make_peripherals_with_args_command(
+                tilequeue_enqueue_full_pyramid_from_toi))
 
     subparser = subparsers.add_parser('rawr-enqueue')
     subparser.add_argument('--config', required=True,
