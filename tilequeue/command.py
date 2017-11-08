@@ -949,15 +949,24 @@ def tilequeue_enqueue_full_pyramid_from_toi(cfg, peripherals, args):
     n_toi = len(tiles_of_interest)
     logger.info('Fetching tiles of interest ... done')
 
-    zoom_start = args.zoom_start
-    zoom_stop = args.zoom_stop
-
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml, 'Missing rawr yaml'
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom, 'Missing rawr group-zoom'
     assert isinstance(group_by_zoom, int), 'Invalid rawr group-zoom'
+
+    if args.zoom_start is None:
+        zoom_start = group_by_zoom
+    else:
+        zoom_start = args.zoom_start
+
+    if args.zoom_stop is None:
+        zoom_stop = cfg.max_zoom + 1  # +1 because exclusive
+    else:
+        zoom_stop = args.zoom_stop
+
     assert zoom_start >= group_by_zoom
+    assert zoom_stop > zoom_start
 
     ungrouped = []
     coords_at_group_zoom = set()
@@ -1821,9 +1830,10 @@ def tilequeue_main(argv_args=None):
     subparser = subparsers.add_parser('enqueue-tiles-of-interest-pyramids')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
-    subparser.add_argument('zoom_start', type=int, help='Min zoom start')
-    subparser.add_argument('zoom_stop', type=int,
-                           help='Max zoom stop, exclusive')
+    subparser.add_argument('--zoom-start', type=int, required=False,
+                           default=None, help='Zoom start')
+    subparser.add_argument('--zoom-stop', type=int, required=False,
+                           default=None, help='Zoom stop, exclusive')
     subparser.set_defaults(
             func=_make_peripherals_with_args_command(
                 tilequeue_enqueue_full_pyramid_from_toi))
