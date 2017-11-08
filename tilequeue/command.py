@@ -935,7 +935,7 @@ def coord_pyramids(coords, zoom_start, zoom_stop):
         if zoom_start <= coord.zoom:
             yield coord
         for child_coord in coord_children_range(coord, zoom_stop):
-            if zoom_start <= child_coord.zoom < zoom_stop:
+            if zoom_start <= child_coord.zoom:
                 yield child_coord
 
 
