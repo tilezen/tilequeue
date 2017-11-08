@@ -546,7 +546,8 @@ def make_rawr_queue(name, region, wait_time_secs):
     import boto3
     sqs_client = boto3.client('sqs', region_name=region)
     resp = sqs_client.get_queue_url(QueueName=name)
-    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
+        'Failed to get queue url for: %s' % name
     queue_url = resp['QueueUrl']
     from tilequeue.rawr import SqsQueue
     rawr_queue = SqsQueue(sqs_client, queue_url, wait_time_secs)

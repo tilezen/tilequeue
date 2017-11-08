@@ -230,14 +230,9 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         queue_type = queue_yaml_cfg.get('type')
         assert queue_type, 'Missing queue type'
         if queue_type == 'sqs':
-            aws_access_key_id = None
-            aws_secret_access_key = None
-            aws_cfg = all_cfg.get('aws')
-            if aws_cfg:
-                aws_access_key_id = aws_cfg.get('aws_access_key_id')
-                aws_secret_access_key = aws_cfg.get('aws_secret_access_key')
-            tile_queue = make_sqs_queue(
-                queue_name, aws_access_key_id, aws_secret_access_key)
+            region = queue_yaml_cfg.get('region')
+            assert region, 'Missing queue region'
+            tile_queue = make_sqs_queue(queue_name, region)
         elif queue_type == 'mem':
             from tilequeue.queue import MemoryQueue
             tile_queue = MemoryQueue()
