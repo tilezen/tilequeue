@@ -69,10 +69,10 @@ class SqsQueue(object):
 
         return msg_handles
 
-    def job_done(self, msg_handle):
+    def job_done(self, handle):
         self.sqs_client.delete_message(
             QueueUrl=self.queue_url,
-            ReceiptHandle=msg_handle.handle,
+            ReceiptHandle=handle,
         )
 
     def clear(self):
@@ -82,7 +82,7 @@ class SqsQueue(object):
             if not msgs:
                 break
             for msg in msgs:
-                self.job_done(msg)
+                self.job_done(msg.handle)
             n += len(msgs)
         return n
 

@@ -88,19 +88,17 @@ class SingleMessageTrackerTest(unittest.TestCase):
 
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord
-        from tilequeue.queue import MessageHandle
-        from tilequeue.queue.message import QueueMessageHandle
-        msg_handle = MessageHandle('handle', 'payload')
+        from tilequeue.queue.message import QueueHandle
         queue_id = 1
-        queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
+        queue_handle = QueueHandle(queue_id, 'handle')
         coords = [deserialize_coord('1/1/1')]
-        coord_handles = self.tracker.track(queue_msg_handle, coords)
+        coord_handles = self.tracker.track(queue_handle, coords)
         self.assertEqual(1, len(coord_handles))
         coord_handle = coord_handles[0]
-        self.assertIs(queue_msg_handle, coord_handle)
+        self.assertIs(queue_handle, coord_handle)
 
-        returned_msg_handle, all_done = self.tracker.done(coord_handle)
-        self.assertIs(queue_msg_handle, returned_msg_handle)
+        returned_queue_handle, all_done = self.tracker.done(coord_handle)
+        self.assertIs(queue_handle, returned_queue_handle)
         self.assertTrue(all_done)
 
 
@@ -112,21 +110,19 @@ class MultipleMessageTrackerTest(unittest.TestCase):
 
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord
-        from tilequeue.queue import MessageHandle
-        from tilequeue.queue.message import QueueMessageHandle
-        msg_handle = MessageHandle('handle', 'payload')
+        from tilequeue.queue.message import QueueHandle
         queue_id = 1
-        queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
+        queue_handle = QueueHandle(queue_id, 'handle')
         coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
-        coord_handles = self.tracker.track(queue_msg_handle, coords)
+        coord_handles = self.tracker.track(queue_handle, coords)
         self.assertEqual(2, len(coord_handles))
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             self.tracker.done('bogus-coord-handle')
 
-        msg_handle_result, all_done = self.tracker.done(coord_handles[0])
+        queue_handle_result, all_done = self.tracker.done(coord_handles[0])
         self.assertFalse(all_done)
 
-        msg_handle_result, all_done = self.tracker.done(coord_handles[1])
+        queue_handle_result, all_done = self.tracker.done(coord_handles[1])
         self.assertTrue(all_done)
-        self.assertIs(queue_msg_handle, msg_handle_result)
+        self.assertIs(queue_handle, queue_handle_result)
