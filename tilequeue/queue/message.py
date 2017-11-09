@@ -96,7 +96,8 @@ class MultipleMessagesPerCoordTracker(object):
     queue handle.
     """
 
-    def __init__(self):
+    def __init__(self, msg_tracker_logger):
+        self.msg_tracker_logger = msg_tracker_logger
         self.queue_handle_map = {}
         self.coord_ids_map = {}
         # TODO we might want to have a way to purge this, or risk
@@ -122,18 +123,38 @@ class MultipleMessagesPerCoordTracker(object):
         return coord_handles
 
     def done(self, coord_handle):
+        queue_handle = None
+        all_done = False
+
         with self.lock:
             coord_id, queue_handle_id = coord_handle
-            coord_ids = self.coord_ids_map[queue_handle_id]
-            coord_ids.remove(coord_id)
-            queue_handle = self.queue_handle_map[queue_handle_id]
+            coord_ids = self.coord_ids_map.get(queue_handle_id)
+            if coord_ids is None:
+                self.msg_tracker_logger.unknown_queue_handle_id(
+                    coord_id, queue_handle_id)
 
-            all_done = False
+            else:
+                if coord_id not in coord_ids:
+                    self.msg_tracker_logger.unknown_coord_id(
+                        coord_id, queue_handle_id)
+                else:
+                    coord_ids.remove(coord_id)
+
+            queue_handle = self.queue_handle_map.get(queue_handle_id)
+            if queue_handle is None:
+                self.msg_tracker_logger.unknown_queue_handle_id(
+                    coord_id, queue_handle_id)
+
             if not coord_ids:
-                # we're done with all coordinates in this set, and can ask
-                # the queue to complete the message
-                del self.queue_handle_map[queue_handle_id]
-                del self.coord_ids_map[queue_handle_id]
-                all_done = True
+                # we're done with all coordinates for the queue message
+                try:
+                    del self.queue_handle_map[queue_handle_id]
+                except KeyError:
+                    pass
+                try:
+                    del self.coord_ids_map[queue_handle_id]
+                except KeyError:
+                    pass
+                all_done = queue_handle is not None
 
         return queue_handle, all_done

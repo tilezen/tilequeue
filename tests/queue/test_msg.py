@@ -105,8 +105,10 @@ class SingleMessageTrackerTest(unittest.TestCase):
 class MultipleMessageTrackerTest(unittest.TestCase):
 
     def setUp(self):
+        from mock import MagicMock
         from tilequeue.queue.message import MultipleMessagesPerCoordTracker
-        self.tracker = MultipleMessagesPerCoordTracker()
+        msg_tracker_logger = MagicMock()
+        self.tracker = MultipleMessagesPerCoordTracker(msg_tracker_logger)
 
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord

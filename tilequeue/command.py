@@ -269,7 +269,9 @@ def make_msg_tracker(msg_tracker_yaml):
             return SingleMessagePerCoordTracker()
         elif msg_tracker_type == 'multiple':
             from tilequeue.queue.message import MultipleMessagesPerCoordTracker
-            return MultipleMessagesPerCoordTracker()
+            from tilequeue.log import MultipleMessagesTrackerLogger
+            msg_tracker_logger = MultipleMessagesTrackerLogger()
+            return MultipleMessagesPerCoordTracker(msg_tracker_logger)
         else:
             assert 0, 'Unknown message tracker type: %s' % msg_tracker_type
 

@@ -545,13 +545,14 @@ class TileQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            msg_metadata = queue_handle.metadata
             time_in_queue = 0
-            if msg_metadata:
-                tile_timestamp_millis = msg_metadata.get('timestamp')
-                if tile_timestamp_millis is not None:
-                    tile_timestamp_seconds = tile_timestamp_millis / 1000.0
-                    time_in_queue = now - tile_timestamp_seconds
+            if queue_handle:
+                msg_metadata = queue_handle.metadata
+                if msg_metadata:
+                    tile_timestamp_millis = msg_metadata.get('timestamp')
+                    if tile_timestamp_millis is not None:
+                        tile_timestamp_seconds = tile_timestamp_millis / 1000.0
+                        time_in_queue = now - tile_timestamp_seconds
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']
