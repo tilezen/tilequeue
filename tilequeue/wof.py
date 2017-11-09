@@ -2,6 +2,7 @@ from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
 from datetime import datetime
+from edtf import parse_edtf
 from operator import attrgetter
 from psycopg2.extras import register_hstore
 from shapely import geos
@@ -10,7 +11,6 @@ from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import mercator_point_to_coord
 from tilequeue.tile import reproject_lnglat_to_mercator
 import csv
-import edtf
 import json
 import os.path
 import psycopg2
@@ -187,12 +187,12 @@ class NeighbourhoodFailure(object):
 def _normalize_edtf(s):
     if s and s != 'u':
         try:
-            return edtf.EDTF(s)
+            return parse_edtf(s)
         except Exception:
             pass
 
     # when all else fails, return the "most unknown" EDTF.
-    return edtf.EDTF('uuuu')
+    return parse_edtf('uuuu')
 
 
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
@@ -328,9 +328,9 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     edtf_deprecated = _normalize_edtf(props.get('edtf:deprecated'))
 
     # check that the dates are valid first to return back a better error
-    inception_earliest = edtf_inception.date_earliest()
-    cessation_latest = edtf_cessation.date_latest()
-    deprecated_latest = edtf_deprecated.date_latest()
+    inception_earliest = edtf_inception.lower_fuzzy()
+    cessation_latest = edtf_cessation.upper_fuzzy()
+    deprecated_latest = edtf_deprecated.upper_fuzzy()
     if inception_earliest is None:
         return failure('invalid edtf:inception: %s' %
                        props.get('edtf:inception'))
