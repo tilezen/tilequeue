@@ -22,14 +22,15 @@ class MessageHandle(object):
         self.metadata = metadata
 
 
-class QueueMessageHandle(object):
+class QueueHandle(object):
     """
     message handle combined with a queue id
     """
 
-    def __init__(self, queue_id, msg_handle):
+    def __init__(self, queue_id, handle, metadata=None):
         self.queue_id = queue_id
-        self.msg_handle = msg_handle
+        self.handle = handle
+        self.metadata = metadata
 
 
 class SingleMessageMarshaller(object):
@@ -73,18 +74,17 @@ class CommaSeparatedMarshaller(object):
 class SingleMessagePerCoordTracker(object):
 
     """
-    one-to-one mapping between message handles and coordinates
+    one-to-one mapping between queue handles and coordinates
     """
 
-    def track(self, queue_msg_handle, coords):
+    def track(self, queue_handle, coords):
         assert len(coords) == 1
-        # treat the message handle itself as the coordinate handle
-        return [queue_msg_handle]
+        return [queue_handle]
 
     def done(self, coord_handle):
-        queue_msg_handle = coord_handle
+        queue_handle = coord_handle
         all_done = True
-        return queue_msg_handle, all_done
+        return queue_handle, all_done
 
 
 class MultipleMessagesPerCoordTracker(object):
@@ -93,55 +93,68 @@ class MultipleMessagesPerCoordTracker(object):
     track a mapping for multiple coordinates
 
     Support tracking a mapping for multiple coordinates to a single
-    queue message handle.
+    queue handle.
     """
 
-    def __init__(self):
-        # use an opaque id for indirect reference to message handles
-        self.handle_id_to_msg_handle = {}
-        # lookup the opaque handle id for a coordinate id
-        self.coord_id_to_handle_id = {}
-        # state for the open set of coordinates for a given message handle id
+    def __init__(self, msg_tracker_logger):
+        self.msg_tracker_logger = msg_tracker_logger
+        self.queue_handle_map = {}
+        self.coord_ids_map = {}
         # TODO we might want to have a way to purge this, or risk
         # running out of memory if a coordinate never completes
-        self.handle_id_to_coords = {}
         self.lock = threading.Lock()
 
-    def track(self, queue_msg_handle, coords):
+    def track(self, queue_handle, coords):
         with self.lock:
-            handle_id = id(queue_msg_handle)
-            self.handle_id_to_msg_handle.setdefault(
-                handle_id, queue_msg_handle)
+            # rely on the queue handle token as the mapping key
+            queue_handle_id = queue_handle.handle
+            self.queue_handle_map[queue_handle_id] = queue_handle
 
-            coord_id_set = set()
+            coord_ids = set()
             coord_handles = []
             for coord in coords:
-                coord_id = id(coord)
-                self.coord_id_to_handle_id[coord_id] = handle_id
-                coord_id_set.add(coord_id)
-                coord_handles.append(coord_id)
+                coord_id = (int(coord.zoom), int(coord.column), int(coord.row))
+                coord_handle = (coord_id, queue_handle_id)
+                coord_ids.add(coord_id)
+                coord_handles.append(coord_handle)
 
-            self.handle_id_to_coords[handle_id] = coord_id_set
+            self.coord_ids_map[queue_handle_id] = coord_ids
 
         return coord_handles
 
     def done(self, coord_handle):
+        queue_handle = None
+        all_done = False
+
         with self.lock:
-            handle_id = self.coord_id_to_handle_id.get(coord_handle)
-            assert handle_id
-            coord_id_set = self.handle_id_to_coords.get(handle_id)
-            assert coord_id_set is not None
-            coord_id_set.remove(coord_handle)
-            queue_msg_handle = self.handle_id_to_msg_handle.get(
-                handle_id, None)
-            assert queue_msg_handle
-            all_done = False
-            if not coord_id_set:
-                # we're done with all coordinates in this set, and can ask
-                # the queue to complete the message
-                # clear the state first, so in case of exception we don't
-                # leak them
-                del self.handle_id_to_msg_handle[handle_id]
-                del self.handle_id_to_coords[handle_id]
-                all_done = True
-        return queue_msg_handle, all_done
+            coord_id, queue_handle_id = coord_handle
+            coord_ids = self.coord_ids_map.get(queue_handle_id)
+            if coord_ids is None:
+                self.msg_tracker_logger.unknown_queue_handle_id(
+                    coord_id, queue_handle_id)
+
+            else:
+                if coord_id not in coord_ids:
+                    self.msg_tracker_logger.unknown_coord_id(
+                        coord_id, queue_handle_id)
+                else:
+                    coord_ids.remove(coord_id)
+
+            queue_handle = self.queue_handle_map.get(queue_handle_id)
+            if queue_handle is None:
+                self.msg_tracker_logger.unknown_queue_handle_id(
+                    coord_id, queue_handle_id)
+
+            if not coord_ids:
+                # we're done with all coordinates for the queue message
+                try:
+                    del self.queue_handle_map[queue_handle_id]
+                except KeyError:
+                    pass
+                try:
+                    del self.coord_ids_map[queue_handle_id]
+                except KeyError:
+                    pass
+                all_done = queue_handle is not None
+
+        return queue_handle, all_done

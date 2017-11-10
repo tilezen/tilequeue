@@ -8,7 +8,7 @@ from tilequeue.metatile import common_parent
 from tilequeue.metatile import make_metatiles
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
-from tilequeue.queue.message import QueueMessageHandle
+from tilequeue.queue.message import QueueHandle
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
@@ -136,9 +136,10 @@ class TileQueueReader(object):
                     break
 
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-                queue_msg_handle = QueueMessageHandle(queue_id, msg_handle)
+                queue_handle = QueueHandle(
+                    queue_id, msg_handle.handle, msg_handle.metadata)
                 coord_handles = self.msg_tracker.track(
-                    queue_msg_handle, coords)
+                    queue_handle, coords)
 
                 all_coords_data = []
                 top_tile = None
@@ -198,7 +199,13 @@ class TileQueueReader(object):
         # of timed-out jobs being re-added to the
         # queue until they overflow max-retries.
         try:
-            self.msg_tracker.done(coord_handle)
+            queue_handle, done = self.msg_tracker.done(coord_handle)
+            if done:
+                tile_queue = (
+                    self.queue_mapper.get_queue(queue_handle.queue_id))
+                assert tile_queue, \
+                    'Missing tile_queue: %s' % queue_handle.queue_id
+                tile_queue.job_done(queue_handle.handle)
         except Exception as e:
             stacktrace = format_stacktrace_one_line()
             self.tile_proc_logger.error(
@@ -521,14 +528,13 @@ class TileQueueWriter(object):
                 continue
 
             try:
-                queue_msg_handle, done = self.msg_tracker.done(coord_handle)
-                msg_handle = queue_msg_handle.msg_handle
+                queue_handle, done = self.msg_tracker.done(coord_handle)
                 if done:
                     tile_queue = (
-                        self.queue_mapper.get_queue(queue_msg_handle.queue_id))
+                        self.queue_mapper.get_queue(queue_handle.queue_id))
                     assert tile_queue, \
-                        'Missing tile_queue: %s' % queue_msg_handle.queue_id
-                    tile_queue.job_done(msg_handle)
+                        'Missing tile_queue: %s' % queue_handle.queue_id
+                    tile_queue.job_done(queue_handle.handle)
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
@@ -539,13 +545,14 @@ class TileQueueWriter(object):
             now = time.time()
             timing['ack_seconds'] = now - start
 
-            msg_metadata = msg_handle.metadata
             time_in_queue = 0
-            if msg_metadata:
-                tile_timestamp_millis = msg_metadata.get('timestamp')
-                if tile_timestamp_millis is not None:
-                    tile_timestamp_seconds = tile_timestamp_millis / 1000.0
-                    time_in_queue = now - tile_timestamp_seconds
+            if queue_handle:
+                msg_metadata = queue_handle.metadata
+                if msg_metadata:
+                    tile_timestamp_millis = msg_metadata.get('timestamp')
+                    if tile_timestamp_millis is not None:
+                        tile_timestamp_seconds = tile_timestamp_millis / 1000.0
+                        time_in_queue = now - tile_timestamp_seconds
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']

@@ -165,3 +165,27 @@ class JsonRawrProcessingLogger(object):
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
+
+
+class MultipleMessagesTrackerLogger(object):
+
+    def __init__(self, logger):
+        self.logger = logger
+
+    def _log(self, msg, coord_id, queue_handle_id):
+        z, x, y = coord_id
+        json_obj = dict(
+            type=log_level_name(LogLevel.WARNING),
+            category=log_category_name(LogCategory.PROCESS),
+            msg=msg,
+            coord=dict(z=z, x=x, y=y),
+            handle=queue_handle_id,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.warning(json_str)
+
+    def unknown_queue_handle_id(self, coord_id, queue_handle_id):
+        self._log('Unknown queue_handle_id', coord_id, queue_handle_id)
+
+    def unknown_coord_id(self, coord_id, queue_handle_id):
+        self._log('Unknown coord_id', coord_id, queue_handle_id)

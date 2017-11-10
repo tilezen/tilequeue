@@ -6,32 +6,25 @@ class TestQueue(unittest.TestCase):
         from mock import MagicMock
         from tilequeue.queue import SqsQueue
 
-        self.message = None
-        self.mockQueue = MagicMock()
-        self.mockQueue.write = self.fake_write
-        self.mockQueue.write_batch = self.fake_write_batch
-        self.sqs = SqsQueue(self.mockQueue)
-        self.values = []
-        self.key_name = None
-        self.coords = None
-
-    def fake_write(self, message):
-        self.message = message
-
-    def fake_write_batch(self, message_tuples):
-        self.message_tuples = message_tuples
+        self.mockClient = MagicMock()
+        self.sqs = SqsQueue(self.mockClient, 'queue-url', 10, 20)
 
     def test_enqueue_batch_adds_tiles(self):
         from mock import MagicMock
         coords = ['1/1/1', '2/2/2']
-        mock = MagicMock()
-        mock.side_effect = [False, False]
+        self.mockClient.send_message_batch = MagicMock(
+            return_value=dict(ResponseMetadata=dict(HTTPStatusCode=200)),
+        )
         self.sqs.enqueue_batch(coords)
-        self.assertEqual(2, len(self.message_tuples))
-        self.assertEqual(self.message_tuples[0][1], "1/1/1")
-        self.assertEqual(self.message_tuples[1][1], "2/2/2")
+        self.mockClient.send_message_batch.assert_called_with([
+            {'Id': '0', 'MessageBody': '1/1/1'},
+            {'Id': '1', 'MessageBody': '2/2/2'}])
 
     def test_enqueue_should_write_message_to_queue(self):
+        from mock import MagicMock
+        self.mockClient.send = MagicMock(
+            return_value=dict(ResponseMetadata=dict(HTTPStatusCode=200)),
+        )
         self.sqs.enqueue('1/1/1')
-        self.assertIsNotNone(self.message)
-        self.assertEqual('1/1/1', self.message.get_body())
+        self.mockClient.send.assert_called_with(
+            MessageBody='1/1/1', QueueUrl='queue-url')
