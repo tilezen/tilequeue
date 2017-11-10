@@ -6,6 +6,7 @@ from cStringIO import StringIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
+from raw_tiles.source.table_reader import TableReader
 from tilequeue.command import explode_and_intersect
 from tilequeue.format import zip_format
 from tilequeue.queue.message import MessageHandle
@@ -277,7 +278,7 @@ class RawrTileGenerationPipeline(object):
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
             queue_writer, rawr_toi_intersector, stats_handler,
-            rawr_proc_logger):
+            rawr_proc_logger, conn_ctx):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
@@ -286,6 +287,7 @@ class RawrTileGenerationPipeline(object):
         self.rawr_toi_intersector = rawr_toi_intersector
         self.stats_handler = stats_handler
         self.rawr_proc_logger = rawr_proc_logger
+        self.conn_ctx = conn_ctx
 
     def _atexit_log(self):
         self.rawr_proc_logger.lifecycle('Processing stopped')
@@ -331,7 +333,17 @@ class RawrTileGenerationPipeline(object):
             try:
                 rawr_gen_timing = {}
                 with time_block(rawr_gen_timing, 'total'):
-                    rawr_gen_specific_timing = self.rawr_gen(rawr_tile_coord)
+                    # grab connection
+                    with self.conn_ctx() as conn:
+                        # commit transaction
+                        with conn as conn:
+                            # cleanup cursor resources
+                            with conn.cursor() as cur:
+                                table_reader = TableReader(cur)
+
+                                rawr_gen_specific_timing = self.rawr_gen(
+                                    table_reader, rawr_tile_coord)
+
                 rawr_gen_timing.update(rawr_gen_specific_timing)
                 timing['rawr_gen'] = rawr_gen_timing
 

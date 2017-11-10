@@ -342,6 +342,88 @@ def _make_meta(source, fid, shape_type, osm):
     return _Metadata(source.name, ways, rel_dicts)
 
 
+def insert_into_index(tile_pyramid, feature, tile_index):
+    assert isinstance(feature, _Feature)
+
+    layer_min_zooms = feature.layer_min_zooms
+    # quick exit if the feature didn't have a min zoom in any layer.
+    if not layer_min_zooms:
+        return
+
+    # lowest zoom that this feature appears in any layer. note that this
+    # is clamped to the max zoom, so that all features that appear at some
+    # zoom level appear at the max zoom. this is different from the min
+    # zoom in layer_min_zooms, which is a property that will be injected
+    # for each layer and is used by the _client_ to determine feature
+    # visibility.
+    min_zoom = min(tile_pyramid.max_z, min(layer_min_zooms.values()))
+
+    # take the minimum integer zoom - this is the min zoom tile that the
+    # feature should appear in, and a feature with min_zoom = 1.9 should
+    # appear in a tile at z=1, not 2, since the tile at z=N is used for
+    # the zoom range N to N+1.
+    #
+    # we cut this off at this index's min zoom, as we aren't interested
+    # in any tiles outside of that.
+    floor_zoom = max(tile_pyramid.z, int(floor(min_zoom)))
+
+    # seed initial set of tiles at maximum zoom. all features appear at
+    # least at the max zoom, even if the min_zoom function returns a
+    # value larger than the max zoom.
+    zoom = tile_pyramid.max_z
+    tiles = shape_tile_coverage(feature.shape, zoom, tile_pyramid.tile())
+
+    while zoom >= floor_zoom:
+        parent_tiles = set()
+        for tile in tiles:
+            tile_index[tile].append(feature)
+            parent_tiles.add(tile.parent())
+
+        zoom -= 1
+        tiles = parent_tiles
+
+
+def make_layer_min_zooms(layers, source, fid, shape, props, shape_type):
+    layer_min_zooms = {}
+    meta = _make_meta(source, fid, shape_type, None)
+    for layer_name, info in layers.items():
+        if info.shape_types and shape_type not in info.shape_types:
+            continue
+        min_zoom = info.min_zoom_fn(shape, props, fid, meta)
+        if min_zoom is not None:
+            layer_min_zooms[layer_name] = min_zoom
+    return layer_min_zooms
+
+
+# TODO: factor out common features of _SimpleLayersIndex & _LayersIndex
+class _SimpleLayersIndex(object):
+    """
+    Index features by the tile(s) that they appear in.
+
+    This is the non-relations version, for stand-alone features such as those
+    from openstreetmapdata.com shapefiles or WOF.
+    """
+
+    def __init__(self, layers, tile_pyramid, source):
+        self.layers = layers
+        self.tile_pyramid = tile_pyramid
+        self.tile_index = defaultdict(list)
+        self.source = source
+
+    def add_row(self, fid, shape_wkb, props):
+        shape = _LazyShape(shape_wkb)
+        shape_type = wkb_shape_type(shape_wkb)
+
+        layer_min_zooms = make_layer_min_zooms(
+            self.layers, self.source, fid, shape, props, shape_type)
+
+        feature = _Feature(fid, shape, props, layer_min_zooms)
+        insert_into_index(self.tile_pyramid, feature, self.tile_index)
+
+    def __call__(self, tile):
+        return self.tile_index.get(tile, [])
+
+
 class _LayersIndex(object):
     """
     Index features by the tile(s) that they appear in.
@@ -394,41 +476,7 @@ class _LayersIndex(object):
             if min_zoom is not None:
                 layer_min_zooms[layer_name] = min_zoom
 
-        # quick exit if the feature didn't have a min zoom in any layer.
-        if not layer_min_zooms:
-            return
-
-        # lowest zoom that this feature appears in any layer. note that this
-        # is clamped to the max zoom, so that all features that appear at some
-        # zoom level appear at the max zoom. this is different from the min
-        # zoom in layer_min_zooms, which is a property that will be injected
-        # for each layer and is used by the _client_ to determine feature
-        # visibility.
-        min_zoom = min(self.tile_pyramid.max_z, min(layer_min_zooms.values()))
-
-        # take the minimum integer zoom - this is the min zoom tile that the
-        # feature should appear in, and a feature with min_zoom = 1.9 should
-        # appear in a tile at z=1, not 2, since the tile at z=N is used for
-        # the zoom range N to N+1.
-        #
-        # we cut this off at this index's min zoom, as we aren't interested
-        # in any tiles outside of that.
-        floor_zoom = max(self.tile_pyramid.z, int(floor(min_zoom)))
-
-        # seed initial set of tiles at maximum zoom. all features appear at
-        # least at the max zoom, even if the min_zoom function returns a
-        # value larger than the max zoom.
-        zoom = self.tile_pyramid.max_z
-        tiles = shape_tile_coverage(shape, zoom, self.tile_pyramid.tile())
-
-        while zoom >= floor_zoom:
-            parent_tiles = set()
-            for tile in tiles:
-                self.tile_index[tile].append(feature)
-                parent_tiles.add(tile.parent())
-
-            zoom -= 1
-            tiles = parent_tiles
+        insert_into_index(self.tile_pyramid, feature, self.tile_index)
 
     def __call__(self, tile):
         return self.tile_index.get(tile, [])
@@ -450,6 +498,7 @@ class RawrTile(object):
         self.tile_pyramid = tile_pyramid
         self.label_placement_layers = label_placement_layers
         self.layer_indexes = {}
+        self.simple_layer_indexes = {}
 
         table_indexes = defaultdict(list)
 
@@ -478,6 +527,13 @@ class RawrTile(object):
 
         assert source
         self.layers_index_source = source
+
+        for name in ('wof_neighbourhood', 'water_polygons',
+                     'land_polygons'):
+            table = tables('wof_neighbourhood')
+            index = _SimpleLayersIndex(layers, tile_pyramid, table.source)
+            index_table(table.rows, index)
+            self.simple_layer_indexes[name] = index
 
         # there's a chicken and egg problem with the indexes: we want to know
         # which features to index, but also calculate the feature's min zoom,
@@ -508,6 +564,9 @@ class RawrTile(object):
 
         for tile in _tiles(zoom, unpadded_bounds):
             tile_features = self.layers_index(tile)
+            for _, index in self.simple_layer_indexes:
+                tile_features.extend(index(tile))
+
             for feature in tile_features:
                 feature_id = id(feature)
                 if feature_id not in seen_ids:
