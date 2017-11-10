@@ -7,7 +7,7 @@ class TestQueue(unittest.TestCase):
         from tilequeue.queue import SqsQueue
 
         self.mockClient = MagicMock()
-        self.sqs = SqsQueue(self.mockClient, 'queue-url', 10, 20)
+        self.sqs = SqsQueue(self.mockClient, 'queue-url', 10, 20, 1800)
 
     def test_enqueue_batch_adds_tiles(self):
         from mock import MagicMock
@@ -16,9 +16,11 @@ class TestQueue(unittest.TestCase):
             return_value=dict(ResponseMetadata=dict(HTTPStatusCode=200)),
         )
         self.sqs.enqueue_batch(coords)
-        self.mockClient.send_message_batch.assert_called_with([
-            {'Id': '0', 'MessageBody': '1/1/1'},
-            {'Id': '1', 'MessageBody': '2/2/2'}])
+        self.mockClient.send_message_batch.assert_called_with(
+            QueueUrl='queue-url',
+            Entries=[
+                {'Id': '0', 'MessageBody': '1/1/1'},
+                {'Id': '1', 'MessageBody': '2/2/2'}])
 
     def test_enqueue_should_write_message_to_queue(self):
         from mock import MagicMock

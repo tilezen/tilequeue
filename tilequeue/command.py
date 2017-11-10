@@ -213,6 +213,19 @@ def make_inflight_manager(inflight_yaml, redis_client=None):
         assert 0, 'Unknown inflight type: %s' % inflight_type
 
 
+def make_sqs_queue_from_cfg(name, queue_yaml_cfg):
+    region = queue_yaml_cfg.get('region')
+    assert region, 'Missing queue sqs region'
+    visibility_extend_seconds = \
+        queue_yaml_cfg.get('visibility-extend-seconds')
+    assert visibility_extend_seconds is not None, \
+        'Missing queue sqs visibility-extend-seconds'
+    assert visibility_extend_seconds > 0, \
+        'Invalid queue sqs visibility-extend-seconds config'
+    tile_queue = make_sqs_queue(name, region, visibility_extend_seconds)
+    return tile_queue
+
+
 def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
     # return a tile_queue, name instance, or list of tilequeue, name pairs
     # alternatively maybe should force queue implementations to know
@@ -230,9 +243,8 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         queue_type = queue_yaml_cfg.get('type')
         assert queue_type, 'Missing queue type'
         if queue_type == 'sqs':
-            region = queue_yaml_cfg.get('region')
-            assert region, 'Missing queue region'
-            tile_queue = make_sqs_queue(queue_name, region)
+            sqs_cfg = queue_yaml_cfg.get('sqs', 'Missing queue sqs config')
+            tile_queue = make_sqs_queue_from_cfg(queue_name, sqs_cfg)
         elif queue_type == 'mem':
             from tilequeue.queue import MemoryQueue
             tile_queue = MemoryQueue()
@@ -257,7 +269,7 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         return tile_queue, queue_name
 
 
-def make_msg_tracker(msg_tracker_yaml):
+def make_msg_tracker(msg_tracker_yaml, logger):
     if not msg_tracker_yaml:
         from tilequeue.queue.message import SingleMessagePerCoordTracker
         return SingleMessagePerCoordTracker()
@@ -270,7 +282,7 @@ def make_msg_tracker(msg_tracker_yaml):
         elif msg_tracker_type == 'multiple':
             from tilequeue.queue.message import MultipleMessagesPerCoordTracker
             from tilequeue.log import MultipleMessagesTrackerLogger
-            msg_tracker_logger = MultipleMessagesTrackerLogger()
+            msg_tracker_logger = MultipleMessagesTrackerLogger(logger)
             return MultipleMessagesPerCoordTracker(msg_tracker_logger)
         else:
             assert 0, 'Unknown message tracker type: %s' % msg_tracker_type
@@ -643,7 +655,8 @@ def tilequeue_process(cfg, peripherals):
 
     queue_mapper = peripherals.queue_mapper
     msg_marshaller = peripherals.msg_marshaller
-    msg_tracker = peripherals.msg_tracker
+    msg_tracker_yaml = cfg.yml.get('message-tracker')
+    msg_tracker = make_msg_tracker(msg_tracker_yaml, logger)
     tile_queue_reader = TileQueueReader(
         queue_mapper, msg_marshaller, msg_tracker, tile_input_queue,
         tile_proc_logger, thread_tile_queue_reader_stop, cfg.max_zoom
@@ -665,7 +678,7 @@ def tilequeue_process(cfg, peripherals):
     thread_tile_writer_stop = threading.Event()
     tile_queue_writer = TileQueueWriter(
         queue_mapper, s3_store_queue, peripherals.inflight_mgr,
-        peripherals.msg_tracker, tile_proc_logger, stats_handler,
+        msg_tracker, tile_proc_logger, stats_handler,
         thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
@@ -1700,7 +1713,7 @@ def tilequeue_rawr_seed_toi(cfg, peripherals):
 Peripherals = namedtuple(
     'Peripherals',
     'toi stats redis_client '
-    'queue_mapper msg_tracker msg_marshaller inflight_mgr queue_writer'
+    'queue_mapper msg_marshaller inflight_mgr queue_writer'
 )
 
 
@@ -1774,14 +1787,11 @@ def tilequeue_main(argv_args=None):
         queue_writer = QueueWriter(
             queue_mapper, msg_marshaller, inflight_mgr, enqueue_batch_size)
 
-        msg_tracker_yaml = cfg.yml.get('message-tracker')
-        msg_tracker = make_msg_tracker(msg_tracker_yaml)
-
         stats = make_statsd_client_from_cfg(cfg)
 
         peripherals = Peripherals(
-            toi_helper, stats, redis_client, queue_mapper, msg_tracker,
-            msg_marshaller, inflight_mgr, queue_writer
+            toi_helper, stats, redis_client, queue_mapper, msg_marshaller,
+            inflight_mgr, queue_writer
         )
         return peripherals
 

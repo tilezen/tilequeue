@@ -3,6 +3,12 @@ queue:
   # can also be a list of queues to configure multiple
   type: mem
   name: <sqs queue/list of queue names/queue file name/redis key/>
+  # if using sqs configuration
+  sqs:
+    region: <aws-region>
+    # on partial completions, how much to extend the sqs message visibility
+    # timeout
+    visibility-extend-seconds: 1800
 queue-mapping:
   type: <single/multiple>
   # for multiple configuration

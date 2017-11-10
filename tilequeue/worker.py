@@ -86,6 +86,32 @@ class OutputQueue(object):
         return False
 
 
+def _ack_coord_handle(
+        coord, coord_handle, queue_mapper, msg_tracker, tile_proc_logger):
+    """share code for acknowledging a coordinate"""
+    queue_handle = None
+    err = None
+    try:
+        # update the msg tracker to also keep track of timestamps that
+        # way we can reset the visibility timeout to prevent the
+        # upstream sqs messages from timing out
+        queue_handle, done = msg_tracker.done(coord_handle)
+        if queue_handle:
+            tile_queue = (
+                queue_mapper.get_queue(queue_handle.queue_id))
+            assert tile_queue, \
+                'Missing tile_queue: %s' % queue_handle.queue_id
+            if done:
+                tile_queue.job_done(queue_handle.handle)
+            else:
+                tile_queue.job_partially_done(queue_handle.handle)
+    except Exception as e:
+        stacktrace = format_stacktrace_one_line()
+        tile_proc_logger.error('Acknowledgment error', e, stacktrace, coord)
+        err = e
+    return queue_handle, err
+
+
 # The strategy with each worker is to loop on a thread event. When the
 # main thread/process receives a kill signal, it will issue stops to
 # each worker to signal that work should end.
@@ -193,24 +219,13 @@ class TileQueueReader(object):
             None,  # stacktrace
             coord,
         )
-
         # delete jobs that we can't handle from the
         # queue, otherwise we'll get stuck in a cycle
         # of timed-out jobs being re-added to the
         # queue until they overflow max-retries.
-        try:
-            queue_handle, done = self.msg_tracker.done(coord_handle)
-            if done:
-                tile_queue = (
-                    self.queue_mapper.get_queue(queue_handle.queue_id))
-                assert tile_queue, \
-                    'Missing tile_queue: %s' % queue_handle.queue_id
-                tile_queue.job_done(queue_handle.handle)
-        except Exception as e:
-            stacktrace = format_stacktrace_one_line()
-            self.tile_proc_logger.error(
-                'Acknowledge error for coord above max zoom',
-                e, stacktrace, coord)
+        _ack_coord_handle(
+            coord, coord_handle, self.queue_mapper, self.msg_tracker,
+            self.tile_proc_logger)
 
 
 class DataFetch(object):
@@ -527,18 +542,10 @@ class TileQueueWriter(object):
                     'Unmarking in-flight error', e, stacktrace, coord)
                 continue
 
-            try:
-                queue_handle, done = self.msg_tracker.done(coord_handle)
-                if done:
-                    tile_queue = (
-                        self.queue_mapper.get_queue(queue_handle.queue_id))
-                    assert tile_queue, \
-                        'Missing tile_queue: %s' % queue_handle.queue_id
-                    tile_queue.job_done(queue_handle.handle)
-            except Exception as e:
-                stacktrace = format_stacktrace_one_line()
-                self.tile_proc_logger.error(
-                    'Acknowledgment error', e, stacktrace, coord)
+            queue_handle, err = _ack_coord_handle(
+                coord, coord_handle, self.queue_mapper, self.msg_tracker,
+                self.tile_proc_logger)
+            if err is not None:
                 continue
 
             timing = metadata['timing']

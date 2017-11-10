@@ -43,6 +43,9 @@ class OutputFileQueue(object):
     def job_done(self, msg_handle):
         pass
 
+    def job_partially_done(self, handle):
+        pass
+
     def clear(self):
         with self.lock:
             self.fp.seek(0)

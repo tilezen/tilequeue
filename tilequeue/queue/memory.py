@@ -21,6 +21,9 @@ class MemoryQueue(object):
     def job_done(self, msg_handle):
         pass
 
+    def job_partially_done(self, handle):
+        pass
+
     def clear(self):
         n = len(self.q)
         del self.q[:]

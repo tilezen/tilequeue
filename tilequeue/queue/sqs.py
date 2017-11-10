@@ -5,11 +5,12 @@ from tilequeue.utils import grouper
 class SqsQueue(object):
 
     def __init__(self, sqs_client, queue_url, read_size,
-                 recv_wait_time_seconds):
+                 recv_wait_time_seconds, visibility_extend_seconds):
         self.sqs_client = sqs_client
         self.queue_url = queue_url
         self.read_size = read_size
         self.recv_wait_time_seconds = recv_wait_time_seconds
+        self.visibility_extend_seconds = visibility_extend_seconds
 
     def enqueue(self, payload):
         return self.sqs_client.send(
@@ -28,7 +29,10 @@ class SqsQueue(object):
                     MessageBody=payload,
                 )
                 msgs.append(msg)
-            resp = self.sqs_client.send_message_batch(msgs)
+            resp = self.sqs_client.send_message_batch(
+                QueueUrl=self.queue_url,
+                Entries=msgs,
+            )
             if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
                 raise Exception('Invalid status code from sqs: %s' %
                                 resp['ResponseMetadata']['HTTPStatusCode'])
@@ -75,6 +79,13 @@ class SqsQueue(object):
             ReceiptHandle=handle,
         )
 
+    def job_partially_done(self, handle):
+        self.sqs_client.change_message_visibility(
+            QueueUrl=self.queue_url,
+            ReceiptHandle=handle,
+            VisibilityTimeout=self.visibility_extend_seconds,
+        )
+
     def clear(self):
         n = 0
         while True:
@@ -90,7 +101,7 @@ class SqsQueue(object):
         pass
 
 
-def make_sqs_queue(name, region):
+def make_sqs_queue(name, region, visibility_extend_seconds):
     import boto3
     sqs_client = boto3.client('sqs', region_name=region)
     resp = sqs_client.get_queue_url(QueueName=name)
@@ -99,4 +110,5 @@ def make_sqs_queue(name, region):
     queue_url = resp['QueueUrl']
     read_size = 10
     recv_wait_time_seconds = 20
-    return SqsQueue(sqs_client, queue_url, read_size, recv_wait_time_seconds)
+    return SqsQueue(sqs_client, queue_url, read_size, recv_wait_time_seconds,
+                    visibility_extend_seconds)
