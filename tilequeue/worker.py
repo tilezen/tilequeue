@@ -162,8 +162,11 @@ class TileQueueReader(object):
                     break
 
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-                queue_handle = QueueHandle(
-                    queue_id, msg_handle.handle, msg_handle.metadata)
+                msg_timestamp = None
+                if msg_handle.metadata:
+                    msg_timestamp = msg_handle.metadata.get('timestamp')
+
+                queue_handle = QueueHandle(queue_id, msg_handle.handle)
                 coord_handles = self.msg_tracker.track(
                     queue_handle, coords)
 
@@ -181,6 +184,7 @@ class TileQueueReader(object):
                             s3_seconds=None,
                             ack_seconds=None,
                         ),
+                        msg_timestamp=msg_timestamp,
                         coord_handle=coord_handle,
                     )
                     data = dict(
@@ -553,13 +557,11 @@ class TileQueueWriter(object):
             timing['ack_seconds'] = now - start
 
             time_in_queue = 0
-            if queue_handle:
-                msg_metadata = queue_handle.metadata
-                if msg_metadata:
-                    tile_timestamp_millis = msg_metadata.get('timestamp')
-                    if tile_timestamp_millis is not None:
-                        tile_timestamp_seconds = tile_timestamp_millis / 1000.0
-                        time_in_queue = now - tile_timestamp_seconds
+            msg_timestamp = metadata['msg_timestamp']
+            if msg_timestamp:
+                tile_timestamp_millis = msg_timestamp
+                tile_timestamp_seconds = tile_timestamp_millis / 1000.0
+                time_in_queue = now - tile_timestamp_seconds
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']

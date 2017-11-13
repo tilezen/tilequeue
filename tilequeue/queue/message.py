@@ -27,10 +27,9 @@ class QueueHandle(object):
     message handle combined with a queue id
     """
 
-    def __init__(self, queue_id, handle, metadata=None):
+    def __init__(self, queue_id, handle):
         self.queue_id = queue_id
         self.handle = handle
-        self.metadata = metadata
 
 
 class SingleMessageMarshaller(object):
