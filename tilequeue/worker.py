@@ -89,7 +89,7 @@ class OutputQueue(object):
 
 def _ack_coord_handle(
         coord, coord_handle, queue_mapper, msg_tracker, timing_state,
-        tile_proc_logger):
+        tile_proc_logger, stats_handler):
     """share code for acknowledging a coordinate"""
     queue_handle = None
     err = None
@@ -114,6 +114,8 @@ def _ack_coord_handle(
                     stop_time_secs = time.time()
                     tile_proc_logger.log_processed_pyramid(
                         parent_tile, start_time_secs, stop_time_secs)
+                    stats_handler.processed_pyramid(
+                        start_time_secs, stop_time_secs)
             else:
                 tile_queue.job_partially_done(queue_handle.handle)
     except Exception as e:
@@ -599,7 +601,7 @@ class TileQueueWriter(object):
                 store_info,
             )
             self.tile_proc_logger.log_processed_coord(coord_proc_data)
-            self.stats_handler(coord_proc_data)
+            self.stats_handler.processed_coord(coord_proc_data)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)

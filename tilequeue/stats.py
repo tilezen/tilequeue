@@ -3,7 +3,7 @@ class TileProcessingStatsHandler(object):
     def __init__(self, stats):
         self.stats = stats
 
-    def __call__(self, coord_proc_data):
+    def processed_coord(self, coord_proc_data):
         with self.stats.pipeline() as pipe:
             pipe.timing('process.fetch',
                         coord_proc_data.timing['fetch_seconds'])
@@ -22,6 +22,12 @@ class TileProcessingStatsHandler(object):
                       coord_proc_data.store_info['stored'])
             pipe.incr('process.storage.skipped',
                       coord_proc_data.store_info['not_stored'])
+
+    def processed_pyramid(self, parent_tile,
+                          timing_start_seconds, timing_stop_seconds):
+        duration_seconds = timing_stop_seconds - timing_start_seconds
+        duration_millis = int(duration_seconds * 1000)
+        self.stats.timing('process.pyramid', duration_millis)
 
 
 class RawrTileEnqueueStatsHandler(object):
