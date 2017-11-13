@@ -115,3 +115,8 @@ class CoordsByParent(object):
 
     def __iter__(self):
         return self.groups.iteritems()
+
+
+def convert_seconds_to_millis(time_in_seconds):
+    time_in_millis = int(time_in_seconds * 1000)
+    return time_in_millis

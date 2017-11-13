@@ -14,6 +14,7 @@ from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
+from tilequeue.utils import convert_seconds_to_millis
 from tilequeue.utils import format_stacktrace_one_line
 import Queue
 import signal
@@ -110,12 +111,11 @@ def _ack_coord_handle(
                 if parent_tile is not None:
                     # we completed a tile pyramid and should log appropriately
 
-                    start_time_secs = timing_state['start']
-                    stop_time_secs = time.time()
+                    start_time = timing_state['start']
+                    stop_time = convert_seconds_to_millis(time.time())
                     tile_proc_logger.log_processed_pyramid(
-                        parent_tile, start_time_secs, stop_time_secs)
-                    stats_handler.processed_pyramid(
-                        start_time_secs, stop_time_secs)
+                        parent_tile, start_time, stop_time)
+                    stats_handler.processed_pyramid(start_time, stop_time)
             else:
                 tile_queue.job_partially_done(queue_handle.handle)
     except Exception as e:
@@ -174,11 +174,10 @@ class TileQueueReader(object):
                 if self.stop.is_set():
                     break
 
-                now = time.time()
+                now = convert_seconds_to_millis(time.time())
                 msg_timestamp = None
                 if msg_handle.metadata:
                     msg_timestamp = msg_handle.metadata.get('timestamp')
-                # NOTE: this is in seconds
                 timing_state = dict(
                     msg_timestamp=msg_timestamp,
                     start=now,
@@ -200,10 +199,10 @@ class TileQueueReader(object):
                     metadata = dict(
                         # the timing is just what will be filled out later
                         timing=dict(
-                            fetch_seconds=None,
-                            process_seconds=None,
-                            s3_seconds=None,
-                            ack_seconds=None,
+                            fetch=None,
+                            process=None,
+                            s3=None,
+                            ack=None,
                         ),
                         # this is temporary state that is used later on to
                         # determine timing information
@@ -327,7 +326,8 @@ class DataFetch(object):
 
         source_rows = fetch(nominal_zoom, unpadded_bounds)
 
-        metadata['timing']['fetch_seconds'] = time.time() - start
+        metadata['timing']['fetch'] = convert_seconds_to_millis(
+            time.time() - start)
 
         # every tile job that we get from the queue is a "parent" tile
         # and its four children to cut from it. at zoom 15, this may
@@ -403,7 +403,8 @@ class ProcessAndFormatData(object):
                 continue
 
             metadata = data['metadata']
-            metadata['timing']['process_seconds'] = time.time() - start
+            metadata['timing']['process'] = convert_seconds_to_millis(
+                time.time() - start)
             metadata['layers'] = extra_data
 
             data = dict(
@@ -484,7 +485,8 @@ class S3Storage(object):
                 continue
 
             metadata = data['metadata']
-            metadata['timing']['s3_seconds'] = time.time() - start
+            metadata['timing']['s3'] = convert_seconds_to_millis(
+                time.time() - start)
             metadata['store'] = dict(
                 stored=n_stored,
                 not_stored=n_not_stored,
@@ -579,14 +581,12 @@ class TileQueueWriter(object):
 
             timing = metadata['timing']
             now = time.time()
-            timing['ack_seconds'] = now - start
+            timing['ack'] = convert_seconds_to_millis(now - start)
 
             time_in_queue = 0
             msg_timestamp = timing_state['msg_timestamp']
             if msg_timestamp:
-                tile_timestamp_millis = msg_timestamp
-                tile_timestamp_seconds = tile_timestamp_millis / 1000.0
-                time_in_queue = now - tile_timestamp_seconds
+                time_in_queue = msg_timestamp
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']

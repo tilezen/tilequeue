@@ -109,7 +109,7 @@ class JsonTileProcessingLogger(object):
             category=log_category_name(LogCategory.PROCESS),
             type=log_level_name(LogLevel.INFO),
             coord=make_coord_dict(coord_proc_data.coord),
-            timing=coord_proc_data.timing,
+            time=coord_proc_data.timing,
             size=coord_proc_data.size,
             storage=coord_proc_data.store_info,
         )
@@ -117,12 +117,9 @@ class JsonTileProcessingLogger(object):
         self.logger.info(json_str)
 
     def log_processed_pyramid(self, parent_tile,
-                              start_time_secs, stop_time_secs):
-        duration_seconds = stop_time_secs - start_time_secs
+                              start_time, stop_time):
 
-        start_time_millis = int(start_time_secs * 1000)
-        stop_time_millis = int(stop_time_secs * 1000)
-        duration_millis = int(duration_seconds * 1000)
+        duration = stop_time - start_time
 
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
@@ -130,9 +127,9 @@ class JsonTileProcessingLogger(object):
             msg_type=MsgType.PYRAMID,
             coord=make_coord_dict(parent_tile),
             time=dict(
-                start=start_time_millis,
-                stop=stop_time_millis,
-                duration=duration_millis,
+                start=start_time,
+                stop=stop_time,
+                duration=duration,
             ),
         )
         json_str = json.dumps(json_obj)
