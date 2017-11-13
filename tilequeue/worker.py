@@ -4,6 +4,7 @@ from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
+from tilequeue.log import MsgType
 from tilequeue.metatile import common_parent
 from tilequeue.metatile import make_metatiles
 from tilequeue.process import convert_source_data_to_feature_layers
@@ -87,7 +88,8 @@ class OutputQueue(object):
 
 
 def _ack_coord_handle(
-        coord, coord_handle, queue_mapper, msg_tracker, tile_proc_logger):
+        coord, coord_handle, queue_mapper, msg_tracker, timing_state,
+        tile_proc_logger):
     """share code for acknowledging a coordinate"""
     queue_handle = None
     err = None
@@ -95,14 +97,23 @@ def _ack_coord_handle(
         # update the msg tracker to also keep track of timestamps that
         # way we can reset the visibility timeout to prevent the
         # upstream sqs messages from timing out
-        queue_handle, done = msg_tracker.done(coord_handle)
-        if queue_handle:
+        track_result = msg_tracker.done(coord_handle)
+        if track_result.queue_handle:
             tile_queue = (
                 queue_mapper.get_queue(queue_handle.queue_id))
             assert tile_queue, \
                 'Missing tile_queue: %s' % queue_handle.queue_id
-            if done:
+            if track_result.all_done:
                 tile_queue.job_done(queue_handle.handle)
+
+                parent_tile = track_result.parent_tile
+                if parent_tile is not None:
+                    # we completed a tile pyramid and should log appropriately
+
+                    start_time_secs = timing_state['start']
+                    stop_time_secs = time.time()
+                    tile_proc_logger.log_processed_pyramid(
+                        parent_tile, start_time_secs, stop_time_secs)
             else:
                 tile_queue.job_partially_done(queue_handle.handle)
     except Exception as e:
@@ -161,10 +172,17 @@ class TileQueueReader(object):
                 if self.stop.is_set():
                     break
 
-                coords = self.msg_marshaller.unmarshall(msg_handle.payload)
+                now = time.time()
                 msg_timestamp = None
                 if msg_handle.metadata:
                     msg_timestamp = msg_handle.metadata.get('timestamp')
+                # NOTE: this is in seconds
+                timing_state = dict(
+                    msg_timestamp=msg_timestamp,
+                    start=now,
+                )
+
+                coords = self.msg_marshaller.unmarshall(msg_handle.payload)
 
                 queue_handle = QueueHandle(queue_id, msg_handle.handle)
                 coord_handles = self.msg_tracker.track(
@@ -174,17 +192,20 @@ class TileQueueReader(object):
                 top_tile = None
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
-                        self._reject_coord(coord, coord_handle)
+                        self._reject_coord(coord, coord_handle, timing_state)
                         continue
 
                     metadata = dict(
+                        # the timing is just what will be filled out later
                         timing=dict(
                             fetch_seconds=None,
                             process_seconds=None,
                             s3_seconds=None,
                             ack_seconds=None,
                         ),
-                        msg_timestamp=msg_timestamp,
+                        # this is temporary state that is used later on to
+                        # determine timing information
+                        timing_state=timing_state,
                         coord_handle=coord_handle,
                     )
                     data = dict(
@@ -212,10 +233,11 @@ class TileQueueReader(object):
             tile_queue.close()
         self.tile_proc_logger.lifecycle('tile queue reader stopped')
 
-    def _reject_coord(self, coord, coord_handle):
+    def _reject_coord(self, coord, coord_handle, timing_state):
         self.tile_proc_logger.log(
             LogLevel.WARNING,
             LogCategory.PROCESS,
+            MsgType.INDIVIDUAL,
             'Job coordinates above max zoom are not '
             'supported, skipping %d > %d' % (
                 coord.zoom, self.max_zoom),
@@ -229,7 +251,7 @@ class TileQueueReader(object):
         # queue until they overflow max-retries.
         _ack_coord_handle(
             coord, coord_handle, self.queue_mapper, self.msg_tracker,
-            self.tile_proc_logger)
+            timing_state, self.tile_proc_logger)
 
 
 class DataFetch(object):
@@ -290,8 +312,8 @@ class DataFetch(object):
             else:
                 log_level = LogLevel.ERROR
             self.tile_proc_logger.log(
-                log_level, LogCategory.PROCESS, 'Fetch error',
-                e, stacktrace, coord)
+                log_level, LogCategory.PROCESS, MsgType.INDIVIDUAL,
+                'Fetch error', e, stacktrace, coord)
 
         return False
 
@@ -535,6 +557,7 @@ class TileQueueWriter(object):
             metadata = data['metadata']
             coord_handle = metadata['coord_handle']
             coord = data['coord']
+            timing_state = metadata['timing_state']
 
             start = time.time()
 
@@ -548,7 +571,7 @@ class TileQueueWriter(object):
 
             queue_handle, err = _ack_coord_handle(
                 coord, coord_handle, self.queue_mapper, self.msg_tracker,
-                self.tile_proc_logger)
+                timing_state, self.tile_proc_logger)
             if err is not None:
                 continue
 
@@ -557,7 +580,7 @@ class TileQueueWriter(object):
             timing['ack_seconds'] = now - start
 
             time_in_queue = 0
-            msg_timestamp = metadata['msg_timestamp']
+            msg_timestamp = timing_state['msg_timestamp']
             if msg_timestamp:
                 tile_timestamp_millis = msg_timestamp
                 tile_timestamp_seconds = tile_timestamp_millis / 1000.0

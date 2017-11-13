@@ -37,6 +37,11 @@ class LogCategory(Enum):
     RAWR_PROCESS = 4
 
 
+class MsgType(Enum):
+    INDIVIDUAL = 1
+    PYRAMID = 2
+
+
 def log_level_name(log_level):
     return log_level.name.lower()
 
@@ -45,12 +50,16 @@ def log_category_name(log_category):
     return log_category.name.lower()
 
 
+def log_msg_type_name(log_msg_type):
+    return log_msg_type.name.lower()
+
+
 class JsonTileProcessingLogger(object):
 
     def __init__(self, logger):
         self.logger = logger
 
-    def log(self, log_level, log_category, msg, exception,
+    def log(self, log_level, log_category, log_msg_type, msg, exception,
             formatted_stacktrace, coord):
         try:
             log_level_str = log_level_name(log_level)
@@ -72,6 +81,15 @@ class JsonTileProcessingLogger(object):
             type=log_level_str,
             msg=msg,
         )
+
+        if log_msg_type is not None:
+            try:
+                json_obj['msg_type'] = log_msg_type_name(log_msg_type)
+            except Exception:
+                sys.stderr.write(
+                    'ERROR: code error: invalid log msg_type: %s\n' %
+                    log_msg_type)
+
         if exception:
             json_obj['exception'] = str(exception)
         if formatted_stacktrace:
@@ -82,8 +100,9 @@ class JsonTileProcessingLogger(object):
         self.logger.log(logging_log_level, json_str)
 
     def error(self, msg, exception, formatted_stacktrace, coord=None):
-        self.log(LogLevel.ERROR, LogCategory.PROCESS, msg, exception,
-                 formatted_stacktrace, coord)
+        msg_type = None if coord is None else MsgType.INDIVIDUAL
+        self.log(LogLevel.ERROR, LogCategory.PROCESS, msg_type, msg,
+                 exception, formatted_stacktrace, coord)
 
     def log_processed_coord(self, coord_proc_data):
         json_obj = dict(
@@ -97,9 +116,31 @@ class JsonTileProcessingLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
+    def log_processed_pyramid(self, parent_tile,
+                              start_time_secs, stop_time_secs):
+        duration_seconds = stop_time_secs - start_time_secs
+
+        start_time_millis = int(start_time_secs * 1000)
+        stop_time_millis = int(stop_time_secs * 1000)
+        duration_millis = int(duration_seconds * 1000)
+
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.PROCESS),
+            msg_type=MsgType.PYRAMID,
+            coord=make_coord_dict(parent_tile),
+            time=dict(
+                start=start_time_millis,
+                stop=stop_time_millis,
+                duration=duration_millis,
+            ),
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
     def lifecycle(self, msg):
         self.log(
-            LogLevel.INFO, LogCategory.LIFECYCLE, msg, None, None, None)
+            LogLevel.INFO, LogCategory.LIFECYCLE, None, msg, None, None, None)
 
     def log_queue_sizes(self, queue_info):
         sizes = {}
