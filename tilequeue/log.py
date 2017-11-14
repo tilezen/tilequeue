@@ -108,6 +108,7 @@ class JsonTileProcessingLogger(object):
         json_obj = dict(
             category=log_category_name(LogCategory.PROCESS),
             type=log_level_name(LogLevel.INFO),
+            msg_type=log_msg_type_name(MsgType.INDIVIDUAL),
             coord=make_coord_dict(coord_proc_data.coord),
             time=coord_proc_data.timing,
             size=coord_proc_data.size,
