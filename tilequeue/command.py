@@ -259,7 +259,8 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         queue_type = queue_yaml_cfg.get('type')
         assert queue_type, 'Missing queue type'
         if queue_type == 'sqs':
-            sqs_cfg = queue_yaml_cfg.get('sqs', 'Missing queue sqs config')
+            sqs_cfg = queue_yaml_cfg.get('sqs')
+            assert sqs_cfg, 'Missing queue sqs config'
             visibility_yaml = all_cfg.get('message-visibility')
             visibility_mgr = make_visibility_mgr_from_cfg(visibility_yaml)
             tile_queue = make_sqs_queue_from_cfg(queue_name, sqs_cfg,
