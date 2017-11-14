@@ -592,7 +592,7 @@ class TileQueueWriter(object):
             time_in_queue = 0
             msg_timestamp = timing_state['msg_timestamp']
             if msg_timestamp:
-                time_in_queue = msg_timestamp
+                time_in_queue = convert_seconds_to_millis(now) - msg_timestamp
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']
