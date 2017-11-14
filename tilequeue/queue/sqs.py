@@ -1,16 +1,67 @@
+from collections import namedtuple
+from datetime import datetime
 from tilequeue.queue import MessageHandle
 from tilequeue.utils import grouper
+import threading
+
+
+VisibilityState = namedtuple(
+    'VisibilityState',
+    ('last',  # the datetime when the message was last extended
+     'total',  # the total amount of time currently extended
+     ))
+
+
+class VisibilityManager(object):
+
+    def __init__(self, extend_secs, max_extend_secs, timeout_secs):
+        self.extend_secs = extend_secs
+        self.max_extend_secs = max_extend_secs
+        self.timeout_secs = timeout_secs
+        self.handle_state_map = {}
+        self.lock = threading.Lock()
+
+    def should_extend(self, handle, now=None):
+        if now is None:
+            now = datetime.now()
+        with self.lock:
+            state = self.handle_state_map.get(handle)
+            if not state:
+                return True
+            if state.total + self.extend_secs > self.max_extend_secs:
+                return False
+            delta = now - state.last
+            return delta.seconds > self.extend_secs
+
+    def extend(self, handle, now=None):
+        if now is None:
+            now = datetime.now()
+        with self.lock:
+            state = self.handle_state_map.get(handle)
+            if state:
+                state.last = now
+                state.total += self.extend_secs
+            else:
+                state = VisibilityState(now, self.extend_secs)
+                self.handle_state_map[handle] = state
+
+    def done(self, handle):
+        try:
+            with self.lock:
+                del self.handle_state_map[handle]
+        except KeyError:
+            pass
 
 
 class SqsQueue(object):
 
     def __init__(self, sqs_client, queue_url, read_size,
-                 recv_wait_time_seconds, visibility_extend_seconds):
+                 recv_wait_time_seconds, visibility_mgr):
         self.sqs_client = sqs_client
         self.queue_url = queue_url
         self.read_size = read_size
         self.recv_wait_time_seconds = recv_wait_time_seconds
-        self.visibility_extend_seconds = visibility_extend_seconds
+        self.visibility_mgr = visibility_mgr
 
     def enqueue(self, payload):
         return self.sqs_client.send(
@@ -51,6 +102,7 @@ class SqsQueue(object):
             MaxNumberOfMessages=self.read_size,
             AttributeNames=('SentTimestamp',),
             WaitTimeSeconds=self.recv_wait_time_seconds,
+            VisibilityTimeout=self.visibility_mgr.timeout_secs,
         )
         if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
             raise Exception('Invalid status code from sqs: %s' %
@@ -74,17 +126,21 @@ class SqsQueue(object):
         return msg_handles
 
     def job_done(self, handle):
+        self.visibility_mgr.done(handle)
         self.sqs_client.delete_message(
             QueueUrl=self.queue_url,
             ReceiptHandle=handle,
         )
 
     def job_partially_done(self, handle):
-        self.sqs_client.change_message_visibility(
-            QueueUrl=self.queue_url,
-            ReceiptHandle=handle,
-            VisibilityTimeout=self.visibility_extend_seconds,
-        )
+        if self.visibility_mgr.should_extend(handle):
+            self.visibility_mgr.extend(handle)
+
+            self.sqs_client.change_message_visibility(
+                QueueUrl=self.queue_url,
+                ReceiptHandle=handle,
+                VisibilityTimeout=self.visibility_mgr.extend_secs,
+            )
 
     def clear(self):
         n = 0
@@ -101,7 +157,13 @@ class SqsQueue(object):
         pass
 
 
-def make_sqs_queue(name, region, visibility_extend_seconds):
+def make_visibility_manager(extend_secs, max_extend_secs, timeout_secs):
+    visibility_mgr = VisibilityManager(extend_secs, max_extend_secs,
+                                       timeout_secs)
+    return visibility_mgr
+
+
+def make_sqs_queue(name, region, visibility_mgr):
     import boto3
     sqs_client = boto3.client('sqs', region_name=region)
     resp = sqs_client.get_queue_url(QueueName=name)
@@ -111,4 +173,4 @@ def make_sqs_queue(name, region, visibility_extend_seconds):
     read_size = 10
     recv_wait_time_seconds = 20
     return SqsQueue(sqs_client, queue_url, read_size, recv_wait_time_seconds,
-                    visibility_extend_seconds)
+                    visibility_mgr)

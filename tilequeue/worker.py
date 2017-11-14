@@ -100,6 +100,7 @@ def _ack_coord_handle(
         # upstream sqs messages from timing out
         track_result = msg_tracker.done(coord_handle)
         if track_result.queue_handle:
+            queue_handle = track_result.queue_handle
             tile_queue = (
                 queue_mapper.get_queue(queue_handle.queue_id))
             assert tile_queue, \
@@ -146,17 +147,21 @@ class TileQueueReader(object):
 
     def __init__(
             self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
-            tile_proc_logger, stop, max_zoom):
+            tile_proc_logger, stats_handler, stop, max_zoom):
         self.queue_mapper = queue_mapper
         self.msg_marshaller = msg_marshaller
         self.msg_tracker = msg_tracker
         self.output = OutputQueue(output_queue, tile_proc_logger, stop)
         self.tile_proc_logger = tile_proc_logger
+        self.stats_handler = stats_handler
         self.stop = stop
         self.max_zoom = max_zoom
 
     def __call__(self):
         while not self.stop.is_set():
+
+            msg_handles = ()
+
             for queue_id, tile_queue in (
                     self.queue_mapper.queues_in_priority_order()):
                 try:
@@ -252,7 +257,7 @@ class TileQueueReader(object):
         # queue until they overflow max-retries.
         _ack_coord_handle(
             coord, coord_handle, self.queue_mapper, self.msg_tracker,
-            timing_state, self.tile_proc_logger)
+            timing_state, self.tile_proc_logger, self.stats_handler)
 
 
 class DataFetch(object):
@@ -575,7 +580,7 @@ class TileQueueWriter(object):
 
             queue_handle, err = _ack_coord_handle(
                 coord, coord_handle, self.queue_mapper, self.msg_tracker,
-                timing_state, self.tile_proc_logger)
+                timing_state, self.tile_proc_logger, self.stats_handler)
             if err is not None:
                 continue
 

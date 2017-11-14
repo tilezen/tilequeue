@@ -7,7 +7,9 @@ class TestQueue(unittest.TestCase):
         from tilequeue.queue import SqsQueue
 
         self.mockClient = MagicMock()
-        self.sqs = SqsQueue(self.mockClient, 'queue-url', 10, 20, 1800)
+        visibility_mgr = None
+        self.sqs = SqsQueue(self.mockClient, 'queue-url', 10, 20,
+                            visibility_mgr)
 
     def test_enqueue_batch_adds_tiles(self):
         from mock import MagicMock
