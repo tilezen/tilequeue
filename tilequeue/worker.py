@@ -116,7 +116,8 @@ def _ack_coord_handle(
                     stop_time = convert_seconds_to_millis(time.time())
                     tile_proc_logger.log_processed_pyramid(
                         parent_tile, start_time, stop_time)
-                    stats_handler.processed_pyramid(start_time, stop_time)
+                    stats_handler.processed_pyramid(
+                        parent_tile, start_time, stop_time)
             else:
                 tile_queue.job_partially_done(queue_handle.handle)
     except Exception as e:
