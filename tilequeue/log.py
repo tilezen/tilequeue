@@ -124,7 +124,7 @@ class JsonTileProcessingLogger(object):
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.PROCESS),
-            msg_type=MsgType.PYRAMID,
+            msg_type=log_msg_type_name(MsgType.PYRAMID),
             coord=make_coord_dict(parent_tile),
             time=dict(
                 start=start_time,
