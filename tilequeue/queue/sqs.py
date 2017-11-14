@@ -1,15 +1,16 @@
-from collections import namedtuple
 from datetime import datetime
 from tilequeue.queue import MessageHandle
 from tilequeue.utils import grouper
 import threading
 
 
-VisibilityState = namedtuple(
-    'VisibilityState',
-    ('last',  # the datetime when the message was last extended
-     'total',  # the total amount of time currently extended
-     ))
+class VisibilityState(object):
+
+    def __init__(self, last, total):
+        # the datetime when the message was last extended
+        self.last = last
+        # the total amount of time currently extended
+        self.total = total
 
 
 class VisibilityManager(object):
