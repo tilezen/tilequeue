@@ -4,6 +4,7 @@ from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
+from tilequeue.log import MsgType
 from tilequeue.metatile import common_parent
 from tilequeue.metatile import make_metatiles
 from tilequeue.process import convert_source_data_to_feature_layers
@@ -13,6 +14,7 @@ from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
+from tilequeue.utils import convert_seconds_to_millis
 from tilequeue.utils import format_stacktrace_one_line
 import Queue
 import signal
@@ -86,6 +88,45 @@ class OutputQueue(object):
         return False
 
 
+def _ack_coord_handle(
+        coord, coord_handle, queue_mapper, msg_tracker, timing_state,
+        tile_proc_logger, stats_handler):
+    """share code for acknowledging a coordinate"""
+    queue_handle = None
+    err = None
+    try:
+        # update the msg tracker to also keep track of timestamps that
+        # way we can reset the visibility timeout to prevent the
+        # upstream sqs messages from timing out
+        track_result = msg_tracker.done(coord_handle)
+        if track_result.queue_handle:
+            queue_handle = track_result.queue_handle
+            tile_queue = (
+                queue_mapper.get_queue(queue_handle.queue_id))
+            assert tile_queue, \
+                'Missing tile_queue: %s' % queue_handle.queue_id
+            if track_result.all_done:
+                tile_queue.job_done(queue_handle.handle)
+
+                parent_tile = track_result.parent_tile
+                if parent_tile is not None:
+                    # we completed a tile pyramid and should log appropriately
+
+                    start_time = timing_state['start']
+                    stop_time = convert_seconds_to_millis(time.time())
+                    tile_proc_logger.log_processed_pyramid(
+                        parent_tile, start_time, stop_time)
+                    stats_handler.processed_pyramid(
+                        parent_tile, start_time, stop_time)
+            else:
+                tile_queue.job_progress(queue_handle.handle)
+    except Exception as e:
+        stacktrace = format_stacktrace_one_line()
+        tile_proc_logger.error('Acknowledgment error', e, stacktrace, coord)
+        err = e
+    return queue_handle, err
+
+
 # The strategy with each worker is to loop on a thread event. When the
 # main thread/process receives a kill signal, it will issue stops to
 # each worker to signal that work should end.
@@ -107,17 +148,21 @@ class TileQueueReader(object):
 
     def __init__(
             self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
-            tile_proc_logger, stop, max_zoom):
+            tile_proc_logger, stats_handler, stop, max_zoom):
         self.queue_mapper = queue_mapper
         self.msg_marshaller = msg_marshaller
         self.msg_tracker = msg_tracker
         self.output = OutputQueue(output_queue, tile_proc_logger, stop)
         self.tile_proc_logger = tile_proc_logger
+        self.stats_handler = stats_handler
         self.stop = stop
         self.max_zoom = max_zoom
 
     def __call__(self):
         while not self.stop.is_set():
+
+            msg_handles = ()
+
             for queue_id, tile_queue in (
                     self.queue_mapper.queues_in_priority_order()):
                 try:
@@ -135,9 +180,18 @@ class TileQueueReader(object):
                 if self.stop.is_set():
                     break
 
+                now = convert_seconds_to_millis(time.time())
+                msg_timestamp = None
+                if msg_handle.metadata:
+                    msg_timestamp = msg_handle.metadata.get('timestamp')
+                timing_state = dict(
+                    msg_timestamp=msg_timestamp,
+                    start=now,
+                )
+
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
-                queue_handle = QueueHandle(
-                    queue_id, msg_handle.handle, msg_handle.metadata)
+
+                queue_handle = QueueHandle(queue_id, msg_handle.handle)
                 coord_handles = self.msg_tracker.track(
                     queue_handle, coords)
 
@@ -145,16 +199,20 @@ class TileQueueReader(object):
                 top_tile = None
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
-                        self._reject_coord(coord, coord_handle)
+                        self._reject_coord(coord, coord_handle, timing_state)
                         continue
 
                     metadata = dict(
+                        # the timing is just what will be filled out later
                         timing=dict(
-                            fetch_seconds=None,
-                            process_seconds=None,
-                            s3_seconds=None,
-                            ack_seconds=None,
+                            fetch=None,
+                            process=None,
+                            s3=None,
+                            ack=None,
                         ),
+                        # this is temporary state that is used later on to
+                        # determine timing information
+                        timing_state=timing_state,
                         coord_handle=coord_handle,
                     )
                     data = dict(
@@ -182,10 +240,11 @@ class TileQueueReader(object):
             tile_queue.close()
         self.tile_proc_logger.lifecycle('tile queue reader stopped')
 
-    def _reject_coord(self, coord, coord_handle):
+    def _reject_coord(self, coord, coord_handle, timing_state):
         self.tile_proc_logger.log(
             LogLevel.WARNING,
             LogCategory.PROCESS,
+            MsgType.INDIVIDUAL,
             'Job coordinates above max zoom are not '
             'supported, skipping %d > %d' % (
                 coord.zoom, self.max_zoom),
@@ -193,24 +252,13 @@ class TileQueueReader(object):
             None,  # stacktrace
             coord,
         )
-
         # delete jobs that we can't handle from the
         # queue, otherwise we'll get stuck in a cycle
         # of timed-out jobs being re-added to the
         # queue until they overflow max-retries.
-        try:
-            queue_handle, done = self.msg_tracker.done(coord_handle)
-            if done:
-                tile_queue = (
-                    self.queue_mapper.get_queue(queue_handle.queue_id))
-                assert tile_queue, \
-                    'Missing tile_queue: %s' % queue_handle.queue_id
-                tile_queue.job_done(queue_handle.handle)
-        except Exception as e:
-            stacktrace = format_stacktrace_one_line()
-            self.tile_proc_logger.error(
-                'Acknowledge error for coord above max zoom',
-                e, stacktrace, coord)
+        _ack_coord_handle(
+            coord, coord_handle, self.queue_mapper, self.msg_tracker,
+            timing_state, self.tile_proc_logger, self.stats_handler)
 
 
 class DataFetch(object):
@@ -271,8 +319,8 @@ class DataFetch(object):
             else:
                 log_level = LogLevel.ERROR
             self.tile_proc_logger.log(
-                log_level, LogCategory.PROCESS, 'Fetch error',
-                e, stacktrace, coord)
+                log_level, LogCategory.PROCESS, MsgType.INDIVIDUAL,
+                'Fetch error', e, stacktrace, coord)
 
         return False
 
@@ -284,7 +332,8 @@ class DataFetch(object):
 
         source_rows = fetch(nominal_zoom, unpadded_bounds)
 
-        metadata['timing']['fetch_seconds'] = time.time() - start
+        metadata['timing']['fetch'] = convert_seconds_to_millis(
+            time.time() - start)
 
         # every tile job that we get from the queue is a "parent" tile
         # and its four children to cut from it. at zoom 15, this may
@@ -360,7 +409,8 @@ class ProcessAndFormatData(object):
                 continue
 
             metadata = data['metadata']
-            metadata['timing']['process_seconds'] = time.time() - start
+            metadata['timing']['process'] = convert_seconds_to_millis(
+                time.time() - start)
             metadata['layers'] = extra_data
 
             data = dict(
@@ -441,7 +491,8 @@ class S3Storage(object):
                 continue
 
             metadata = data['metadata']
-            metadata['timing']['s3_seconds'] = time.time() - start
+            metadata['timing']['s3'] = convert_seconds_to_millis(
+                time.time() - start)
             metadata['store'] = dict(
                 stored=n_stored,
                 not_stored=n_not_stored,
@@ -516,6 +567,7 @@ class TileQueueWriter(object):
             metadata = data['metadata']
             coord_handle = metadata['coord_handle']
             coord = data['coord']
+            timing_state = metadata['timing_state']
 
             start = time.time()
 
@@ -527,32 +579,20 @@ class TileQueueWriter(object):
                     'Unmarking in-flight error', e, stacktrace, coord)
                 continue
 
-            try:
-                queue_handle, done = self.msg_tracker.done(coord_handle)
-                if done:
-                    tile_queue = (
-                        self.queue_mapper.get_queue(queue_handle.queue_id))
-                    assert tile_queue, \
-                        'Missing tile_queue: %s' % queue_handle.queue_id
-                    tile_queue.job_done(queue_handle.handle)
-            except Exception as e:
-                stacktrace = format_stacktrace_one_line()
-                self.tile_proc_logger.error(
-                    'Acknowledgment error', e, stacktrace, coord)
+            queue_handle, err = _ack_coord_handle(
+                coord, coord_handle, self.queue_mapper, self.msg_tracker,
+                timing_state, self.tile_proc_logger, self.stats_handler)
+            if err is not None:
                 continue
 
             timing = metadata['timing']
             now = time.time()
-            timing['ack_seconds'] = now - start
+            timing['ack'] = convert_seconds_to_millis(now - start)
 
             time_in_queue = 0
-            if queue_handle:
-                msg_metadata = queue_handle.metadata
-                if msg_metadata:
-                    tile_timestamp_millis = msg_metadata.get('timestamp')
-                    if tile_timestamp_millis is not None:
-                        tile_timestamp_seconds = tile_timestamp_millis / 1000.0
-                        time_in_queue = now - tile_timestamp_seconds
+            msg_timestamp = timing_state['msg_timestamp']
+            if msg_timestamp:
+                time_in_queue = convert_seconds_to_millis(now) - msg_timestamp
             timing['queue'] = time_in_queue
 
             layers = metadata['layers']
@@ -567,7 +607,7 @@ class TileQueueWriter(object):
                 store_info,
             )
             self.tile_proc_logger.log_processed_coord(coord_proc_data)
-            self.stats_handler(coord_proc_data)
+            self.stats_handler.processed_coord(coord_proc_data)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)

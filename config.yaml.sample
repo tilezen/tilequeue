@@ -3,6 +3,9 @@ queue:
   # can also be a list of queues to configure multiple
   type: mem
   name: <sqs queue/list of queue names/queue file name/redis key/>
+  # if using sqs configuration
+  sqs:
+    region: <aws-region>
 queue-mapping:
   type: <single/multiple>
   # for multiple configuration
@@ -29,6 +32,15 @@ in-flight:
 message-tracker:
   # should correspond with the marshall and queue implementations
   type: <single/multiple>
+# NOTE: message-visibility is sqs specific in utility
+# config is shared across queues
+message-visibility:
+  # on partial completion, how long to extend the visibility
+  extend-seconds: 1800
+  # don't exceed max, which is 12 hours for sqs
+  max-seconds: 43200
+  # read visibility timeout for receive message calls
+  timeout-seconds: 3600
 # Uncomment this section to activate statsd
 #statsd:
 #  host: 127.0.0.1

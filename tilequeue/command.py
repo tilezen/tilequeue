@@ -13,6 +13,7 @@ from tilequeue.process import process_coord
 from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
+from tilequeue.queue import make_visibility_manager
 from tilequeue.store import make_store
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
@@ -213,6 +214,34 @@ def make_inflight_manager(inflight_yaml, redis_client=None):
         assert 0, 'Unknown inflight type: %s' % inflight_type
 
 
+def make_visibility_mgr_from_cfg(visibility_yaml):
+    assert visibility_yaml, 'Missing message-visibility config'
+
+    extend_secs = visibility_yaml.get('extend-seconds')
+    assert extend_secs > 0, \
+        'Invalid message-visibility extend-seconds'
+
+    max_secs = visibility_yaml.get('max-seconds')
+    assert max_secs is not None, \
+        'Invalid message-visibility max-seconds'
+
+    timeout_secs = visibility_yaml.get('timeout-seconds')
+    assert timeout_secs is not None, \
+        'Invalid message-visibility timeout-seconds'
+
+    visibility_extend_mgr = make_visibility_manager(
+        extend_secs, max_secs, timeout_secs)
+    return visibility_extend_mgr
+
+
+def make_sqs_queue_from_cfg(name, queue_yaml_cfg, visibility_mgr):
+    region = queue_yaml_cfg.get('region')
+    assert region, 'Missing queue sqs region'
+
+    tile_queue = make_sqs_queue(name, region, visibility_mgr)
+    return tile_queue
+
+
 def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
     # return a tile_queue, name instance, or list of tilequeue, name pairs
     # alternatively maybe should force queue implementations to know
@@ -230,9 +259,12 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         queue_type = queue_yaml_cfg.get('type')
         assert queue_type, 'Missing queue type'
         if queue_type == 'sqs':
-            region = queue_yaml_cfg.get('region')
-            assert region, 'Missing queue region'
-            tile_queue = make_sqs_queue(queue_name, region)
+            sqs_cfg = queue_yaml_cfg.get('sqs')
+            assert sqs_cfg, 'Missing queue sqs config'
+            visibility_yaml = all_cfg.get('message-visibility')
+            visibility_mgr = make_visibility_mgr_from_cfg(visibility_yaml)
+            tile_queue = make_sqs_queue_from_cfg(queue_name, sqs_cfg,
+                                                 visibility_mgr)
         elif queue_type == 'mem':
             from tilequeue.queue import MemoryQueue
             tile_queue = MemoryQueue()
@@ -257,7 +289,7 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         return tile_queue, queue_name
 
 
-def make_msg_tracker(msg_tracker_yaml):
+def make_msg_tracker(msg_tracker_yaml, logger):
     if not msg_tracker_yaml:
         from tilequeue.queue.message import SingleMessagePerCoordTracker
         return SingleMessagePerCoordTracker()
@@ -270,7 +302,7 @@ def make_msg_tracker(msg_tracker_yaml):
         elif msg_tracker_type == 'multiple':
             from tilequeue.queue.message import MultipleMessagesPerCoordTracker
             from tilequeue.log import MultipleMessagesTrackerLogger
-            msg_tracker_logger = MultipleMessagesTrackerLogger()
+            msg_tracker_logger = MultipleMessagesTrackerLogger(logger)
             return MultipleMessagesPerCoordTracker(msg_tracker_logger)
         else:
             assert 0, 'Unknown message tracker type: %s' % msg_tracker_type
@@ -643,11 +675,14 @@ def tilequeue_process(cfg, peripherals):
 
     queue_mapper = peripherals.queue_mapper
     msg_marshaller = peripherals.msg_marshaller
-    msg_tracker = peripherals.msg_tracker
+    msg_tracker_yaml = cfg.yml.get('message-tracker')
+    msg_tracker = make_msg_tracker(msg_tracker_yaml, logger)
+    from tilequeue.stats import TileProcessingStatsHandler
+    stats_handler = TileProcessingStatsHandler(peripherals.stats)
     tile_queue_reader = TileQueueReader(
         queue_mapper, msg_marshaller, msg_tracker, tile_input_queue,
-        tile_proc_logger, thread_tile_queue_reader_stop, cfg.max_zoom
-    )
+        tile_proc_logger, stats_handler, thread_tile_queue_reader_stop,
+        cfg.max_zoom)
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
@@ -660,12 +695,10 @@ def tilequeue_process(cfg, peripherals):
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            tile_proc_logger, cfg.metatile_size)
 
-    from tilequeue.stats import TileProcessingStatsHandler
-    stats_handler = TileProcessingStatsHandler(peripherals.stats)
     thread_tile_writer_stop = threading.Event()
     tile_queue_writer = TileQueueWriter(
         queue_mapper, s3_store_queue, peripherals.inflight_mgr,
-        peripherals.msg_tracker, tile_proc_logger, stats_handler,
+        msg_tracker, tile_proc_logger, stats_handler,
         thread_tile_writer_stop)
 
     def create_and_start_thread(fn, *args):
@@ -1706,7 +1739,7 @@ def tilequeue_rawr_seed_toi(cfg, peripherals):
 Peripherals = namedtuple(
     'Peripherals',
     'toi stats redis_client '
-    'queue_mapper msg_tracker msg_marshaller inflight_mgr queue_writer'
+    'queue_mapper msg_marshaller inflight_mgr queue_writer'
 )
 
 
@@ -1780,14 +1813,11 @@ def tilequeue_main(argv_args=None):
         queue_writer = QueueWriter(
             queue_mapper, msg_marshaller, inflight_mgr, enqueue_batch_size)
 
-        msg_tracker_yaml = cfg.yml.get('message-tracker')
-        msg_tracker = make_msg_tracker(msg_tracker_yaml)
-
         stats = make_statsd_client_from_cfg(cfg)
 
         peripherals = Peripherals(
-            toi_helper, stats, redis_client, queue_mapper, msg_tracker,
-            msg_marshaller, inflight_mgr, queue_writer
+            toi_helper, stats, redis_client, queue_mapper, msg_marshaller,
+            inflight_mgr, queue_writer
         )
         return peripherals
 

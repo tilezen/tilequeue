@@ -97,9 +97,10 @@ class SingleMessageTrackerTest(unittest.TestCase):
         coord_handle = coord_handles[0]
         self.assertIs(queue_handle, coord_handle)
 
-        returned_queue_handle, all_done = self.tracker.done(coord_handle)
-        self.assertIs(queue_handle, returned_queue_handle)
-        self.assertTrue(all_done)
+        track_result = self.tracker.done(coord_handle)
+        self.assertIs(queue_handle, track_result.queue_handle)
+        self.assertTrue(track_result.all_done)
+        self.assertFalse(track_result.parent_tile)
 
 
 class MultipleMessageTrackerTest(unittest.TestCase):
@@ -122,9 +123,10 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.tracker.done('bogus-coord-handle')
 
-        queue_handle_result, all_done = self.tracker.done(coord_handles[0])
-        self.assertFalse(all_done)
+        track_result = self.tracker.done(coord_handles[0])
+        self.assertFalse(track_result.all_done)
 
-        queue_handle_result, all_done = self.tracker.done(coord_handles[1])
-        self.assertTrue(all_done)
-        self.assertIs(queue_handle, queue_handle_result)
+        track_result = self.tracker.done(coord_handles[1])
+        self.assertIs(queue_handle, track_result.queue_handle)
+        self.assertTrue(track_result.all_done)
+        self.assertEqual(deserialize_coord('1/1/1'), track_result.parent_tile)

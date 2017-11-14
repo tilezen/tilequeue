@@ -1,3 +1,5 @@
+from collections import namedtuple
+from tilequeue.metatile import common_parent
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
 import threading
@@ -27,10 +29,9 @@ class QueueHandle(object):
     message handle combined with a queue id
     """
 
-    def __init__(self, queue_id, handle, metadata=None):
+    def __init__(self, queue_id, handle):
         self.queue_id = queue_id
         self.handle = handle
-        self.metadata = metadata
 
 
 class SingleMessageMarshaller(object):
@@ -71,6 +72,11 @@ class CommaSeparatedMarshaller(object):
         return coords
 
 
+MessageDoneResult = namedtuple(
+    'MessageDoneResult',
+    ('queue_handle all_done parent_tile'))
+
+
 class SingleMessagePerCoordTracker(object):
 
     """
@@ -84,7 +90,8 @@ class SingleMessagePerCoordTracker(object):
     def done(self, coord_handle):
         queue_handle = coord_handle
         all_done = True
-        return queue_handle, all_done
+        parent_tile = None
+        return MessageDoneResult(queue_handle, all_done, parent_tile)
 
 
 class MultipleMessagesPerCoordTracker(object):
@@ -100,11 +107,14 @@ class MultipleMessagesPerCoordTracker(object):
         self.msg_tracker_logger = msg_tracker_logger
         self.queue_handle_map = {}
         self.coord_ids_map = {}
+        self.pyramid_map = {}
         # TODO we might want to have a way to purge this, or risk
         # running out of memory if a coordinate never completes
         self.lock = threading.Lock()
 
     def track(self, queue_handle, coords):
+        parent_tile = None
+        is_pyramid = False
         with self.lock:
             # rely on the queue handle token as the mapping key
             queue_handle_id = queue_handle.handle
@@ -113,6 +123,13 @@ class MultipleMessagesPerCoordTracker(object):
             coord_ids = set()
             coord_handles = []
             for coord in coords:
+
+                if parent_tile is None:
+                    parent_tile = coord
+                else:
+                    parent_tile = common_parent(parent_tile, coord)
+                    is_pyramid = True
+
                 coord_id = (int(coord.zoom), int(coord.column), int(coord.row))
                 coord_handle = (coord_id, queue_handle_id)
                 coord_ids.add(coord_id)
@@ -120,11 +137,15 @@ class MultipleMessagesPerCoordTracker(object):
 
             self.coord_ids_map[queue_handle_id] = coord_ids
 
+        if is_pyramid:
+            self.pyramid_map[queue_handle_id] = parent_tile
+
         return coord_handles
 
     def done(self, coord_handle):
         queue_handle = None
         all_done = False
+        parent_tile = None
 
         with self.lock:
             coord_id, queue_handle_id = coord_handle
@@ -156,5 +177,6 @@ class MultipleMessagesPerCoordTracker(object):
                 except KeyError:
                     pass
                 all_done = queue_handle is not None
+                parent_tile = self.pyramid_map.pop(queue_handle_id)
 
-        return queue_handle, all_done
+        return MessageDoneResult(queue_handle, all_done, parent_tile)
