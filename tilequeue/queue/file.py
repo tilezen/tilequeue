@@ -43,7 +43,7 @@ class OutputFileQueue(object):
     def job_done(self, msg_handle):
         pass
 
-    def job_partially_done(self, handle):
+    def job_progress(self, handle):
         pass
 
     def clear(self):

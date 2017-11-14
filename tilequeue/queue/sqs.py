@@ -132,7 +132,7 @@ class SqsQueue(object):
             ReceiptHandle=handle,
         )
 
-    def job_partially_done(self, handle):
+    def job_progress(self, handle):
         if self.visibility_mgr.should_extend(handle):
             self.visibility_mgr.extend(handle)
 

@@ -41,7 +41,7 @@ class RedisQueue(object):
             msg_handles.append(msg_handle)
         return msg_handles
 
-    def job_paritally_done(self, handle):
+    def job_progress(self, handle):
         pass
 
     def job_done(self, msg_handle):

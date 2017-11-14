@@ -119,7 +119,7 @@ def _ack_coord_handle(
                     stats_handler.processed_pyramid(
                         parent_tile, start_time, stop_time)
             else:
-                tile_queue.job_partially_done(queue_handle.handle)
+                tile_queue.job_progress(queue_handle.handle)
     except Exception as e:
         stacktrace = format_stacktrace_one_line()
         tile_proc_logger.error('Acknowledgment error', e, stacktrace, coord)
