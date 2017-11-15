@@ -5,12 +5,12 @@ class TileProcessingStatsHandler(object):
 
     def processed_coord(self, coord_proc_data):
         with self.stats.pipeline() as pipe:
-            pipe.timing('process.fetch', coord_proc_data.timing['fetch'])
-            pipe.timing('process.process', coord_proc_data.timing['process'])
-            pipe.timing('process.upload', coord_proc_data.timing['s3'])
-            pipe.timing('process.ack', coord_proc_data.timing['ack'])
-            pipe.timing('process.time-in-queue',
-                        coord_proc_data.timing['queue'])
+            pipe.timing('process.time.fetch', coord_proc_data.timing['fetch'])
+            pipe.timing('process.time.process',
+                        coord_proc_data.timing['process'])
+            pipe.timing('process.time.upload', coord_proc_data.timing['s3'])
+            pipe.timing('process.time.ack', coord_proc_data.timing['ack'])
+            pipe.timing('process.time.queue', coord_proc_data.timing['queue'])
 
             for layer_name, features_size in coord_proc_data.size.items():
                 metric_name = 'process.size.%s' % layer_name
