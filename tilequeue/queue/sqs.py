@@ -54,6 +54,14 @@ class VisibilityManager(object):
             pass
 
 
+class JobProgressException(Exception):
+
+    def __init__(self, msg, cause, err_details):
+        super(JobProgressException, self).__init__(
+            msg + ', caused by ' + repr(cause))
+        self.err_details = err_details
+
+
 class SqsQueue(object):
 
     def __init__(self, sqs_client, queue_url, read_size,
@@ -137,11 +145,21 @@ class SqsQueue(object):
         if self.visibility_mgr.should_extend(handle):
             self.visibility_mgr.extend(handle)
 
-            self.sqs_client.change_message_visibility(
-                QueueUrl=self.queue_url,
-                ReceiptHandle=handle,
-                VisibilityTimeout=self.visibility_mgr.extend_secs,
-            )
+            try:
+                self.sqs_client.change_message_visibility(
+                    QueueUrl=self.queue_url,
+                    ReceiptHandle=handle,
+                    VisibilityTimeout=self.visibility_mgr.extend_secs,
+                )
+            except Exception as e:
+                visibility_state = self.visibility_mgr.lookup(handle)
+                err_details = dict(
+                    visibility=dict(
+                        last=visibility_state.last.isoformat(),
+                        total=visibility_state.total,
+                        ))
+                raise JobProgressException(
+                    'update visibility timeout', e, err_details)
 
     def clear(self):
         n = 0

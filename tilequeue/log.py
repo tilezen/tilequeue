@@ -157,6 +157,32 @@ class JsonTileProcessingLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
+    def _log_job_error(self, msg, exception, stacktrace, coord, parent_tile,
+                       err_details):
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.PROCESS),
+            msg=msg,
+            coord=make_coord_dict(coord),
+            exception=str(exception),
+            stacktrace=stacktrace,
+        )
+        if parent_tile is not None:
+            json_obj['parent'] = make_coord_dict(parent_tile)
+        if err_details is not None and isinstance(err_details, dict):
+            json_obj.update(err_details)
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
+    def error_job_done(self, msg, exception, stacktrace, coord, parent_tile):
+        self._log_job_error(
+            msg, exception, stacktrace, coord, parent_tile, None)
+
+    def error_job_progress(
+            self, msg, exception, stacktrace, coord, parent_tile, err_details):
+        self._log_job_error(
+            msg, exception, stacktrace, coord, parent_tile, err_details)
+
 
 class JsonRawrProcessingLogger(object):
 
