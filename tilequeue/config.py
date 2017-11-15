@@ -1,6 +1,7 @@
 from tilequeue.tile import bounds_buffer
 from yaml import load
 import math
+import os
 
 
 class Configuration(object):
@@ -11,9 +12,12 @@ class Configuration(object):
     def __init__(self, yml):
         self.yml = yml
 
-        self.aws_access_key_id = self._cfg('aws credentials aws_access_key_id')
-        self.aws_secret_access_key = self._cfg('aws credentials '
-                                               'aws_secret_access_key')
+        self.aws_access_key_id = \
+            self._cfg('aws credentials aws_access_key_id') or \
+            os.environ.get('AWS_ACCESS_KEY_ID')
+        self.aws_secret_access_key = \
+            self._cfg('aws credentials aws_secret_access_key') or \
+            os.environ.get('AWS_SECRET_ACCESS_KEY')
 
         self.queue_cfg = self.yml['queue']
 
