@@ -177,6 +177,6 @@ class MultipleMessagesPerCoordTracker(object):
                 except KeyError:
                     pass
                 all_done = queue_handle is not None
-                parent_tile = self.pyramid_map.pop(queue_handle_id)
+                parent_tile = self.pyramid_map.pop(queue_handle_id, None)
 
         return MessageDoneResult(queue_handle, all_done, parent_tile)
