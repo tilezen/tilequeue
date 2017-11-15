@@ -9,6 +9,7 @@ from tilequeue.metatile import common_parent
 from tilequeue.metatile import make_metatiles
 from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import process_coord
+from tilequeue.queue import JobProgressException
 from tilequeue.queue.message import QueueHandle
 from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
@@ -92,39 +93,55 @@ def _ack_coord_handle(
         coord, coord_handle, queue_mapper, msg_tracker, timing_state,
         tile_proc_logger, stats_handler):
     """share code for acknowledging a coordinate"""
-    queue_handle = None
-    err = None
-    try:
-        # update the msg tracker to also keep track of timestamps that
-        # way we can reset the visibility timeout to prevent the
-        # upstream sqs messages from timing out
-        track_result = msg_tracker.done(coord_handle)
-        if track_result.queue_handle:
-            queue_handle = track_result.queue_handle
-            tile_queue = (
-                queue_mapper.get_queue(queue_handle.queue_id))
-            assert tile_queue, \
-                'Missing tile_queue: %s' % queue_handle.queue_id
-            if track_result.all_done:
-                tile_queue.job_done(queue_handle.handle)
 
-                parent_tile = track_result.parent_tile
-                if parent_tile is not None:
-                    # we completed a tile pyramid and should log appropriately
+    # returns tuple of (handle, error), either of which can be None
 
-                    start_time = timing_state['start']
-                    stop_time = convert_seconds_to_millis(time.time())
-                    tile_proc_logger.log_processed_pyramid(
-                        parent_tile, start_time, stop_time)
-                    stats_handler.processed_pyramid(
-                        parent_tile, start_time, stop_time)
-            else:
-                tile_queue.job_progress(queue_handle.handle)
-    except Exception as e:
-        stacktrace = format_stacktrace_one_line()
-        tile_proc_logger.error('Acknowledgment error', e, stacktrace, coord)
-        err = e
-    return queue_handle, err
+    track_result = msg_tracker.done(coord_handle)
+    queue_handle = track_result.queue_handle
+    if not queue_handle:
+        return None, None
+
+    tile_queue = queue_mapper.get_queue(queue_handle.queue_id)
+    assert tile_queue, \
+        'Missing tile_queue: %s' % queue_handle.queue_id
+
+    if track_result.all_done:
+        parent_tile = track_result.parent_tile
+
+        try:
+            tile_queue.job_done(queue_handle.handle)
+        except Exception as e:
+            stacktrace = format_stacktrace_one_line()
+            tile_proc_logger.error_job_done(
+                'tile_queue.job_done', e, stacktrace,
+                queue_handle, coord, parent_tile,
+            )
+            return queue_handle, e
+
+        if parent_tile is not None:
+            # we completed a tile pyramid and should log appropriately
+
+            start_time = timing_state['start']
+            stop_time = convert_seconds_to_millis(time.time())
+            tile_proc_logger.log_processed_pyramid(
+                parent_tile, start_time, stop_time)
+            stats_handler.processed_pyramid(
+                parent_tile, start_time, stop_time)
+    else:
+        try:
+            tile_queue.job_progress(queue_handle.handle)
+        except Exception as e:
+            stacktrace = format_stacktrace_one_line()
+            err_details = None
+            if isinstance(e, JobProgressException):
+                err_details = e.err_details
+            tile_proc_logger.error_job_progress(
+                'tile_queue.job_progress', e, stacktrace,
+                queue_handle, coord, parent_tile, err_details,
+            )
+            return queue_handle, e
+
+    return queue_handle, None
 
 
 # The strategy with each worker is to loop on a thread event. When the
