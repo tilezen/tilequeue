@@ -26,6 +26,12 @@ class TileProcessingStatsHandler(object):
         duration = stop_time - start_time
         self.stats.timing('process.pyramid', duration)
 
+    def fetch_error(self):
+        self.stats.incr('process.errors.fetch', 1)
+
+    def proc_error(self):
+        self.stats.incr('process.errors.process', 1)
+
 
 class RawrTileEnqueueStatsHandler(object):
 
