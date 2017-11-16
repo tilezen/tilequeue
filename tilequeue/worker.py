@@ -1,7 +1,6 @@
 from collections import namedtuple
 from itertools import izip
 from operator import attrgetter
-from psycopg2.extensions import TransactionRollbackError
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
 from tilequeue.log import MsgType
@@ -315,7 +314,7 @@ class DataFetch(object):
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
-                    'Fetch error', e, stacktrace, parent)
+                    'Fetch error', e, stacktrace, coord)
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
@@ -323,23 +322,8 @@ class DataFetch(object):
         self.tile_proc_logger.lifecycle('data fetch stopped')
 
     def _fetch_and_output(self, fetch, coord, metadata, output):
-        try:
-            data = self._fetch(fetch, coord, metadata)
-
-            if output(coord, data):
-                return True
-
-        except Exception as e:
-            stacktrace = format_stacktrace_one_line()
-            if isinstance(e, TransactionRollbackError):
-                log_level = LogLevel.WARNING
-            else:
-                log_level = LogLevel.ERROR
-            self.tile_proc_logger.log(
-                log_level, LogCategory.PROCESS, MsgType.INDIVIDUAL,
-                'Fetch error', e, stacktrace, coord)
-
-        return False
+        data = self._fetch(fetch, coord, metadata)
+        return output(coord, data)
 
     def _fetch(self, fetch, coord, metadata):
         nominal_zoom = coord.zoom + self.metatile_zoom
