@@ -128,7 +128,7 @@ class RawrEnqueuer(object):
         if self.logger:
             self.logger.info(
                 'Rawr tiles enqueued: '
-                'coords(%d) payloads(%d) enqueue_calls(%d))' %
+                'coords(%d) payloads(%d) enqueue_calls(%d)' %
                 (n_coords, n_payloads, n_msgs_sent))
 
         self.stats_handler(n_coords, n_payloads, n_msgs_sent)
