@@ -134,10 +134,20 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         'linestring': set(['earth', 'landuse', 'water']),
     }
 
+    # TODO: put this in the config!
+    indexes_cfg = [
+        dict(type="osm"),
+        dict(type="simple", table="wof_neighbourhood", layer="places"),
+        dict(type="simple", table="water_polygons", layer="water"),
+        dict(type="simple", table="land_polygons", layer="earth"),
+        dict(type="simple", table="ne_10m_urban_areas", layer="landuse"),
+    ]
+
     layers = _make_layer_info(layer_data, cfg.process_yaml_cfg)
 
     return make_rawr_data_fetcher(
-        group_by_zoom, max_z, storage, layers, label_placement_layers)
+        group_by_zoom, max_z, storage, layers, indexes_cfg,
+        label_placement_layers)
 
 
 def _make_layer_info(layer_data, process_yaml_cfg):

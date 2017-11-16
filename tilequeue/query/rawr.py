@@ -464,6 +464,7 @@ class _LayersIndex(object):
     def index(self, osm, source):
         for feature in self.delayed_features:
             self._index_feature(feature, osm, source)
+        self.source = source
         del self.delayed_features
 
     def _index_feature(self, feature, osm, source):
@@ -492,9 +493,66 @@ class _LayersIndex(object):
         return self.tile_index.get(tile, [])
 
 
+def osm_index(layers, tables, tile_pyramid):
+    from raw_tiles.index.index import index_table
+
+    table_indexes = defaultdict(list)
+
+    index = _LayersIndex(layers, tile_pyramid)
+    for shape_type in ('point', 'line', 'polygon'):
+        table_name = 'planet_osm_' + shape_type
+        table_indexes[table_name].append(index)
+
+    # source for all these layers has to be the same
+    source = None
+
+    osm = OsmRawrLookup()
+    # NOTE: order here is different from that in raw_tiles index()
+    # function. this is because here we want to gather up some
+    # "interesting" feature IDs before we look at the ways/rels tables.
+    for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
+        table_name = 'planet_osm_' + typ
+        table = tables(table_name)
+        extra_indexes = table_indexes[table_name]
+        index_table(table.rows, osm, *extra_indexes)
+
+        if source is None:
+            source = table.source
+        else:
+            assert source == table.source, 'Mismatched sources'
+
+    assert source
+
+    # there's a chicken and egg problem with the indexes: we want to know
+    # which features to index, but also calculate the feature's min zoom,
+    # which might depend on ways and relations not seen yet. one solution
+    # would be to do this in two passes, but that might mean paying a cost
+    # to decompress or deserialize the data twice. instead, the index
+    # buffers the features and indexes them in the following step. this
+    # might mean we buffer more information in memory than we technically
+    # need if many of the features are not visible, but means we get one
+    # single set of _Feature objects.
+    index.index(osm, source)
+
+    return index, osm
+
+
+def simple_index(layers, tables, tile_pyramid, table_name, layer_name):
+    from raw_tiles.index.index import index_table
+
+    table = tables(table_name)
+    # only using a single layer
+    simple_layers = {layer_name: layers[layer_name]}
+    index = _SimpleLayersIndex(
+        simple_layers, tile_pyramid, table.source)
+    index_table(table.rows, index)
+    return index
+
+
 class RawrTile(object):
 
-    def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
+    def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
+                 indexes_cfg):
         """
         Expect layers to be a dict of layer name to LayerInfo (see fixture.py).
         Tables should be a callable which returns a Table object (namedtuple
@@ -502,69 +560,35 @@ class RawrTile(object):
         that table's name.
         """
 
-        from raw_tiles.index.index import index_table
-
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.label_placement_layers = label_placement_layers
-        self.layer_indexes = {}
-        self.simple_layer_indexes = {}
+        self.osm = None
 
-        table_indexes = defaultdict(list)
+        indexes = []
+        for index_cfg in indexes_cfg:
+            typ = index_cfg.get('type')
+            assert typ, 'Index configuration must provide a type.'
 
-        self.layers_index = _LayersIndex(self.layers, self.tile_pyramid)
-        for shape_type in ('point', 'line', 'polygon'):
-            table_name = 'planet_osm_' + shape_type
-            table_indexes[table_name].append(self.layers_index)
+            if typ == 'osm':
+                index, osm = osm_index(layers, tables, tile_pyramid)
+                assert self.osm is None, 'Cannot have more than one OSM index.'
+                self.osm = osm
+                indexes.append(index)
 
-        # source for all these layers has to be the same
-        source = None
+            elif typ == 'simple':
+                table_name = index_cfg.get('table')
+                assert table_name, 'Simple index must have a table name.'
 
-        self.osm = OsmRawrLookup()
-        # NOTE: order here is different from that in raw_tiles index()
-        # function. this is because here we want to gather up some
-        # "interesting" feature IDs before we look at the ways/rels tables.
-        for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
-            table_name = 'planet_osm_' + typ
-            table = tables(table_name)
-            extra_indexes = table_indexes[table_name]
-            index_table(table.rows, self.osm, *extra_indexes)
+                layer_name = index_cfg.get('layer')
+                assert layer_name, 'Simple index must have a layer name.'
 
-            if source is None:
-                source = table.source
+                indexes.append(simple_index(layers, tables, tile_pyramid,
+                                            table_name, layer_name))
             else:
-                assert source == table.source, 'Mismatched sources'
+                raise ValueError('Unknown index type %r' % (typ,))
 
-        assert source
-        self.layers_index_source = source
-
-        # TODO: make this configurable!
-        simple_layers = (
-            ('wof_neighbourhood', 'places'),
-            ('water_polygons', 'water'),
-            ('land_polygons', 'earth'),
-            ('ne_10m_urban_areas', 'landuse'),
-        )
-
-        for name, layer_name in simple_layers:
-            table = tables(name)
-            # only using a single layer
-            simple_layers = {layer_name: layers[layer_name]}
-            index = _SimpleLayersIndex(
-                simple_layers, tile_pyramid, table.source)
-            index_table(table.rows, index)
-            self.simple_layer_indexes[name] = index
-
-        # there's a chicken and egg problem with the indexes: we want to know
-        # which features to index, but also calculate the feature's min zoom,
-        # which might depend on ways and relations not seen yet. one solution
-        # would be to do this in two passes, but that might mean paying a cost
-        # to decompress or deserialize the data twice. instead, the index
-        # buffers the features and indexes them in the following step. this
-        # might mean we buffer more information in memory than we technically
-        # need if many of the features are not visible, but means we get one
-        # single set of _Feature objects.
-        self.layers_index.index(self.osm, self.layers_index_source)
+        self.indexes = indexes
 
     def _named_layer(self, layer_min_zooms):
         # we want only one layer from ('pois', 'landuse', 'buildings') for
@@ -589,11 +613,9 @@ class RawrTile(object):
                 source_features[source].append(feature)
 
         for tile in _tiles(zoom, unpadded_bounds):
-            for feature in self.layers_index(tile):
-                _add_feature(self.layers_index_source, feature)
-
-            for _, index in self.simple_layer_indexes.items():
-                source_features[index.source].extend(index(tile))
+            for index in self.indexes:
+                for feature in index(tile):
+                    _add_feature(index.source, feature)
 
         return source_features.iteritems()
 
@@ -690,11 +712,13 @@ class RawrTile(object):
 
 class DataFetcher(object):
 
-    def __init__(self, min_z, max_z, storage, layers, label_placement_layers):
+    def __init__(self, min_z, max_z, storage, layers, indexes_cfg,
+                 label_placement_layers):
         self.min_z = min_z
         self.max_z = max_z
         self.storage = storage
         self.layers = layers
+        self.indexes_cfg = indexes_cfg
         self.label_placement_layers = label_placement_layers
 
     def fetch_tiles(self, all_data):
@@ -716,7 +740,7 @@ class DataFetcher(object):
             tables = self.storage(tile_pyramid.tile())
 
             fetcher = RawrTile(self.layers, tables, tile_pyramid,
-                               self.label_placement_layers)
+                               self.label_placement_layers, self.indexes_cfg)
 
             for coord, data in coord_group:
                 yield fetcher, data
@@ -730,11 +754,16 @@ class DataFetcher(object):
 #             returning a "tables" callable. The "tables" callable returns a
 #             list of rows given the table name as its only argument.
 #  - layers:  A dict of layer name to LayerInfo (see fixture.py).
+#  - indexes_cfg: A list of index configurations. Each entry should be a dict
+#             with a "type" key in (osm, simple). OSM has no further
+#             configuration, but simple requires a further "table" and "layer"
+#             entry to give the table name and layer name.
 #  - label_placement_layers:
 #             A dict of geometry type ('point', 'linestring', 'polygon') to
 #             set (or other in-supporting collection) of layer names.
 #             Geometries of that type in that layer will have a label
 #             placement generated for them.
-def make_rawr_data_fetcher(min_z, max_z, storage, layers,
+def make_rawr_data_fetcher(min_z, max_z, storage, layers, indexes_cfg,
                            label_placement_layers={}):
-    return DataFetcher(min_z, max_z, storage, layers, label_placement_layers)
+    return DataFetcher(min_z, max_z, storage, layers, indexes_cfg,
+                       label_placement_layers)
