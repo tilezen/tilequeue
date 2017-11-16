@@ -1731,8 +1731,6 @@ def tilequeue_rawr_process(cfg, peripherals):
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
     from tilequeue.rawr import RawrTileGenerationPipeline
-    from tilequeue.rawr import RawrToiIntersector
-    from tilequeue.rawr import EmptyToiIntersector
     from tilequeue.stats import RawrTilePipelineStatsHandler
     import boto3
     # pass through the postgresql yaml config directly
@@ -1765,25 +1763,38 @@ def tilequeue_rawr_process(cfg, peripherals):
         s3_client = boto3.client('s3', region_name=sink_region)
         rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
-    toi_yaml = cfg.yml.get('toi-store')
-    toi_type = toi_yaml.get('type')
-    if toi_type == 's3':
-        toi_s3_yaml = toi_yaml.get('s3')
-        assert toi_s3_yaml, 'Missing toi-store s3 config'
-        toi_bucket = toi_s3_yaml.get('bucket')
-        toi_key = toi_s3_yaml.get('key')
+    rawr_intersect_yaml = rawr_yaml.get('intersect')
+    assert rawr_intersect_yaml, 'Missing rawr intersect config'
+    intersect_type = rawr_intersect_yaml.get('type')
+    assert intersect_type, 'Missing rawr intersect type'
+
+    if intersect_type == 'toi':
+        toi_yaml = cfg.yml.get('toi-store')
+        toi_type = toi_yaml.get('type')
+        assert toi_type == 's3', 'Rawr toi intersector requires toi on s3'
+        toi_bucket = toi_yaml.get('bucket')
+        toi_key = toi_yaml.get('key')
+        toi_region = toi_yaml.get('region')
         assert toi_bucket, 'Missing toi-store s3 bucket'
         assert toi_key, 'Missing toi-store s3 key'
-
+        assert toi_region, 'Missing toi-store s3 region'
+        s3_client = boto3.client('s3', region_name=toi_region)
+        from tilequeue.rawr import RawrToiIntersector
         rawr_toi_intersector = RawrToiIntersector(
             s3_client, toi_bucket, toi_key)
-
-    elif toi_type == 'none':
+    elif intersect_type == 'none':
+        from tilequeue.rawr import EmptyToiIntersector
         rawr_toi_intersector = EmptyToiIntersector()
-
+    elif intersect_type == 'all':
+        from tilequeue.rawr import RawrAllIntersector
+        rawr_toi_intersector = RawrAllIntersector()
+    elif intersect_type == 'all-parents':
+        from tilequeue.rawr import RawrAllWithParentsIntersector
+        zoom_stop_inclusive = 0
+        rawr_toi_intersector = \
+            RawrAllWithParentsIntersector(zoom_stop_inclusive)
     else:
-        assert False, 'TOI type %r is not known. Options are s3 or none.' \
-            % (toi_type,)
+        assert 0, 'Invalid rawr intersect type: %s' % intersect_type
 
     logger = make_logger(cfg, 'rawr_process')
     rawr_source = parse_sources(rawr_source_list)

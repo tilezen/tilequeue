@@ -360,5 +360,8 @@ rawr:
       table: ne_10m_urban_areas
       layer: landuse
       end_zoom: 10
+  intersect:
+    # type can be toi, none, all, all-parents
+    type: toi
 # uncomment this to use RAWR tiles rather than go direct to the database.
 #use-rawr-tiles: true
