@@ -1035,6 +1035,10 @@ def tilequeue_enqueue_full_pyramid_from_toi(cfg, peripherals, args):
 
 def tilequeue_enqueue_random_pyramids(cfg, peripherals, args):
     """enqueue random pyramids"""
+
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
+    from tilequeue.rawr import make_rawr_enqueuer_from_cfg
+
     logger = make_logger(cfg, 'enqueue_random_pyramids')
 
     rawr_yaml = cfg.yml.get('rawr')
@@ -1064,9 +1068,10 @@ def tilequeue_enqueue_random_pyramids(cfg, peripherals, args):
 
     scale_factor = float(tileset_dim) / float(gridsize)
 
-    queue_writer = peripherals.queue_writer
-    n_queued = 0
-    n_in_flight = 0
+    stats = make_statsd_client_from_cfg(cfg)
+    stats_handler = RawrTileEnqueueStatsHandler(stats)
+    rawr_enqueuer = make_rawr_enqueuer_from_cfg(
+        cfg, logger, stats_handler, peripherals.msg_marshaller)
 
     for grid_y in xrange(gridsize):
         tile_y_min = int(grid_y * scale_factor)
@@ -1094,12 +1099,7 @@ def tilequeue_enqueue_random_pyramids(cfg, peripherals, args):
             for x, y in cell_samples:
                 coord = Coordinate(zoom=group_by_zoom, column=x, row=y)
                 pyramid = coord_pyramid(coord, zoom_start, zoom_stop)
-                cell_enqueued, cell_in_flight = queue_writer.enqueue_batch(
-                        pyramid)
-                n_queued += cell_enqueued
-                n_in_flight += cell_in_flight
-
-    logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
+                rawr_enqueuer(pyramid)
 
 
 def tilequeue_consume_tile_traffic(cfg, peripherals):
