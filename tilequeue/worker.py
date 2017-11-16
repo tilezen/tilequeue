@@ -281,12 +281,13 @@ class DataFetch(object):
 
     def __init__(
             self, fetcher, input_queue, output_queue, io_pool,
-            tile_proc_logger, metatile_zoom, max_zoom):
+            tile_proc_logger, stats_handler, metatile_zoom, max_zoom):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.tile_proc_logger = tile_proc_logger
+        self.stats_handler = stats_handler
         self.metatile_zoom = metatile_zoom
         self.max_zoom = max_zoom
 
@@ -315,6 +316,7 @@ class DataFetch(object):
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
                     'Fetch error', e, stacktrace, coord)
+                self.stats_handler.fetch_error()
 
         if not saw_sentinel:
             _force_empty_queue(self.input_queue)
@@ -360,7 +362,7 @@ class ProcessAndFormatData(object):
 
     def __init__(self, post_process_data, formats, input_queue,
                  output_queue, buffer_cfg, output_calc_mapping, layer_data,
-                 tile_proc_logger):
+                 tile_proc_logger, stats_handler):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
@@ -370,6 +372,7 @@ class ProcessAndFormatData(object):
         self.output_calc_mapping = output_calc_mapping
         self.layer_data = layer_data
         self.tile_proc_logger = tile_proc_logger
+        self.stats_handler = stats_handler
 
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
@@ -407,6 +410,7 @@ class ProcessAndFormatData(object):
                 stacktrace = format_stacktrace_one_line()
                 self.tile_proc_logger.error(
                     'Processing error', e, stacktrace, coord)
+                self.stats_handler.proc_error()
                 continue
 
             metadata = data['metadata']

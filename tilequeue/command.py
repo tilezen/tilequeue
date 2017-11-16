@@ -688,11 +688,12 @@ def tilequeue_process(cfg, peripherals):
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
-        tile_proc_logger, cfg.metatile_zoom, cfg.max_zoom)
+        tile_proc_logger, stats_handler, cfg.metatile_zoom, cfg.max_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, output_calc_mapping, layer_data, tile_proc_logger)
+        cfg.buffer_cfg, output_calc_mapping, layer_data, tile_proc_logger,
+        stats_handler)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
                            tile_proc_logger, cfg.metatile_size)
