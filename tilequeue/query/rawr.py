@@ -352,7 +352,8 @@ def _make_meta(source, fid, shape_type, osm):
     return _Metadata(source.name, ways, rel_dicts)
 
 
-def insert_into_index(tile_pyramid, feature, tile_index):
+def insert_into_index(tile_pyramid, feature, tile_index,
+                      start_zoom=0, end_zoom=None):
     assert isinstance(feature, _Feature)
 
     layer_min_zooms = feature.layer_min_zooms
@@ -374,13 +375,26 @@ def insert_into_index(tile_pyramid, feature, tile_index):
     # the zoom range N to N+1.
     #
     # we cut this off at this index's min zoom, as we aren't interested
-    # in any tiles outside of that.
-    floor_zoom = max(tile_pyramid.z, int(floor(min_zoom)))
+    # in any tiles outside of that, and the layer's start_zoom, since the
+    # feature shouldn't appear outside that range.
+    floor_zoom = max(tile_pyramid.z, int(floor(min_zoom)), start_zoom)
 
     # seed initial set of tiles at maximum zoom. all features appear at
     # least at the max zoom, even if the min_zoom function returns a
     # value larger than the max zoom.
     zoom = tile_pyramid.max_z
+
+    # make sure that features aren't visible at or beyond the end_zoom
+    # for the layer, if one was provided.
+    if end_zoom is not None:
+        # end_zoom is exclusive, so we have to back up one level.
+        zoom = min(zoom, end_zoom - 1)
+
+    # if the zoom ranges don't intersect, then this feature does not appear
+    # in any zoom.
+    if zoom < floor_zoom:
+        return
+
     tiles = shape_tile_coverage(feature.shape, zoom, tile_pyramid.tile())
 
     while zoom >= floor_zoom:
@@ -414,11 +428,13 @@ class _SimpleLayersIndex(object):
     from openstreetmapdata.com shapefiles or WOF.
     """
 
-    def __init__(self, layers, tile_pyramid, source):
+    def __init__(self, layers, tile_pyramid, source, start_zoom, end_zoom):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.tile_index = defaultdict(list)
         self.source = source
+        self.start_zoom = start_zoom
+        self.end_zoom = end_zoom
 
     def add_row(self, fid, shape_wkb, props):
         shape = _LazyShape(shape_wkb)
@@ -428,7 +444,8 @@ class _SimpleLayersIndex(object):
             self.layers, self.source, fid, shape, props, shape_type)
 
         feature = _Feature(fid, shape, props, layer_min_zooms)
-        insert_into_index(self.tile_pyramid, feature, self.tile_index)
+        insert_into_index(self.tile_pyramid, feature, self.tile_index,
+                          self.start_zoom, self.end_zoom)
 
     def __call__(self, tile):
         return self.tile_index.get(tile, [])
@@ -537,14 +554,23 @@ def osm_index(layers, tables, tile_pyramid):
     return index, osm
 
 
-def simple_index(layers, tables, tile_pyramid, table_name, layer_name):
+def simple_index(layers, tables, tile_pyramid, index_cfg):
     from raw_tiles.index.index import index_table
+
+    table_name = index_cfg.get('table')
+    assert table_name, 'Simple index must have a table name.'
+
+    layer_name = index_cfg.get('layer')
+    assert layer_name, 'Simple index must have a layer name.'
+
+    start_zoom = index_cfg.get('start_zoom', 0)
+    end_zoom = index_cfg.get('end_zoom')
 
     table = tables(table_name)
     # only using a single layer
     simple_layers = {layer_name: layers[layer_name]}
     index = _SimpleLayersIndex(
-        simple_layers, tile_pyramid, table.source)
+        simple_layers, tile_pyramid, table.source, start_zoom, end_zoom)
     index_table(table.rows, index)
     return index
 
@@ -577,14 +603,8 @@ class RawrTile(object):
                 indexes.append(index)
 
             elif typ == 'simple':
-                table_name = index_cfg.get('table')
-                assert table_name, 'Simple index must have a table name.'
-
-                layer_name = index_cfg.get('layer')
-                assert layer_name, 'Simple index must have a layer name.'
-
-                indexes.append(simple_index(layers, tables, tile_pyramid,
-                                            table_name, layer_name))
+                indexes.append(simple_index(
+                    layers, tables, tile_pyramid, index_cfg))
             else:
                 raise ValueError('Unknown index type %r' % (typ,))
 

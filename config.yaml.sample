@@ -341,7 +341,10 @@ rawr:
   # appear in an index, so this list must be exhaustive. all OSM-based features
   # are handled by a single index of {type: osm}. other indexes are provided on
   # single table/layer combinations with the {type: simple}, providing the
-  # names of both the table and layer.
+  # names of both the table and layer. it's also possible to provide start_zoom
+  # and end_zoom parameters which control when the data is visible. note that
+  # the start_zoom is inclusive (and optional; defaults to 0) and the end_zoom
+  # is exclusive (also optional; defaults to infinity).
   indexes:
     - type: osm
     - type: simple
@@ -356,5 +359,6 @@ rawr:
     - type: simple
       table: ne_10m_urban_areas
       layer: landuse
+      end_zoom: 10
 # uncomment this to use RAWR tiles rather than go direct to the database.
 #use-rawr-tiles: true
