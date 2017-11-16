@@ -306,7 +306,7 @@ class _LazyShape(object):
 _Metadata = namedtuple('_Metadata', 'source ways relations')
 
 
-def _make_meta(source, fid, shape_type, osm):
+def _associated_ways_and_relations(fid, shape_type, osm):
     ways = []
     rels = []
 
@@ -327,6 +327,16 @@ def _make_meta(source, fid, shape_type, osm):
             rel = osm.relation(rel_id)
             if rel:
                 rels.append(rel)
+
+    return ways, rels
+
+
+def _make_meta(source, fid, shape_type, osm):
+    if osm:
+        ways, rels = _associated_ways_and_relations(fid, shape_type, osm)
+    else:
+        ways = []
+        rels = []
 
     # have to transform the Relation object into a dict, which is
     # what the functions called on this data expect.
@@ -528,10 +538,20 @@ class RawrTile(object):
         assert source
         self.layers_index_source = source
 
-        for name in ('wof_neighbourhood', 'water_polygons',
-                     'land_polygons'):
-            table = tables('wof_neighbourhood')
-            index = _SimpleLayersIndex(layers, tile_pyramid, table.source)
+        # TODO: make this configurable!
+        simple_layers = (
+            ('wof_neighbourhood', 'places'),
+            ('water_polygons', 'water'),
+            ('land_polygons', 'earth'),
+            ('ne_10m_urban_areas', 'landuse'),
+        )
+
+        for name, layer_name in simple_layers:
+            table = tables(name)
+            # only using a single layer
+            simple_layers = {layer_name: layers[layer_name]}
+            index = _SimpleLayersIndex(
+                simple_layers, tile_pyramid, table.source)
             index_table(table.rows, index)
             self.simple_layer_indexes[name] = index
 
@@ -559,21 +579,23 @@ class RawrTile(object):
         return None
 
     def _lookup(self, zoom, unpadded_bounds):
-        features = []
+        source_features = defaultdict(list)
         seen_ids = set()
 
+        def _add_feature(source, feature):
+            feature_id = id(feature)
+            if feature_id not in seen_ids:
+                seen_ids.add(feature_id)
+                source_features[source].append(feature)
+
         for tile in _tiles(zoom, unpadded_bounds):
-            tile_features = self.layers_index(tile)
-            for _, index in self.simple_layer_indexes:
-                tile_features.extend(index(tile))
+            for feature in self.layers_index(tile):
+                _add_feature(self.layers_index_source, feature)
 
-            for feature in tile_features:
-                feature_id = id(feature)
-                if feature_id not in seen_ids:
-                    seen_ids.add(feature_id)
-                    features.append(feature)
+            for _, index in self.simple_layer_indexes.items():
+                source_features[index.source].extend(index(tile))
 
-        return {self.layers_index_source: features}.iteritems()
+        return source_features.iteritems()
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []
