@@ -41,10 +41,11 @@ class MapboxVectorTileTest(unittest.TestCase):
 
         output_calc_mapping = dict(fake_layer=_output_fn)
         tiles, extra = process_coord(
-            coord, coord.zoom, feature_layers, post_process_data, formats,
+            coord, nominal_zoom, feature_layers, post_process_data, formats,
             unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
 
-        return tiles
+        self.assertEqual(len(cut_coords) + 1, len(tiles))
+        return tiles, ([coord] + cut_coords)
 
     def _check_metatile(self, metatile_size):
         from mock import patch
@@ -65,17 +66,29 @@ class MapboxVectorTileTest(unittest.TestCase):
                         bounds[1] + box_height)
 
             metatile_zoom = metatile_zoom_from_size(metatile_size)
-            tiles = self._make_tiles(shape, coord, metatile_zoom)
+            tiles, tile_coords = self._make_tiles(shape, coord, metatile_zoom)
 
             num_tiles = 0
             for z in range(0, metatile_zoom + 1):
                 num_tiles += 4**z
 
+            # resolution should be 4096 at 256px, which is metatile_zoom
+            # levels down from the extent of the world.
+            resolution = (bounds[2] - bounds[0]) / (4096 * 2**metatile_zoom)
+
             self.assertEqual(num_tiles, len(tiles))
             self.assertEqual(num_tiles, encode.call_count)
-            for posargs, kwargs in encode.call_args_list:
+            for (posargs, kwargs), coord in zip(encode.call_args_list,
+                                                tile_coords):
+                self.assertIn('quantize_bounds', kwargs)
+                quantize_bounds = kwargs['quantize_bounds']
+                extent = int((quantize_bounds[2] - quantize_bounds[0]) /
+                             resolution)
                 self.assertIn('extents', kwargs)
-                self.assertEquals(kwargs['extents'], 4096)
+                actual_extent = kwargs['extents']
+                self.assertEquals(extent, actual_extent,
+                                  "Expected %r, not %r, for coord %r" %
+                                  (extent, actual_extent, coord))
 
     def test_single_tile(self):
         self._check_metatile(1)

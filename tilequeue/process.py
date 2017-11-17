@@ -189,7 +189,7 @@ def _create_formatted_tile(
     tile_data_file = StringIO()
     format.format_tile(
         tile_data_file, transformed_feature_layers, nominal_zoom,
-        unpadded_bounds, unpadded_bounds_lnglat)
+        unpadded_bounds, unpadded_bounds_lnglat, scale)
     tile = tile_data_file.getvalue()
 
     formatted_tile = dict(format=format, tile=tile, coord=coord, layer=layer)
@@ -435,20 +435,31 @@ def _cut_child_tiles(
         unpadded_cut_bounds, scale, buffer_cfg)
 
 
+def _calculate_scale(scale, coord, nominal_zoom):
+    # it doesn't happen very often that the coordinate zoom is greater than
+    # the nominal zoom, but when it is, we don't want a loss of precision
+    # compared with the previous behaviour, so we don't scale down.
+    if coord.zoom <= nominal_zoom:
+        return scale * 2**(nominal_zoom - coord.zoom)
+    else:
+        return scale
+
+
 def format_coord(
         coord, nominal_zoom, processed_feature_layers, formats,
-        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale=4096):
+        unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale):
 
     coord_formatted_tiles = _format_feature_layers(
         processed_feature_layers, coord, nominal_zoom, formats,
-        unpadded_bounds, scale, buffer_cfg)
+        unpadded_bounds, _calculate_scale(scale, coord, nominal_zoom),
+        buffer_cfg)
 
     children_formatted_tiles = []
     if cut_coords:
         for cut_coord in cut_coords:
             child_tiles = _cut_child_tiles(
                 processed_feature_layers, cut_coord, nominal_zoom, formats,
-                scale, buffer_cfg)
+                _calculate_scale(scale, cut_coord, nominal_zoom), buffer_cfg)
             children_formatted_tiles.extend(child_tiles)
 
     all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
@@ -463,6 +474,11 @@ def format_coord(
 # to actual tile coordinates in future versions of the code. it just
 # becomes a measure of the scale between tile features and intended
 # display size.
+#
+# the scale parameter is the number of integer coordinates across the
+# extent of the tile (where applicable - some formats don't care) for the
+# nominal zoom. this means that there will be more pixels for tiles at
+# other zooms!
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
                   output_calc_spec, scale=4096):
