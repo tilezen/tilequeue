@@ -1,7 +1,6 @@
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import metatile_zoom_from_size
 from yaml import load
-import math
 import os
 
 
