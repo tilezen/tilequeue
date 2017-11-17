@@ -104,6 +104,7 @@ def _ack_coord_handle(
     assert tile_queue, \
         'Missing tile_queue: %s' % queue_handle.queue_id
 
+    parent_tile = None
     if track_result.all_done:
         parent_tile = track_result.parent_tile
 
