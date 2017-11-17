@@ -1772,9 +1772,11 @@ def tilequeue_rawr_process(cfg, peripherals):
         toi_yaml = cfg.yml.get('toi-store')
         toi_type = toi_yaml.get('type')
         assert toi_type == 's3', 'Rawr toi intersector requires toi on s3'
-        toi_bucket = toi_yaml.get('bucket')
-        toi_key = toi_yaml.get('key')
-        toi_region = toi_yaml.get('region')
+        toi_s3_yaml = toi_yaml.get('s3')
+        assert toi_s3_yaml, 'Missing toi-store s3 config'
+        toi_bucket = toi_s3_yaml.get('bucket')
+        toi_key = toi_s3_yaml.get('key')
+        toi_region = toi_s3_yaml.get('region')
         assert toi_bucket, 'Missing toi-store s3 bucket'
         assert toi_key, 'Missing toi-store s3 key'
         assert toi_region, 'Missing toi-store s3 region'
