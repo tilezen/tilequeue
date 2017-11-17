@@ -8,5 +8,6 @@ def encode(fp, feature_layers, bounds_merc):
         quantize_bounds=bounds_merc,
         on_invalid_geometry=on_invalid_geometry_make_valid,
         round_fn=round,
+        extents=4096,
     )
     fp.write(tile)
