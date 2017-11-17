@@ -309,6 +309,7 @@ class DataFetch(object):
                 saw_sentinel = True
                 break
 
+            coord = None
             try:
                 all_data, parent = coord_input_spec
                 for fetch, data in self.fetcher.fetch_tiles(all_data):
