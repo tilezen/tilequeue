@@ -306,7 +306,7 @@ class _LazyShape(object):
 _Metadata = namedtuple('_Metadata', 'source ways relations')
 
 
-def _make_meta(source, fid, shape_type, osm):
+def _associated_ways_and_relations(fid, shape_type, osm):
     ways = []
     rels = []
 
@@ -328,6 +328,16 @@ def _make_meta(source, fid, shape_type, osm):
             if rel:
                 rels.append(rel)
 
+    return ways, rels
+
+
+def _make_meta(source, fid, shape_type, osm):
+    if osm:
+        ways, rels = _associated_ways_and_relations(fid, shape_type, osm)
+    else:
+        ways = []
+        rels = []
+
     # have to transform the Relation object into a dict, which is
     # what the functions called on this data expect.
     # TODO: reusing the Relation object would be better.
@@ -340,6 +350,105 @@ def _make_meta(source, fid, shape_type, osm):
         rel_dicts.append(dict(tags=tags))
 
     return _Metadata(source.name, ways, rel_dicts)
+
+
+def insert_into_index(tile_pyramid, feature, tile_index,
+                      start_zoom=0, end_zoom=None):
+    assert isinstance(feature, _Feature)
+
+    layer_min_zooms = feature.layer_min_zooms
+    # quick exit if the feature didn't have a min zoom in any layer.
+    if not layer_min_zooms:
+        return
+
+    # lowest zoom that this feature appears in any layer. note that this
+    # is clamped to the max zoom, so that all features that appear at some
+    # zoom level appear at the max zoom. this is different from the min
+    # zoom in layer_min_zooms, which is a property that will be injected
+    # for each layer and is used by the _client_ to determine feature
+    # visibility.
+    min_zoom = min(tile_pyramid.max_z, min(layer_min_zooms.values()))
+
+    # take the minimum integer zoom - this is the min zoom tile that the
+    # feature should appear in, and a feature with min_zoom = 1.9 should
+    # appear in a tile at z=1, not 2, since the tile at z=N is used for
+    # the zoom range N to N+1.
+    #
+    # we cut this off at this index's min zoom, as we aren't interested
+    # in any tiles outside of that, and the layer's start_zoom, since the
+    # feature shouldn't appear outside that range.
+    floor_zoom = max(tile_pyramid.z, int(floor(min_zoom)), start_zoom)
+
+    # seed initial set of tiles at maximum zoom. all features appear at
+    # least at the max zoom, even if the min_zoom function returns a
+    # value larger than the max zoom.
+    zoom = tile_pyramid.max_z
+
+    # make sure that features aren't visible at or beyond the end_zoom
+    # for the layer, if one was provided.
+    if end_zoom is not None:
+        # end_zoom is exclusive, so we have to back up one level.
+        zoom = min(zoom, end_zoom - 1)
+
+    # if the zoom ranges don't intersect, then this feature does not appear
+    # in any zoom.
+    if zoom < floor_zoom:
+        return
+
+    tiles = shape_tile_coverage(feature.shape, zoom, tile_pyramid.tile())
+
+    while zoom >= floor_zoom:
+        parent_tiles = set()
+        for tile in tiles:
+            tile_index[tile].append(feature)
+            parent_tiles.add(tile.parent())
+
+        zoom -= 1
+        tiles = parent_tiles
+
+
+def make_layer_min_zooms(layers, source, fid, shape, props, shape_type):
+    layer_min_zooms = {}
+    meta = _make_meta(source, fid, shape_type, None)
+    for layer_name, info in layers.items():
+        if info.shape_types and shape_type not in info.shape_types:
+            continue
+        min_zoom = info.min_zoom_fn(shape, props, fid, meta)
+        if min_zoom is not None:
+            layer_min_zooms[layer_name] = min_zoom
+    return layer_min_zooms
+
+
+# TODO: factor out common features of _SimpleLayersIndex & _LayersIndex
+class _SimpleLayersIndex(object):
+    """
+    Index features by the tile(s) that they appear in.
+
+    This is the non-relations version, for stand-alone features such as those
+    from openstreetmapdata.com shapefiles or WOF.
+    """
+
+    def __init__(self, layers, tile_pyramid, source, start_zoom, end_zoom):
+        self.layers = layers
+        self.tile_pyramid = tile_pyramid
+        self.tile_index = defaultdict(list)
+        self.source = source
+        self.start_zoom = start_zoom
+        self.end_zoom = end_zoom
+
+    def add_row(self, fid, shape_wkb, props):
+        shape = _LazyShape(shape_wkb)
+        shape_type = wkb_shape_type(shape_wkb)
+
+        layer_min_zooms = make_layer_min_zooms(
+            self.layers, self.source, fid, shape, props, shape_type)
+
+        feature = _Feature(fid, shape, props, layer_min_zooms)
+        insert_into_index(self.tile_pyramid, feature, self.tile_index,
+                          self.start_zoom, self.end_zoom)
+
+    def __call__(self, tile):
+        return self.tile_index.get(tile, [])
 
 
 class _LayersIndex(object):
@@ -372,6 +481,7 @@ class _LayersIndex(object):
     def index(self, osm, source):
         for feature in self.delayed_features:
             self._index_feature(feature, osm, source)
+        self.source = source
         del self.delayed_features
 
     def _index_feature(self, feature, osm, source):
@@ -394,49 +504,81 @@ class _LayersIndex(object):
             if min_zoom is not None:
                 layer_min_zooms[layer_name] = min_zoom
 
-        # quick exit if the feature didn't have a min zoom in any layer.
-        if not layer_min_zooms:
-            return
-
-        # lowest zoom that this feature appears in any layer. note that this
-        # is clamped to the max zoom, so that all features that appear at some
-        # zoom level appear at the max zoom. this is different from the min
-        # zoom in layer_min_zooms, which is a property that will be injected
-        # for each layer and is used by the _client_ to determine feature
-        # visibility.
-        min_zoom = min(self.tile_pyramid.max_z, min(layer_min_zooms.values()))
-
-        # take the minimum integer zoom - this is the min zoom tile that the
-        # feature should appear in, and a feature with min_zoom = 1.9 should
-        # appear in a tile at z=1, not 2, since the tile at z=N is used for
-        # the zoom range N to N+1.
-        #
-        # we cut this off at this index's min zoom, as we aren't interested
-        # in any tiles outside of that.
-        floor_zoom = max(self.tile_pyramid.z, int(floor(min_zoom)))
-
-        # seed initial set of tiles at maximum zoom. all features appear at
-        # least at the max zoom, even if the min_zoom function returns a
-        # value larger than the max zoom.
-        zoom = self.tile_pyramid.max_z
-        tiles = shape_tile_coverage(shape, zoom, self.tile_pyramid.tile())
-
-        while zoom >= floor_zoom:
-            parent_tiles = set()
-            for tile in tiles:
-                self.tile_index[tile].append(feature)
-                parent_tiles.add(tile.parent())
-
-            zoom -= 1
-            tiles = parent_tiles
+        insert_into_index(self.tile_pyramid, feature, self.tile_index)
 
     def __call__(self, tile):
         return self.tile_index.get(tile, [])
 
 
+def osm_index(layers, tables, tile_pyramid):
+    from raw_tiles.index.index import index_table
+
+    table_indexes = defaultdict(list)
+
+    index = _LayersIndex(layers, tile_pyramid)
+    for shape_type in ('point', 'line', 'polygon'):
+        table_name = 'planet_osm_' + shape_type
+        table_indexes[table_name].append(index)
+
+    # source for all these layers has to be the same
+    source = None
+
+    osm = OsmRawrLookup()
+    # NOTE: order here is different from that in raw_tiles index()
+    # function. this is because here we want to gather up some
+    # "interesting" feature IDs before we look at the ways/rels tables.
+    for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
+        table_name = 'planet_osm_' + typ
+        table = tables(table_name)
+        extra_indexes = table_indexes[table_name]
+        index_table(table.rows, osm, *extra_indexes)
+
+        if source is None:
+            source = table.source
+        else:
+            assert source == table.source, 'Mismatched sources'
+
+    assert source
+
+    # there's a chicken and egg problem with the indexes: we want to know
+    # which features to index, but also calculate the feature's min zoom,
+    # which might depend on ways and relations not seen yet. one solution
+    # would be to do this in two passes, but that might mean paying a cost
+    # to decompress or deserialize the data twice. instead, the index
+    # buffers the features and indexes them in the following step. this
+    # might mean we buffer more information in memory than we technically
+    # need if many of the features are not visible, but means we get one
+    # single set of _Feature objects.
+    index.index(osm, source)
+
+    return index, osm
+
+
+def simple_index(layers, tables, tile_pyramid, index_cfg):
+    from raw_tiles.index.index import index_table
+
+    table_name = index_cfg.get('table')
+    assert table_name, 'Simple index must have a table name.'
+
+    layer_name = index_cfg.get('layer')
+    assert layer_name, 'Simple index must have a layer name.'
+
+    start_zoom = index_cfg.get('start_zoom', 0)
+    end_zoom = index_cfg.get('end_zoom')
+
+    table = tables(table_name)
+    # only using a single layer
+    simple_layers = {layer_name: layers[layer_name]}
+    index = _SimpleLayersIndex(
+        simple_layers, tile_pyramid, table.source, start_zoom, end_zoom)
+    index_table(table.rows, index)
+    return index
+
+
 class RawrTile(object):
 
-    def __init__(self, layers, tables, tile_pyramid, label_placement_layers):
+    def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
+                 indexes_cfg):
         """
         Expect layers to be a dict of layer name to LayerInfo (see fixture.py).
         Tables should be a callable which returns a Table object (namedtuple
@@ -444,51 +586,29 @@ class RawrTile(object):
         that table's name.
         """
 
-        from raw_tiles.index.index import index_table
-
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.label_placement_layers = label_placement_layers
-        self.layer_indexes = {}
+        self.osm = None
 
-        table_indexes = defaultdict(list)
+        indexes = []
+        for index_cfg in indexes_cfg:
+            typ = index_cfg.get('type')
+            assert typ, 'Index configuration must provide a type.'
 
-        self.layers_index = _LayersIndex(self.layers, self.tile_pyramid)
-        for shape_type in ('point', 'line', 'polygon'):
-            table_name = 'planet_osm_' + shape_type
-            table_indexes[table_name].append(self.layers_index)
+            if typ == 'osm':
+                index, osm = osm_index(layers, tables, tile_pyramid)
+                assert self.osm is None, 'Cannot have more than one OSM index.'
+                self.osm = osm
+                indexes.append(index)
 
-        # source for all these layers has to be the same
-        source = None
-
-        self.osm = OsmRawrLookup()
-        # NOTE: order here is different from that in raw_tiles index()
-        # function. this is because here we want to gather up some
-        # "interesting" feature IDs before we look at the ways/rels tables.
-        for typ in ('point', 'line', 'polygon', 'ways', 'rels'):
-            table_name = 'planet_osm_' + typ
-            table = tables(table_name)
-            extra_indexes = table_indexes[table_name]
-            index_table(table.rows, self.osm, *extra_indexes)
-
-            if source is None:
-                source = table.source
+            elif typ == 'simple':
+                indexes.append(simple_index(
+                    layers, tables, tile_pyramid, index_cfg))
             else:
-                assert source == table.source, 'Mismatched sources'
+                raise ValueError('Unknown index type %r' % (typ,))
 
-        assert source
-        self.layers_index_source = source
-
-        # there's a chicken and egg problem with the indexes: we want to know
-        # which features to index, but also calculate the feature's min zoom,
-        # which might depend on ways and relations not seen yet. one solution
-        # would be to do this in two passes, but that might mean paying a cost
-        # to decompress or deserialize the data twice. instead, the index
-        # buffers the features and indexes them in the following step. this
-        # might mean we buffer more information in memory than we technically
-        # need if many of the features are not visible, but means we get one
-        # single set of _Feature objects.
-        self.layers_index.index(self.osm, self.layers_index_source)
+        self.indexes = indexes
 
     def _named_layer(self, layer_min_zooms):
         # we want only one layer from ('pois', 'landuse', 'buildings') for
@@ -503,18 +623,21 @@ class RawrTile(object):
         return None
 
     def _lookup(self, zoom, unpadded_bounds):
-        features = []
+        source_features = defaultdict(list)
         seen_ids = set()
 
-        for tile in _tiles(zoom, unpadded_bounds):
-            tile_features = self.layers_index(tile)
-            for feature in tile_features:
-                feature_id = id(feature)
-                if feature_id not in seen_ids:
-                    seen_ids.add(feature_id)
-                    features.append(feature)
+        def _add_feature(source, feature):
+            feature_id = id(feature)
+            if feature_id not in seen_ids:
+                seen_ids.add(feature_id)
+                source_features[source].append(feature)
 
-        return {self.layers_index_source: features}.iteritems()
+        for tile in _tiles(zoom, unpadded_bounds):
+            for index in self.indexes:
+                for feature in index(tile):
+                    _add_feature(index.source, feature)
+
+        return source_features.iteritems()
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []
@@ -609,11 +732,13 @@ class RawrTile(object):
 
 class DataFetcher(object):
 
-    def __init__(self, min_z, max_z, storage, layers, label_placement_layers):
+    def __init__(self, min_z, max_z, storage, layers, indexes_cfg,
+                 label_placement_layers):
         self.min_z = min_z
         self.max_z = max_z
         self.storage = storage
         self.layers = layers
+        self.indexes_cfg = indexes_cfg
         self.label_placement_layers = label_placement_layers
 
     def fetch_tiles(self, all_data):
@@ -635,7 +760,7 @@ class DataFetcher(object):
             tables = self.storage(tile_pyramid.tile())
 
             fetcher = RawrTile(self.layers, tables, tile_pyramid,
-                               self.label_placement_layers)
+                               self.label_placement_layers, self.indexes_cfg)
 
             for coord, data in coord_group:
                 yield fetcher, data
@@ -649,11 +774,16 @@ class DataFetcher(object):
 #             returning a "tables" callable. The "tables" callable returns a
 #             list of rows given the table name as its only argument.
 #  - layers:  A dict of layer name to LayerInfo (see fixture.py).
+#  - indexes_cfg: A list of index configurations. Each entry should be a dict
+#             with a "type" key in (osm, simple). OSM has no further
+#             configuration, but simple requires a further "table" and "layer"
+#             entry to give the table name and layer name.
 #  - label_placement_layers:
 #             A dict of geometry type ('point', 'linestring', 'polygon') to
 #             set (or other in-supporting collection) of layer names.
 #             Geometries of that type in that layer will have a label
 #             placement generated for them.
-def make_rawr_data_fetcher(min_z, max_z, storage, layers,
+def make_rawr_data_fetcher(min_z, max_z, storage, layers, indexes_cfg,
                            label_placement_layers={}):
-    return DataFetcher(min_z, max_z, storage, layers, label_placement_layers)
+    return DataFetcher(min_z, max_z, storage, layers, indexes_cfg,
+                       label_placement_layers)

@@ -72,6 +72,16 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         source_value = data['value']
         table_sources[tbl] = Source(source_name, source_value)
 
+    label_placement_layers = rawr_yaml.get('label-placement-layers', {})
+    for geom_type, layers in label_placement_layers.items():
+        assert geom_type in ('point', 'polygon', 'linestring'), \
+            'Geom type %r not understood, expecting point, polygon or ' \
+            'linestring.' % (geom_type,)
+        label_placement_layers[geom_type] = set(layers)
+
+    indexes_cfg = rawr_yaml.get('indexes')
+    assert indexes_cfg, 'Missing definitions of table indexes.'
+
     # source types are:
     #   s3       - to fetch RAWR tiles from S3
     #   store    - to fetch RAWR tiles from any tilequeue tile source
@@ -124,20 +134,15 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         assert False, 'Source type %r not understood. ' \
             'Options are s3, generate and store.' % (source_type,)
 
-    # TODO: this needs to be configurable, everywhere!
+    # TODO: this needs to be configurable, everywhere! this is a long term
+    # refactor - it's hard-coded in a bunch of places :-(
     max_z = 16
-
-    # TODO: put this in the config!
-    label_placement_layers = {
-        'point': set(['earth', 'water']),
-        'polygon': set(['buildings', 'earth', 'landuse', 'water']),
-        'linestring': set(['earth', 'landuse', 'water']),
-    }
 
     layers = _make_layer_info(layer_data, cfg.process_yaml_cfg)
 
     return make_rawr_data_fetcher(
-        group_by_zoom, max_z, storage, layers, label_placement_layers)
+        group_by_zoom, max_z, storage, layers, indexes_cfg,
+        label_placement_layers)
 
 
 def _make_layer_info(layer_data, process_yaml_cfg):

@@ -1725,7 +1725,8 @@ def tilequeue_rawr_process(cfg, peripherals):
     from raw_tiles.formatter.msgpack import Msgpack
     from raw_tiles.gen import RawrGenerator
     from raw_tiles.source.conn import ConnectionContextManager
-    from raw_tiles.source.osm import OsmSource
+    from raw_tiles.source import parse_sources
+    from raw_tiles.source import DEFAULT_SOURCES as DEFAULT_RAWR_SOURCES
     from tilequeue.log import JsonRawrProcessingLogger
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
@@ -1736,6 +1737,12 @@ def tilequeue_rawr_process(cfg, peripherals):
     import boto3
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
+
+    rawr_source_list = rawr_yaml.get('sources', DEFAULT_RAWR_SOURCES)
+    assert isinstance(rawr_source_list, list), \
+        'RAWR source list should be a list'
+    assert len(rawr_source_list) > 0, \
+        'RAWR source list should be non-empty'
 
     rawr_store = rawr_yaml.get('store')
     if rawr_store:
@@ -1779,15 +1786,15 @@ def tilequeue_rawr_process(cfg, peripherals):
             % (toi_type,)
 
     logger = make_logger(cfg, 'rawr_process')
-    rawr_osm_source = OsmSource(conn_ctx)
+    rawr_source = parse_sources(rawr_source_list)
     rawr_formatter = Msgpack()
-    rawr_gen = RawrGenerator(rawr_osm_source, rawr_formatter, rawr_sink)
+    rawr_gen = RawrGenerator(rawr_source, rawr_formatter, rawr_sink)
     stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_proc_logger = JsonRawrProcessingLogger(logger)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
             peripherals.queue_writer, rawr_toi_intersector, stats_handler,
-            rawr_proc_logger)
+            rawr_proc_logger, conn_ctx)
     rawr_pipeline()
 
 
