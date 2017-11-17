@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
+from itertools import imap
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
@@ -127,7 +128,7 @@ class RawrEnqueuer(object):
         if self.logger:
             self.logger.info(
                 'Rawr tiles enqueued: '
-                'coords(%d) payloads(%d) enqueue_calls(%d))' %
+                'coords(%d) payloads(%d) enqueue_calls(%d)' %
                 (n_coords, n_payloads, n_msgs_sent))
 
         self.stats_handler(n_coords, n_payloads, n_msgs_sent)
@@ -269,6 +270,64 @@ class EmptyToiIntersector(object):
             intersect=0,
         )
         return [], metrics, timing
+
+
+class RawrAllIntersector(object):
+    """
+    return back the coordinates themselves
+
+    This is useful when we know that we enqueue the full tile pyramids in the
+    message.
+    """
+
+    def __call__(self, coords):
+        metrics = dict(
+            total=len(coords),
+            hits=len(coords),
+            misses=0,
+            n_toi=0,
+            cached=False,
+        )
+        timing = dict(
+            fetch=0,
+            intersect=0,
+        )
+        return coords, metrics, timing
+
+
+class RawrAllWithParentsIntersector(object):
+    """
+    return back the coordinates with their parents
+    """
+
+    def __init__(self, zoom_stop_inclusive):
+        self.zoom_stop_inclusive = zoom_stop_inclusive
+
+    def __call__(self, coords):
+        timing = dict(
+            fetch=0,
+            intersect=0,
+        )
+        with time_block(timing, 'intersect'):
+            all_coord_ints = set()
+            for coord in coords:
+                while coord.zoom >= self.zoom_stop_inclusive:
+                    coord_int = coord_marshall_int(coord)
+                    if coord_int in all_coord_ints:
+                        # as an optimization, assume that if the coord is
+                        # already in the set, then all its parents will be too
+                        break
+                    all_coord_ints.add(coord_int)
+                    coord = coord.zoomBy(-1).container()
+        coords = imap(coord_unmarshall_int, all_coord_ints)
+        metrics = dict(
+            total=len(all_coord_ints),
+            hits=len(all_coord_ints),
+            misses=0,
+            n_toi=0,
+            cached=False,
+        )
+        return coords, metrics, timing
 
 
 class RawrTileGenerationPipeline(object):
