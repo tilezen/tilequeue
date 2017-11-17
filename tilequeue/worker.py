@@ -192,6 +192,9 @@ class TileQueueReader(object):
                 if msg_handles:
                     break
 
+            if not msg_handles:
+                continue
+
             for msg_handle in msg_handles:
                 # if asked to stop, break as soon as possible
                 if self.stop.is_set():
