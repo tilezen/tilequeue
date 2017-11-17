@@ -82,8 +82,8 @@ class MapboxVectorTileTest(unittest.TestCase):
                                                 tile_coords):
                 self.assertIn('quantize_bounds', kwargs)
                 quantize_bounds = kwargs['quantize_bounds']
-                extent = int((quantize_bounds[2] - quantize_bounds[0]) /
-                             resolution)
+                extent = int(round((quantize_bounds[2] - quantize_bounds[0]) /
+                                   resolution))
                 self.assertIn('extents', kwargs)
                 actual_extent = kwargs['extents']
                 self.assertEquals(extent, actual_extent,
@@ -95,3 +95,6 @@ class MapboxVectorTileTest(unittest.TestCase):
 
     def test_metatile_size_2(self):
         self._check_metatile(2)
+
+    def test_metatile_size_4(self):
+        self._check_metatile(4)
