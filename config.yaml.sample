@@ -329,6 +329,7 @@ rawr:
       wof_neighbourhood: { name: wof, value: whosonfirst.mapzen.com }
       water_polygons: &osmdata { name: shp, value: openstreetmapdata.com }
       land_polygons: *osmdata
+      ne_10m_urban_areas: { name: ne, value: naturalearthdata.com }
   # when a feature's shape is of the type given in the key and the feature
   # appears in the listed layers, then generate a label centroid. multi*
   # geometries are considered the same as single ones for the purposes of key
