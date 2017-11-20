@@ -183,6 +183,21 @@ class JsonTileProcessingLogger(object):
         self._log_job_error(
             msg, exception, stacktrace, coord, parent_tile, err_details)
 
+    def fetch_error(self, exception, stacktrace, coord, parent):
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.PROCESS),
+            msg='Fetch error',
+            exception=str(exception),
+            stacktrace=stacktrace,
+        )
+        if coord is not None:
+            json_obj['coord'] = make_coord_dict(coord)
+        if parent is not None:
+            json_obj['parent'] = make_coord_dict(parent)
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
 
 class JsonRawrProcessingLogger(object):
 
