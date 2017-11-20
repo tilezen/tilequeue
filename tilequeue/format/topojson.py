@@ -65,7 +65,7 @@ def diff_encode(line, transform):
     return coords[:1] + [(x, y) for (x, y) in diffs if (x, y) != (0, 0)]
 
 
-def encode(file, features_by_layer, bounds):
+def encode(file, features_by_layer, bounds, size=4096):
     """ Encode a dict of layername: (shape, props, id) features into a
         TopoJSON stream.
 
@@ -74,8 +74,11 @@ def encode(file, features_by_layer, bounds):
         Geometries in the features list are assumed to be unprojected
         lon, lats.  Bounds are given in geographic coordinates as
         (xmin, ymin, xmax, ymax).
+
+        Size is the number of integer coordinates which span the extent
+        of the tile.
     """
-    transform, forward = get_transform(bounds)
+    transform, forward = get_transform(bounds, size=size)
     arcs = []
 
     geometries_by_layer = {}

@@ -1,6 +1,6 @@
 from tilequeue.tile import bounds_buffer
+from tilequeue.tile import metatile_zoom_from_size
 from yaml import load
-import math
 import os
 
 
@@ -116,12 +116,7 @@ class Configuration(object):
         self.wof = self.yml.get('wof')
 
         self.metatile_size = self._cfg('metatile size')
-        if self.metatile_size is None:
-            self.metatile_zoom = 0
-        else:
-            self.metatile_zoom = int(math.log(self.metatile_size, 2))
-            assert (1 << self.metatile_zoom) == self.metatile_size, \
-                "Metatile size must be a power of two."
+        self.metatile_zoom = metatile_zoom_from_size(self.metatile_size)
 
         self.max_zoom_with_changes = self._cfg('tiles max-zoom-with-changes')
         assert self.max_zoom_with_changes > self.metatile_zoom

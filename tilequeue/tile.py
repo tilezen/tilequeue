@@ -356,3 +356,14 @@ def coord_is_valid(coord, max_zoom=20):
     if coord.column >= max_colrow or coord.row >= max_colrow:
         return False
     return True
+
+
+def metatile_zoom_from_size(metatile_size):
+    metatile_zoom = 0
+
+    if metatile_size is not None:
+        metatile_zoom = int(math.log(metatile_size, 2))
+        assert (1 << metatile_zoom) == metatile_size, \
+            "Metatile size must be a power of two."
+
+    return metatile_zoom

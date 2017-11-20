@@ -30,9 +30,9 @@ class OutputFormat(object):
         return self.extension == other.extension
 
     def format_tile(self, tile_data_file, feature_layers, zoom, bounds_merc,
-                    bounds_lnglat):
+                    bounds_lnglat, extents=4096):
         self.format_fn(tile_data_file, feature_layers, zoom, bounds_merc,
-                       bounds_lnglat)
+                       bounds_lnglat, extents)
 
 
 def convert_feature_layers_to_dict(feature_layers):
@@ -47,7 +47,7 @@ def convert_feature_layers_to_dict(feature_layers):
 
 
 # consistent facade around all formatters that we use
-def format_json(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
+def format_json(fp, feature_layers, zoom, bounds_merc, bounds_lnglat, extents):
     if len(feature_layers) == 1:
         json_encode_single_layer(fp, feature_layers[0]['features'], zoom)
         return
@@ -56,12 +56,13 @@ def format_json(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
         json_encode_multiple_layers(fp, features_by_layer, zoom)
 
 
-def format_topojson(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
+def format_topojson(fp, feature_layers, zoom, bounds_merc, bounds_lnglat,
+                    extents):
     features_by_layer = convert_feature_layers_to_dict(feature_layers)
-    topojson_encode(fp, features_by_layer, bounds_lnglat)
+    topojson_encode(fp, features_by_layer, bounds_lnglat, extents)
 
 
-def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
+def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat, extents):
     mvt_layers = []
     for feature_layer in feature_layers:
         mvt_features = []
@@ -77,7 +78,7 @@ def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
             features=mvt_features,
         )
         mvt_layers.append(mvt_layer)
-    mvt_encode(fp, mvt_layers, bounds_merc)
+    mvt_encode(fp, mvt_layers, bounds_merc, extents)
 
 
 def format_vtm(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
