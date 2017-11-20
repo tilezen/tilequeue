@@ -104,6 +104,7 @@ def _ack_coord_handle(
     assert tile_queue, \
         'Missing tile_queue: %s' % queue_handle.queue_id
 
+    parent_tile = None
     if track_result.all_done:
         parent_tile = track_result.parent_tile
 
@@ -190,6 +191,9 @@ class TileQueueReader(object):
                     continue
                 if msg_handles:
                     break
+
+            if not msg_handles:
+                continue
 
             for msg_handle in msg_handles:
                 # if asked to stop, break as soon as possible
@@ -305,6 +309,7 @@ class DataFetch(object):
                 saw_sentinel = True
                 break
 
+            coord = None
             try:
                 all_data, parent = coord_input_spec
                 for fetch, data in self.fetcher.fetch_tiles(all_data):
