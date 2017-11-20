@@ -310,6 +310,7 @@ class DataFetch(object):
                 break
 
             coord = None
+            parent = None
             try:
                 all_data, parent = coord_input_spec
                 for fetch, data in self.fetcher.fetch_tiles(all_data):
@@ -319,8 +320,7 @@ class DataFetch(object):
                         break
             except Exception as e:
                 stacktrace = format_stacktrace_one_line()
-                self.tile_proc_logger.error(
-                    'Fetch error', e, stacktrace, coord)
+                self.tile_proc_logger.fetch_error(e, stacktrace, coord, parent)
                 self.stats_handler.fetch_error()
 
         if not saw_sentinel:
