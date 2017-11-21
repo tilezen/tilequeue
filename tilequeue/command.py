@@ -688,7 +688,8 @@ def tilequeue_process(cfg, peripherals):
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
-        tile_proc_logger, stats_handler, cfg.metatile_zoom, cfg.max_zoom)
+        tile_proc_logger, stats_handler, cfg.metatile_zoom, cfg.max_zoom,
+        cfg.metatile_start_zoom)
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
@@ -1662,7 +1663,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     feature_layers = convert_source_data_to_feature_layers(
         source_rows, layer_data, unpadded_bounds, coord.zoom)
 
-    cut_coords = []
+    cut_coords = [coord]
     if nominal_zoom > coord.zoom:
         cut_coords.extend(coord_children_range(coord, nominal_zoom))
 

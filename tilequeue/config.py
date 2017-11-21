@@ -117,6 +117,7 @@ class Configuration(object):
 
         self.metatile_size = self._cfg('metatile size')
         self.metatile_zoom = metatile_zoom_from_size(self.metatile_size)
+        self.metatile_start_zoom = self._cfg('metatile start-zoom')
 
         self.max_zoom_with_changes = self._cfg('tiles max-zoom-with-changes')
         assert self.max_zoom_with_changes > self.metatile_zoom
@@ -244,6 +245,7 @@ def default_yml_config():
         },
         'metatile': {
             'size': None,
+            'start-zoom': 0,
         },
         'queue_buffer_size': {
             'sql': None,

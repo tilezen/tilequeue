@@ -11,7 +11,7 @@ from tilequeue.process import process_coord
 from tilequeue.queue import JobProgressException
 from tilequeue.queue.message import QueueHandle
 from tilequeue.store import write_tile_if_changed
-from tilequeue.tile import coord_children_range
+from tilequeue.tile import coord_children_subrange
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import convert_seconds_to_millis
@@ -285,7 +285,8 @@ class DataFetch(object):
 
     def __init__(
             self, fetcher, input_queue, output_queue, io_pool,
-            tile_proc_logger, stats_handler, metatile_zoom, max_zoom):
+            tile_proc_logger, stats_handler, metatile_zoom, max_zoom,
+            metatile_start_zoom=0):
         self.fetcher = fetcher
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -294,6 +295,7 @@ class DataFetch(object):
         self.stats_handler = stats_handler
         self.metatile_zoom = metatile_zoom
         self.max_zoom = max_zoom
+        self.metatile_start_zoom = metatile_start_zoom
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -334,6 +336,7 @@ class DataFetch(object):
 
     def _fetch(self, fetch, coord, metadata):
         nominal_zoom = coord.zoom + self.metatile_zoom
+        start_zoom = coord.zoom + self.metatile_start_zoom
         unpadded_bounds = coord_to_mercator_bounds(coord)
 
         start = time.time()
@@ -347,9 +350,8 @@ class DataFetch(object):
         # and its four children to cut from it. at zoom 15, this may
         # also include a whole bunch of other children below the max
         # zoom.
-        cut_coords = list()
-        if nominal_zoom > coord.zoom:
-            cut_coords.extend(coord_children_range(coord, nominal_zoom))
+        cut_coords = list(
+            coord_children_subrange(coord, start_zoom, nominal_zoom))
 
         return dict(
             metadata=metadata,

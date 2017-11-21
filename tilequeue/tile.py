@@ -284,17 +284,27 @@ def coord_children(coord):
 
 def coord_children_range(coord, zoom_until):
     assert zoom_until > coord.zoom
+    for child in coord_children_subrange(coord, coord.zoom + 1, zoom_until):
+        yield child
+
+
+def coord_children_subrange(coord, zoom_start, zoom_until):
+    assert zoom_start >= coord.zoom
+    assert zoom_until >= coord.zoom
     children_to_process = [coord]
+    if zoom_start <= coord.zoom:
+        yield coord
     cur_zoom = coord.zoom
     while cur_zoom < zoom_until:
         next_children = []
+        cur_zoom += 1
         for child_to_process in children_to_process:
             children = coord_children(child_to_process)
             for child in children:
-                yield child
+                if zoom_start <= cur_zoom:
+                    yield child
                 next_children.append(child)
         children_to_process = next_children
-        cur_zoom += 1
 
 
 tolerances = [6378137 * 2 * math.pi / (2 ** (zoom + 8)) for zoom in range(22)]

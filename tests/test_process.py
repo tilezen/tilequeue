@@ -29,9 +29,10 @@ class TestProcess(unittest.TestCase):
             return dict(foo='bar', min_zoom=0)
 
         output_calc_mapping = dict(fake_layer=_test_output_fn)
+        all_coords = [coord] + cut_coords
         tiles, extra = process_coord(
             coord, coord.zoom, feature_layers, post_process_data, formats,
-            unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
+            unpadded_bounds, all_coords, buffer_cfg, output_calc_mapping)
 
         return tiles
 
@@ -57,7 +58,7 @@ class TestProcess(unittest.TestCase):
         post_process_data = {}
         formats = []
         unpadded_bounds = coord_to_mercator_bounds(coord)
-        cut_coords = []
+        cut_coords = [coord]
         buffer_cfg = {}
 
         def _test_output_fn(*args):
@@ -161,6 +162,48 @@ class TestProcess(unittest.TestCase):
         self.assertEqual(1, len(tile_1['features']))
         self.assertEqual([90.0, 40.0],
                          tile_1['features'][0]['geometry']['coordinates'])
+
+    def test_cut_coord_exclusive(self):
+        # test that cut coords are the only ones in the response, and that
+        # the coordinate itself can be omitted.
+        from tilequeue.process import process_coord
+        from tilequeue.tile import coord_to_mercator_bounds
+        from tilequeue.format import json_format
+
+        coord = Coordinate(0, 0, 0)
+        db_features = []
+        cut_coords = [
+            Coordinate(zoom=1, column=0, row=0),
+            Coordinate(zoom=1, column=1, row=0),
+            Coordinate(zoom=1, column=0, row=1),
+        ]
+        buffer_cfg = {}
+        post_process_data = {}
+
+        unpadded_bounds = coord_to_mercator_bounds(coord)
+        feature_layers = [dict(
+            layer_datum=dict(
+                name='fake_layer',
+                geometry_types=['Point'],
+                transform_fn_names=[],
+                sort_fn_name=None,
+                is_clipped=False
+            ),
+            padded_bounds=dict(point=unpadded_bounds),
+            features=db_features
+        )]
+        formats = [json_format]
+
+        def _test_output_fn(*args):
+            return dict(foo='bar', min_zoom=0)
+
+        output_calc_mapping = dict(fake_layer=_test_output_fn)
+        tiles, extra = process_coord(
+            coord, coord.zoom, feature_layers, post_process_data, formats,
+            unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
+
+        self.assertEqual(len(cut_coords), len(tiles))
+        self.assertNotIn(coord, [t['coord'] for t in tiles])
 
 
 def _only_zoom(ctx, zoom):

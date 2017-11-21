@@ -126,6 +126,45 @@ class TestTileGeneration(unittest.TestCase):
         for actual_child, exp_child in zip(actual, exp):
             self.assertEqual(exp_child, actual_child)
 
+    def test_tiles_children_subrange(self):
+        from tilequeue.tile import coord_children_subrange as subrange
+        from tilequeue.tile import coord_children
+
+        def _c(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        # for any given coord, the subrange from and until the tile's zoom
+        # should just return the coord itself.
+        for coord in (_c(0, 0, 0), _c(1, 1, 1), _c(10, 163, 395)):
+            z = coord.zoom
+            self.assertEqual(set([coord]), set(subrange(coord, z, z)))
+
+        # when until zoom > coordinate zoom, it should generate the whole
+        # pyramid.
+        expect = set([_c(0, 0, 0)])
+        zoom = 0
+        while zoom < 5:
+            self.assertEqual(expect, set(subrange(_c(0, 0, 0), 0, zoom)))
+            children = []
+            for c in expect:
+                children.extend(coord_children(c))
+            expect |= set(children)
+            zoom += 1
+
+        # when both start and until are >, then should generate a slice of
+        # the pyramid.
+        for z in range(0, 5):
+            max_coord = 2 ** z
+            all_tiles = set(_c(z, x, y)
+                            for x in range(0, max_coord)
+                            for y in range(0, max_coord))
+
+            self.assertEqual(all_tiles, set(subrange(_c(0, 0, 0), z, z)))
+
+        # when start > until, then nothing is generated
+        for z in range(0, 5):
+            self.assertEqual(set(), set(subrange(_c(0, 0, 0), z+1, z)))
+
     def test_tiles_low_zooms(self):
         from tilequeue.tile import tile_generator_for_single_bounds
         bounds = -1.115, 50.941, 0.895, 51.984

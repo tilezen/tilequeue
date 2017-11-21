@@ -200,13 +200,13 @@ wof:
     user: osm
     password:
 
-# A metatile is a .zip package of multiple tiles. Storing multiple, related 
+# A metatile is a .zip package of multiple tiles. Storing multiple, related
 # tiles together can be beneficial by reducing the number of writes to disk when
 # storing and loading them.
 metatile:
   # The metatile size setting has the following effects:
   #
-  #   - null or omitted entry: Individual tiles, one for each format, will be 
+  #   - null or omitted entry: Individual tiles, one for each format, will be
   #     saved on disk. This can be a good choice for local development use, or to 
   #     save files to be served directly from storage (i.e: without tapalcatl).
   #
@@ -218,7 +218,18 @@ metatile:
   #     area will be saved together, with all their formats. The filename of the
   #     tile will be based on the coordinate of the "512px" tile, but the zoom
   #     level used for styling will be one higher; that of the "256px" tiles.
+  #
+  #   - 4: A "1024px" tile, 4 "512px" tiles and 16 "256px" tiles covering the
+  #     same area.
   size: null
+
+  # if specified, the zoom levels to leave off the top of the metatile pyramid.
+  # for example, if the metatile size is specified at 4 and the start-zoom as 1,
+  # then the "1024px" tile will be omitted. if start-zoom is 2, then the
+  # "1024px" tile and all four "512px" tiles will be omitted.
+  #
+  # optional: defaults to zero.
+  start-zoom: 0
 
 # Configuration for where to store the tiles of interest set
 toi-store:
