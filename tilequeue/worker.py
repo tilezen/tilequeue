@@ -347,7 +347,7 @@ class DataFetch(object):
         # and its four children to cut from it. at zoom 15, this may
         # also include a whole bunch of other children below the max
         # zoom.
-        cut_coords = list()
+        cut_coords = [coord]
         if nominal_zoom > coord.zoom:
             cut_coords.extend(coord_children_range(coord, nominal_zoom))
 

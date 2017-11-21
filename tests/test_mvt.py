@@ -32,7 +32,7 @@ class MapboxVectorTileTest(unittest.TestCase):
 
         post_process_data = {}
         buffer_cfg = {}
-        cut_coords = list()
+        cut_coords = [coord]
         if nominal_zoom > coord.zoom:
             cut_coords.extend(coord_children_range(coord, nominal_zoom))
 
@@ -44,8 +44,8 @@ class MapboxVectorTileTest(unittest.TestCase):
             coord, nominal_zoom, feature_layers, post_process_data, formats,
             unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping)
 
-        self.assertEqual(len(cut_coords) + 1, len(tiles))
-        return tiles, ([coord] + cut_coords)
+        self.assertEqual(len(cut_coords), len(tiles))
+        return tiles, cut_coords
 
     def _check_metatile(self, metatile_size):
         from mock import patch

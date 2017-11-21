@@ -449,21 +449,24 @@ def format_coord(
         coord, nominal_zoom, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale):
 
-    coord_formatted_tiles = _format_feature_layers(
-        processed_feature_layers, coord, nominal_zoom, formats,
-        unpadded_bounds, _calculate_scale(scale, coord, nominal_zoom),
-        buffer_cfg)
+    formatted_tiles = []
+    for cut_coord in cut_coords:
+        cut_scale = _calculate_scale(scale, coord, nominal_zoom)
 
-    children_formatted_tiles = []
-    if cut_coords:
-        for cut_coord in cut_coords:
-            child_tiles = _cut_child_tiles(
+        if cut_coord == coord:
+            # no need for cutting if this is the original tile.
+            tiles = _format_feature_layers(
+                processed_feature_layers, coord, nominal_zoom, formats,
+                unpadded_bounds, cut_scale, buffer_cfg)
+
+        else:
+            tiles = _cut_child_tiles(
                 processed_feature_layers, cut_coord, nominal_zoom, formats,
                 _calculate_scale(scale, cut_coord, nominal_zoom), buffer_cfg)
-            children_formatted_tiles.extend(child_tiles)
 
-    all_formatted_tiles = coord_formatted_tiles + children_formatted_tiles
-    return all_formatted_tiles, extra_data
+        formatted_tiles.extend(tiles)
+
+    return formatted_tiles, extra_data
 
 
 # given a coord and the raw feature layers results from the database,
@@ -479,6 +482,10 @@ def format_coord(
 # extent of the tile (where applicable - some formats don't care) for the
 # nominal zoom. this means that there will be more pixels for tiles at
 # other zooms!
+#
+# note that the coordinate `coord` is not implicitly rendered and formatted,
+# it must be included in `cut_coords` if a formatted version is wanted in
+# the output.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
                   output_calc_spec, scale=4096):
