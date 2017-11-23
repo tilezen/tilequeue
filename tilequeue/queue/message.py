@@ -1,5 +1,4 @@
 from collections import namedtuple
-from tilequeue.metatile import common_parent
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
 import threading
