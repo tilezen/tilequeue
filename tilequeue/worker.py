@@ -114,7 +114,7 @@ def _ack_coord_handle(
             stacktrace = format_stacktrace_one_line()
             tile_proc_logger.error_job_done(
                 'tile_queue.job_done', e, stacktrace,
-                queue_handle, coord, parent_tile,
+                coord, parent_tile,
             )
             return queue_handle, e
 
@@ -132,12 +132,12 @@ def _ack_coord_handle(
             tile_queue.job_progress(queue_handle.handle)
         except Exception as e:
             stacktrace = format_stacktrace_one_line()
-            err_details = None
+            err_details = {"queue_handle": queue_handle.handle}
             if isinstance(e, JobProgressException):
                 err_details = e.err_details
             tile_proc_logger.error_job_progress(
                 'tile_queue.job_progress', e, stacktrace,
-                queue_handle, coord, parent_tile, err_details,
+                coord, parent_tile, err_details,
             )
             return queue_handle, e
 
