@@ -111,22 +111,39 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         msg_tracker_logger = MagicMock()
         self.tracker = MultipleMessagesPerCoordTracker(msg_tracker_logger)
 
+    def test_track_and_done_invalid_coord_handle(self):
+        with self.assertRaises(ValueError):
+            self.tracker.done('bogus-coord-handle')
+
     def test_track_and_done(self):
         from tilequeue.tile import deserialize_coord
         from tilequeue.queue.message import QueueHandle
         queue_id = 1
         queue_handle = QueueHandle(queue_id, 'handle')
         coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
+        parent_tile = deserialize_coord('1/1/1')
+        self._assert_track_done(coords, queue_handle, parent_tile)
+
+    def test_track_and_done_not_including_parent(self):
+        from tilequeue.tile import deserialize_coord
+        from tilequeue.queue.message import QueueHandle
+        queue_id = 1
+        queue_handle = QueueHandle(queue_id, 'handle')
+        coords = map(deserialize_coord, ('2/2/3', '2/2/2'))
+        parent_tile = deserialize_coord('1/1/1')
+        self._assert_track_done(coords, queue_handle, parent_tile)
+
+    def _assert_track_done(self, coords, queue_handle, expected_parent_tile):
         coord_handles = self.tracker.track(queue_handle, coords)
-        self.assertEqual(2, len(coord_handles))
+        self.assertEqual(len(coords), len(coord_handles))
 
-        with self.assertRaises(ValueError):
-            self.tracker.done('bogus-coord-handle')
+        # all intermediate coords should not result in a done message.
+        for coord in coord_handles[:-1]:
+            track_result = self.tracker.done(coord)
+            self.assertFalse(track_result.all_done)
 
-        track_result = self.tracker.done(coord_handles[0])
-        self.assertFalse(track_result.all_done)
-
-        track_result = self.tracker.done(coord_handles[1])
+        # final coord should complete the tracking
+        track_result = self.tracker.done(coord_handles[-1])
         self.assertIs(queue_handle, track_result.queue_handle)
         self.assertTrue(track_result.all_done)
-        self.assertEqual(deserialize_coord('1/1/1'), track_result.parent_tile)
+        self.assertEqual(expected_parent_tile, track_result.parent_tile)
