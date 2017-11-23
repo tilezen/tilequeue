@@ -250,11 +250,18 @@ class TileQueueReader(object):
 
                     all_coords_data.append(data)
 
-                coord_input_spec = all_coords_data, top_tile
-                msg = "group of %d tiles below %s" \
-                      % (len(all_coords_data), serialize_coord(top_tile))
-                if self.output(msg, coord_input_spec):
-                    break
+                if top_tile is None:
+                    # then we must have rejected all the coordinates, which
+                    # should mean that the whole tile has been ACKed and done
+                    # already. and there's nothing else to do.
+                    assert len(all_coords_data) == 0
+
+                else:
+                    coord_input_spec = all_coords_data, top_tile
+                    msg = "group of %d tiles below %s" \
+                          % (len(all_coords_data), serialize_coord(top_tile))
+                    if self.output(msg, coord_input_spec):
+                        break
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
