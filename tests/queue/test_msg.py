@@ -133,8 +133,8 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         parent_tile = deserialize_coord('1/1/1')
         self._assert_track_done(coords, queue_handle, parent_tile)
 
-    def _assert_track_done(self, coords, queue_handle, expected_parent_tile):
-        coord_handles = self.tracker.track(queue_handle, coords)
+    def _assert_track_done(self, coords, queue_handle, parent_tile):
+        coord_handles = self.tracker.track(queue_handle, coords, parent_tile)
         self.assertEqual(len(coords), len(coord_handles))
 
         # all intermediate coords should not result in a done message.
@@ -146,4 +146,4 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         track_result = self.tracker.done(coord_handles[-1])
         self.assertIs(queue_handle, track_result.queue_handle)
         self.assertTrue(track_result.all_done)
-        self.assertEqual(expected_parent_tile, track_result.parent_tile)
+        self.assertEqual(parent_tile, track_result.parent_tile)

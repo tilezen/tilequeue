@@ -684,7 +684,7 @@ def tilequeue_process(cfg, peripherals):
     tile_queue_reader = TileQueueReader(
         queue_mapper, msg_marshaller, msg_tracker, tile_input_queue,
         tile_proc_logger, stats_handler, thread_tile_queue_reader_stop,
-        cfg.max_zoom)
+        cfg.max_zoom, cfg.group_by_zoom)
 
     data_fetch = DataFetch(
         feature_fetcher, tile_input_queue, sql_data_fetch_queue, io_pool,
