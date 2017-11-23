@@ -217,6 +217,12 @@ class TileQueueReader(object):
                 if not coords:
                     continue
 
+                # check for duplicate coordinates - for the message tracking to
+                # work, we assume that coordinates are unique, as we use them
+                # as keys in a dict. (plus, it doesn't make a lot of sense to
+                # render the coordinate twice in the same job anyway).
+                coords = list(set(coords))
+
                 parent_tile = self._parent(coords)
 
                 queue_handle = QueueHandle(queue_id, msg_handle.handle)

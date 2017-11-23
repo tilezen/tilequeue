@@ -147,3 +147,14 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         self.assertIs(queue_handle, track_result.queue_handle)
         self.assertTrue(track_result.all_done)
         self.assertEqual(parent_tile, track_result.parent_tile)
+
+    def test_track_and_done_asserts_on_duplicates(self):
+        from tilequeue.tile import deserialize_coord
+        from tilequeue.queue.message import QueueHandle
+        queue_id = 1
+        queue_handle = QueueHandle(queue_id, 'handle')
+        coords = map(deserialize_coord, ('2/2/2', '2/2/2'))
+        parent_tile = deserialize_coord('1/1/1')
+
+        with self.assertRaises(AssertionError):
+            self.tracker.track(queue_handle, coords, parent_tile)
