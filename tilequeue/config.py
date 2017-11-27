@@ -130,6 +130,8 @@ class Configuration(object):
         self.tile_traffic_log_path = self._cfg(
             'toi-prune tile-traffic-log-path')
 
+        self.group_by_zoom = self.subtree('rawr group-zoom')
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml

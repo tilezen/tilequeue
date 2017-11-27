@@ -114,7 +114,7 @@ def _ack_coord_handle(
             stacktrace = format_stacktrace_one_line()
             tile_proc_logger.error_job_done(
                 'tile_queue.job_done', e, stacktrace,
-                queue_handle, coord, parent_tile,
+                coord, parent_tile,
             )
             return queue_handle, e
 
@@ -132,12 +132,12 @@ def _ack_coord_handle(
             tile_queue.job_progress(queue_handle.handle)
         except Exception as e:
             stacktrace = format_stacktrace_one_line()
-            err_details = None
+            err_details = {"queue_handle": queue_handle.handle}
             if isinstance(e, JobProgressException):
                 err_details = e.err_details
             tile_proc_logger.error_job_progress(
                 'tile_queue.job_progress', e, stacktrace,
-                queue_handle, coord, parent_tile, err_details,
+                coord, parent_tile, err_details,
             )
             return queue_handle, e
 
@@ -165,7 +165,7 @@ class TileQueueReader(object):
 
     def __init__(
             self, queue_mapper, msg_marshaller, msg_tracker, output_queue,
-            tile_proc_logger, stats_handler, stop, max_zoom):
+            tile_proc_logger, stats_handler, stop, max_zoom, group_by_zoom):
         self.queue_mapper = queue_mapper
         self.msg_marshaller = msg_marshaller
         self.msg_tracker = msg_tracker
@@ -174,6 +174,7 @@ class TileQueueReader(object):
         self.stats_handler = stats_handler
         self.stop = stop
         self.max_zoom = max_zoom
+        self.group_by_zoom = group_by_zoom
 
     def __call__(self):
         while not self.stop.is_set():
@@ -210,13 +211,25 @@ class TileQueueReader(object):
                 )
 
                 coords = self.msg_marshaller.unmarshall(msg_handle.payload)
+                # it seems unlikely, but just in case there are no coordinates
+                # in the payload, there's nothing to do, so skip to the next
+                # payload.
+                if not coords:
+                    continue
+
+                # check for duplicate coordinates - for the message tracking to
+                # work, we assume that coordinates are unique, as we use them
+                # as keys in a dict. (plus, it doesn't make a lot of sense to
+                # render the coordinate twice in the same job anyway).
+                coords = list(set(coords))
+
+                parent_tile = self._parent(coords)
 
                 queue_handle = QueueHandle(queue_id, msg_handle.handle)
                 coord_handles = self.msg_tracker.track(
-                    queue_handle, coords)
+                    queue_handle, coords, parent_tile)
 
                 all_coords_data = []
-                top_tile = None
                 for coord, coord_handle in izip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
                         self._reject_coord(coord, coord_handle, timing_state)
@@ -240,21 +253,18 @@ class TileQueueReader(object):
                         coord=coord,
                     )
 
-                    # find the parent of all the tiles. this is useful to be
-                    # able to describe the job without having to list all the
-                    # tiles.
-                    if top_tile:
-                        top_tile = common_parent(top_tile, coord)
-                    else:
-                        top_tile = coord
-
                     all_coords_data.append(data)
 
-                coord_input_spec = all_coords_data, top_tile
-                msg = "group of %d tiles below %s" \
-                      % (len(all_coords_data), serialize_coord(top_tile))
-                if self.output(msg, coord_input_spec):
-                    break
+                # we might have no coordinates if we rejected all the
+                # coordinates. in which case, there's nothing to do anyway, as
+                # the _reject_coord method will have marked the job as done.
+                if all_coords_data:
+                    coord_input_spec = all_coords_data, parent_tile
+                    msg = "group of %d tiles below %s" \
+                          % (len(all_coords_data),
+                             serialize_coord(parent_tile))
+                    if self.output(msg, coord_input_spec):
+                        break
 
         for _, tile_queue in self.queue_mapper.queues_in_priority_order():
             tile_queue.close()
@@ -279,6 +289,18 @@ class TileQueueReader(object):
         _ack_coord_handle(
             coord, coord_handle, self.queue_mapper, self.msg_tracker,
             timing_state, self.tile_proc_logger, self.stats_handler)
+
+    def _parent(self, coords):
+        if len(coords) == 0:
+            return None
+        parent = reduce(common_parent, coords)
+        if self.group_by_zoom is not None:
+            if parent.zoom < self.group_by_zoom:
+                assert len(coords) == 1, "Expect either a single tile or a " \
+                    "pyramid at or below group zoom."
+            else:
+                parent = parent.zoomTo(self.group_by_zoom).container()
+        return parent
 
 
 class DataFetch(object):

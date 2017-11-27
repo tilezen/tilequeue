@@ -1,5 +1,4 @@
 from collections import namedtuple
-from tilequeue.metatile import common_parent
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
 import threading
@@ -112,9 +111,12 @@ class MultipleMessagesPerCoordTracker(object):
         # running out of memory if a coordinate never completes
         self.lock = threading.Lock()
 
-    def track(self, queue_handle, coords):
-        parent_tile = None
-        is_pyramid = False
+    def track(self, queue_handle, coords, parent_tile=None):
+        is_pyramid = len(coords) > 1
+        if is_pyramid:
+            assert parent_tile is not None, "parent tile was not provided, " \
+                "but is required for tracking pyramids of tiles."
+
         with self.lock:
             # rely on the queue handle token as the mapping key
             queue_handle_id = queue_handle.handle
@@ -123,15 +125,9 @@ class MultipleMessagesPerCoordTracker(object):
             coord_ids = set()
             coord_handles = []
             for coord in coords:
-
-                if parent_tile is None:
-                    parent_tile = coord
-                else:
-                    parent_tile = common_parent(parent_tile, coord)
-                    is_pyramid = True
-
                 coord_id = (int(coord.zoom), int(coord.column), int(coord.row))
                 coord_handle = (coord_id, queue_handle_id)
+                assert coord_id not in coord_ids
                 coord_ids.add(coord_id)
                 coord_handles.append(coord_handle)
 
@@ -149,22 +145,20 @@ class MultipleMessagesPerCoordTracker(object):
 
         with self.lock:
             coord_id, queue_handle_id = coord_handle
+
             coord_ids = self.coord_ids_map.get(queue_handle_id)
-            if coord_ids is None:
-                self.msg_tracker_logger.unknown_queue_handle_id(
-                    coord_id, queue_handle_id)
-
-            else:
-                if coord_id not in coord_ids:
-                    self.msg_tracker_logger.unknown_coord_id(
-                        coord_id, queue_handle_id)
-                else:
-                    coord_ids.remove(coord_id)
-
             queue_handle = self.queue_handle_map.get(queue_handle_id)
-            if queue_handle is None:
+
+            if queue_handle is None or coord_ids is None:
                 self.msg_tracker_logger.unknown_queue_handle_id(
                     coord_id, queue_handle_id)
+                return MessageDoneResult(None, False, None)
+
+            if coord_id not in coord_ids:
+                self.msg_tracker_logger.unknown_coord_id(
+                    coord_id, queue_handle_id)
+            else:
+                coord_ids.remove(coord_id)
 
             if not coord_ids:
                 # we're done with all coordinates for the queue message
@@ -176,7 +170,7 @@ class MultipleMessagesPerCoordTracker(object):
                     del self.coord_ids_map[queue_handle_id]
                 except KeyError:
                     pass
-                all_done = queue_handle is not None
+                all_done = True
                 parent_tile = self.pyramid_map.pop(queue_handle_id, None)
 
         return MessageDoneResult(queue_handle, all_done, parent_tile)
