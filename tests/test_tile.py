@@ -219,3 +219,24 @@ class CoordIntZoomTest(unittest.TestCase):
             exp_int = coord_marshall_int(parent_coord)
             act_int = coord_int_zoom_up(coord_int)
             self.assertEquals(exp_int, act_int)
+
+
+class TestMetatileZoom(unittest.TestCase):
+
+    def test_zoom_from_size(self):
+        from tilequeue.tile import metatile_zoom_from_size as func
+        self.assertEqual(0, func(None))
+        self.assertEqual(0, func(1))
+        self.assertEqual(1, func(2))
+        self.assertEqual(2, func(4))
+
+        with self.assertRaises(AssertionError):
+            func(3)
+
+    def test_zoom_from_str(self):
+        from tilequeue.tile import metatile_zoom_from_str as func
+        self.assertEqual(0, func(None))
+        self.assertEqual(0, func(""))
+        self.assertEqual(0, func("256"))
+        self.assertEqual(1, func("512"))
+        self.assertEqual(2, func("1024"))

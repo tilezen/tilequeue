@@ -377,3 +377,17 @@ def metatile_zoom_from_size(metatile_size):
             "Metatile size must be a power of two."
 
     return metatile_zoom
+
+
+def metatile_zoom_from_str(tile_size):
+    if not tile_size:
+        # missing tile size indicates the default, which is currently 256px.
+        # this is a zoom offset of 0.
+        return 0
+
+    # calculate the number of standard 256px tiles across this tile is.
+    size = int(tile_size) / 256
+
+    # and convert that to the zoom level offset that would create a metatile
+    # of that size.
+    return metatile_zoom_from_size(size)
