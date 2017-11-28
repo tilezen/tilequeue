@@ -25,6 +25,7 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
+from tilequeue.tile import metatile_zoom_from_str
 from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
@@ -1218,14 +1219,37 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
-                coord_int = coord_marshall_int(coord)
 
-                if not tile_size or tile_size == '256':
-                    # "uplift" a tile that is not explicitly a '512' size tile
-                    coord_int = coord_int_zoom_up(coord_int)
+                try:
+                    tile_size_as_zoom = metatile_zoom_from_str(tile_size)
+                    # tile size as zoom > cfg.metatile_zoom would mean that
+                    # someone requested a tile larger than the system is
+                    # currently configured to support (might have been a
+                    # previous configuration).
+                    assert tile_size_as_zoom <= cfg.metatile_zoom
+                    tile_zoom_offset = tile_size_as_zoom - cfg.metatile_zoom
+
+                except AssertionError:
+                    # we don't want bogus data to kill the whole process, but
+                    # it's helpful to have a warning. we'll just skip the bad
+                    # row and continue.
+                    logger.warning('Tile size %r is bogus. Should be None, '
+                                   '256, 512 or 1024' % (tile_size,))
+                    continue
+
+                if tile_zoom_offset:
+                    # if the tile is not the same size as the metatile, then we
+                    # need to offset the zoom to make sure we enqueue the job
+                    # which results in this coordinate being rendered.
+                    coord = coord.zoomBy(tile_zoom_offset).container()
+
+                # just in case we fell off the end of the zoom scale.
+                if coord.zoom < 0:
+                    continue
 
                 # Sum the counts from the 256 and 512 tile requests into the
                 # slot for the 512 tile.
+                coord_int = coord_marshall_int(coord)
                 redshift_results[coord_int] += count
 
     logger.info('Fetching tiles recently requested ... done. %s found',
