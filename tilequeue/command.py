@@ -1221,8 +1221,14 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 coord = create_coord(x, y, z)
 
                 try:
-                    tile_zoom_offset = metatile_zoom_from_str(tile_size) - \
-                                       cfg.metatile_zoom
+                    tile_size_as_zoom = metatile_zoom_from_str(tile_size)
+                    # tile size as zoom > cfg.metatile_zoom would mean that
+                    # someone requested a tile larger than the system is
+                    # currently configured to support (might have been a
+                    # previous configuration).
+                    assert tile_size_as_zoom <= cfg.metatile_zoom
+                    tile_zoom_offset = tile_size_as_zoom - cfg.metatile_zoom
+
                 except AssertionError:
                     # we don't want bogus data to kill the whole process, but
                     # it's helpful to have a warning. we'll just skip the bad
@@ -1236,6 +1242,10 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     # need to offset the zoom to make sure we enqueue the job
                     # which results in this coordinate being rendered.
                     coord = coord.zoomBy(tile_zoom_offset).container()
+
+                # just in case we fell off the end of the zoom scale.
+                if coord.zoom < 0:
+                    continue
 
                 # Sum the counts from the 256 and 512 tile requests into the
                 # slot for the 512 tile.
