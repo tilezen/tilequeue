@@ -396,6 +396,14 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
+def _make_store(cfg):
+    store_cfg = cfg.yml.get('store')
+    assert store_cfg, "Store was not configured, but is necessary."
+    credentials = cfg.subtree('aws credentials')
+    store = make_store(store_cfg, credentials=credentials)
+    return store
+
+
 def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
 
     next_coord_ints = coord_ints
@@ -606,8 +614,7 @@ def tilequeue_process(cfg, peripherals):
 
     formats = lookup_formats(cfg.output_formats)
 
-    store = make_store(cfg.yml['store'],
-                       credentials=cfg.subtree('aws credentials'))
+    store = _make_store(cfg)
 
     assert cfg.postgresql_conn_info, 'Missing postgresql connection info'
 
@@ -1345,7 +1352,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 len(toi_to_remove))
     peripherals.stats.gauge('gardener.removed', len(toi_to_remove))
 
-    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    store = _make_store(cfg)
     if not toi_to_remove:
         logger.info('Skipping TOI remove step because there are '
                     'no tiles to remove')
@@ -1514,7 +1521,7 @@ def tilequeue_stuck_tiles(cfg, peripherals):
     """
     Check which files exist on s3 but are not in toi.
     """
-    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    store = _make_store(cfg)
     format = lookup_format_by_extension('zip')
     layer = 'all'
 
@@ -1533,7 +1540,7 @@ def tilequeue_delete_stuck_tiles(cfg, peripherals):
     format = lookup_format_by_extension('zip')
     layer = 'all'
 
-    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    store = _make_store(cfg)
 
     logger.info('Removing tiles from S3 ...')
     total_removed = 0
@@ -1572,7 +1579,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
     # TODO: make these configurable!
     tile_format = lookup_format_by_extension('zip')
     tile_layer = 'all'
-    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    store = _make_store(cfg)
 
     for coord_str in args.coords:
         coord = deserialize_coord(coord_str)
