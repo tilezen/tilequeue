@@ -1798,41 +1798,6 @@ def tilequeue_rawr_process(cfg, peripherals):
         s3_client = boto3.client('s3', region_name=sink_region)
         rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
-    rawr_intersect_yaml = rawr_yaml.get('intersect')
-    assert rawr_intersect_yaml, 'Missing rawr intersect config'
-    intersect_type = rawr_intersect_yaml.get('type')
-    assert intersect_type, 'Missing rawr intersect type'
-
-    if intersect_type == 'toi':
-        toi_yaml = cfg.yml.get('toi-store')
-        toi_type = toi_yaml.get('type')
-        assert toi_type == 's3', 'Rawr toi intersector requires toi on s3'
-        toi_s3_yaml = toi_yaml.get('s3')
-        assert toi_s3_yaml, 'Missing toi-store s3 config'
-        toi_bucket = toi_s3_yaml.get('bucket')
-        toi_key = toi_s3_yaml.get('key')
-        toi_region = toi_s3_yaml.get('region')
-        assert toi_bucket, 'Missing toi-store s3 bucket'
-        assert toi_key, 'Missing toi-store s3 key'
-        assert toi_region, 'Missing toi-store s3 region'
-        s3_client = boto3.client('s3', region_name=toi_region)
-        from tilequeue.rawr import RawrToiIntersector
-        rawr_toi_intersector = RawrToiIntersector(
-            s3_client, toi_bucket, toi_key)
-    elif intersect_type == 'none':
-        from tilequeue.rawr import EmptyToiIntersector
-        rawr_toi_intersector = EmptyToiIntersector()
-    elif intersect_type == 'all':
-        from tilequeue.rawr import RawrAllIntersector
-        rawr_toi_intersector = RawrAllIntersector()
-    elif intersect_type == 'all-parents':
-        from tilequeue.rawr import RawrAllWithParentsIntersector
-        zoom_stop_inclusive = 0
-        rawr_toi_intersector = \
-            RawrAllWithParentsIntersector(zoom_stop_inclusive)
-    else:
-        assert 0, 'Invalid rawr intersect type: %s' % intersect_type
-
     logger = make_logger(cfg, 'rawr_process')
     rawr_source = parse_sources(rawr_source_list)
     rawr_formatter = Msgpack()
@@ -1841,37 +1806,28 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_proc_logger = JsonRawrProcessingLogger(logger)
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            peripherals.queue_writer, rawr_toi_intersector, stats_handler,
+            peripherals.queue_writer, stats_handler,
             rawr_proc_logger, conn_ctx)
     rawr_pipeline()
 
 
 def tilequeue_rawr_seed_toi(cfg, peripherals):
     """command to read the toi and enqueue the corresponding rawr tiles"""
-    from tilequeue.stats import RawrTileEnqueueStatsHandler
     from tilequeue.rawr import make_rawr_enqueuer_from_cfg
+    from tilequeue.rawr import RawrAllIntersector
+    from tilequeue.stats import RawrTileEnqueueStatsHandler
 
     logger = make_logger(cfg, 'rawr_seed')
     stats_handler = RawrTileEnqueueStatsHandler(peripherals.stats)
+    rawr_toi_intersector = RawrAllIntersector()
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
-        cfg, logger, stats_handler, peripherals.msg_marshaller)
+        cfg, logger, stats_handler, peripherals.msg_marshaller,
+        rawr_toi_intersector)
 
     tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
-    # high zoom level coordinates get enqueued onto rawr queue
-    # low zoom get enqueued for tile processing directly
-    lo_zoom = []
-    hi_zoom = []
-    for coord_int in tiles_of_interest:
-        coord = coord_unmarshall_int(coord_int)
-        if coord.zoom >= rawr_enqueuer.group_by_zoom:
-            hi_zoom.append(coord)
-        else:
-            lo_zoom.append(coord)
-
-    rawr_enqueuer(hi_zoom)
-    peripherals.queue_writer.enqueue_batch(lo_zoom)
-    logger.info('%d coords enqueued for rawr tile processing', len(hi_zoom))
-    logger.info('%d coords enqueued for tilequeue processing', len(lo_zoom))
+    coords = map(coord_unmarshall_int, tiles_of_interest)
+    rawr_enqueuer(coords)
+    logger.info('%d coords enqueued', len(coords))
 
 
 Peripherals = namedtuple(

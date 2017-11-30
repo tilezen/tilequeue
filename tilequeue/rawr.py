@@ -95,21 +95,33 @@ class SqsQueue(object):
 class RawrEnqueuer(object):
     """enqueue coords from expiry grouped by parent zoom"""
 
-    def __init__(self, rawr_queue, msg_marshaller, group_by_zoom, logger,
-                 stats_handler):
+    def __init__(
+            self, rawr_queue, toi_intersector, msg_marshaller, group_by_zoom,
+            logger, stats_handler):
         self.rawr_queue = rawr_queue
+        self.toi_intersector = toi_intersector
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.logger = logger
         self.stats_handler = stats_handler
 
     def __call__(self, coords):
+        # this will produce the intersected list of coordinates with the toi,
+        # all the way to low zoom level tiles
+        intersected_coords, intersect_metrics, timing = \
+                self.toi_intersector(coords)
+
+        low_zoom_coord_ints = set()
+
         grouped_by_zoom = defaultdict(list)
-        for coord in coords:
-            assert self.group_by_zoom <= coord.zoom
-            parent = coord.zoomTo(self.group_by_zoom).container()
-            parent_coord_int = coord_marshall_int(parent)
-            grouped_by_zoom[parent_coord_int].append(coord)
+        for coord in intersected_coords:
+            if self.group_by_zoom <= coord.zoom:
+                parent = coord.zoomTo(self.group_by_zoom).container()
+                parent_coord_int = coord_marshall_int(parent)
+                grouped_by_zoom[parent_coord_int].append(coord)
+            else:
+                coord_int = coord_marshall_int(coord)
+                low_zoom_coord_ints.add(coord_int)
 
         n_coords = 0
         payloads = []
@@ -117,6 +129,16 @@ class RawrEnqueuer(object):
             payload = self.msg_marshaller.marshall(coords)
             payloads.append(payload)
             n_coords += len(coords)
+
+        # add all low zooms into a single payload
+        low_zoom_coords = []
+        for coord_int in low_zoom_coord_ints:
+            coord = coord_unmarshall_int(coord_int)
+            low_zoom_coords.append(coord)
+        if low_zoom_coords:
+            low_zoom_payload = self.msg_marshaller.marshall(low_zoom_coords)
+            payloads.append(low_zoom_payload)
+
         n_payloads = len(payloads)
 
         rawr_queue_batch_size = 10
@@ -128,10 +150,14 @@ class RawrEnqueuer(object):
         if self.logger:
             self.logger.info(
                 'Rawr tiles enqueued: '
-                'coords(%d) payloads(%d) enqueue_calls(%d)' %
-                (n_coords, n_payloads, n_msgs_sent))
+                'coords(%d) payloads(%d) enqueue_calls(%d) '
+                'toi(%d) hits(%d) misses(%d)' %
+                (n_coords, n_payloads, n_msgs_sent,
+                 intersect_metrics['n_toi'], intersect_metrics['hits'],
+                 intersect_metrics['misses']))
 
-        self.stats_handler(n_coords, n_payloads, n_msgs_sent)
+        self.stats_handler(n_coords, n_payloads, n_msgs_sent,
+                           intersect_metrics, timing)
 
 
 def common_parent(coords, parent_zoom):
@@ -235,15 +261,16 @@ class RawrToiIntersector(object):
 
     def __call__(self, coords):
         timing = {}
-        with time_block(timing, 'fetch'):
-            toi, is_toi_cached = self.tiles_of_interest()
-        with time_block(timing, 'intersect'):
-            coord_ints = convert_to_coord_ints(coords)
-            intersected_coord_ints, intersect_metrics = \
-                explode_and_intersect(coord_ints, toi)
-            coords = map(coord_unmarshall_int, intersected_coord_ints)
-        intersect_metrics['cached'] = is_toi_cached
-        return coords, intersect_metrics,  timing
+        with time_block(timing, 'total'):
+            with time_block(timing, 'fetch'):
+                toi, is_toi_cached = self.tiles_of_interest()
+            with time_block(timing, 'intersect'):
+                coord_ints = convert_to_coord_ints(coords)
+                intersected_coord_ints, intersect_metrics = \
+                    explode_and_intersect(coord_ints, toi)
+                coords = map(coord_unmarshall_int, intersected_coord_ints)
+            intersect_metrics['cached'] = is_toi_cached
+        return coords, intersect_metrics, timing
 
 
 class EmptyToiIntersector(object):
@@ -336,14 +363,12 @@ class RawrTileGenerationPipeline(object):
 
     def __init__(
             self, rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            queue_writer, rawr_toi_intersector, stats_handler,
-            rawr_proc_logger, conn_ctx):
+            queue_writer, stats_handler, rawr_proc_logger, conn_ctx):
         self.rawr_queue = rawr_queue
         self.msg_marshaller = msg_marshaller
         self.group_by_zoom = group_by_zoom
         self.rawr_gen = rawr_gen
         self.queue_writer = queue_writer
-        self.rawr_toi_intersector = rawr_toi_intersector
         self.stats_handler = stats_handler
         self.rawr_proc_logger = rawr_proc_logger
         self.conn_ctx = conn_ctx
@@ -377,54 +402,59 @@ class RawrTileGenerationPipeline(object):
                 self.log_exception(e, 'unmarshall payload')
                 continue
 
-            try:
-                parent = common_parent(coords, self.group_by_zoom)
-            except Exception as e:
-                self.log_exception(e, 'find parent')
-                continue
+            # split coordinates into group by zoom and higher and low zoom
+            # the message payload is either coordinates that are at group by
+            # zoom and higher, or all below the group by zoom
+            is_low_zoom = False
+            did_rawr_tile_gen = False
+            for coord in coords:
+                if coord.zoom < self.group_by_zoom:
+                    is_low_zoom = True
+                else:
+                    assert not is_low_zoom, \
+                        'Mix of low/high zoom coords in payload'
 
-            try:
-                rawr_tile_coord = convert_coord_object(parent)
-            except Exception as e:
-                self.log_exception(e, 'convert coord', parent)
-                continue
+            # check if we need to generate the rawr tile
+            # proceed directly to enqueueing the coordinates if not
+            if not is_low_zoom:
+                did_rawr_tile_gen = True
+                try:
+                    parent = common_parent(coords, self.group_by_zoom)
+                except Exception as e:
+                    self.log_exception(e, 'find parent')
+                    continue
 
-            try:
-                rawr_gen_timing = {}
-                with time_block(rawr_gen_timing, 'total'):
-                    # grab connection
-                    with self.conn_ctx() as conn:
-                        # commit transaction
-                        with conn as conn:
-                            # cleanup cursor resources
-                            with conn.cursor() as cur:
-                                table_reader = TableReader(cur)
+                try:
+                    rawr_tile_coord = convert_coord_object(parent)
+                except Exception as e:
+                    self.log_exception(e, 'convert coord', parent)
+                    continue
 
-                                rawr_gen_specific_timing = self.rawr_gen(
-                                    table_reader, rawr_tile_coord)
+                try:
+                    rawr_gen_timing = {}
+                    with time_block(rawr_gen_timing, 'total'):
+                        # grab connection
+                        with self.conn_ctx() as conn:
+                            # commit transaction
+                            with conn as conn:
+                                # cleanup cursor resources
+                                with conn.cursor() as cur:
+                                    table_reader = TableReader(cur)
 
-                rawr_gen_timing.update(rawr_gen_specific_timing)
-                timing['rawr_gen'] = rawr_gen_timing
+                                    rawr_gen_specific_timing = self.rawr_gen(
+                                        table_reader, rawr_tile_coord)
 
-            except Exception as e:
-                self.log_exception(e, 'rawr tile gen', parent)
-                continue
+                    rawr_gen_timing.update(rawr_gen_specific_timing)
+                    timing['rawr_gen'] = rawr_gen_timing
 
-            try:
-                intersect_timing = {}
-                with time_block(intersect_timing, 'total'):
-                    coords_to_enqueue, intersect_metrics, int_spec_timing = \
-                        self.rawr_toi_intersector(coords)
-                intersect_timing.update(int_spec_timing)
-                timing['toi'] = intersect_timing
-            except Exception as e:
-                self.log_exception(e, 'intersect coords', parent)
-                continue
+                except Exception as e:
+                    self.log_exception(e, 'rawr tile gen', parent)
+                    continue
 
             try:
                 with time_block(timing, 'queue_write'):
                     n_enqueued, n_inflight = \
-                        self.queue_writer.enqueue_batch(coords_to_enqueue)
+                        self.queue_writer.enqueue_batch(coords)
             except Exception as e:
                 self.log_exception(e, 'queue write', parent)
                 continue
@@ -438,14 +468,14 @@ class RawrTileGenerationPipeline(object):
 
             try:
                 self.rawr_proc_logger.processed(
-                    intersect_metrics, n_enqueued, n_inflight, timing, parent)
+                    n_enqueued, n_inflight, did_rawr_tile_gen, timing, parent)
             except Exception as e:
                 self.log_exception(e, 'log', parent)
                 continue
 
             try:
                 self.stats_handler(
-                    intersect_metrics, n_enqueued, n_inflight, timing)
+                    n_enqueued, n_inflight, did_rawr_tile_gen, timing)
             except Exception as e:
                 self.log_exception(e, 'stats', parent)
 
@@ -496,10 +526,12 @@ def make_rawr_s3_path(tile, prefix, suffix):
     return path_with_hash
 
 
-def make_rawr_enqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
-                       stats_handler):
-    return RawrEnqueuer(rawr_queue, msg_marshaller, group_by_zoom, logger,
-                        stats_handler)
+def make_rawr_enqueuer(
+        rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
+        stats_handler):
+    return RawrEnqueuer(
+            rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
+            stats_handler)
 
 
 class RawrS3Sink(object):
@@ -675,7 +707,8 @@ def make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller):
     return rawr_queue
 
 
-def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller):
+def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller,
+                                rawr_toi_intersector=None):
     from tilequeue.rawr import make_rawr_enqueuer
 
     rawr_yaml = cfg.yml.get('rawr')
@@ -688,5 +721,43 @@ def make_rawr_enqueuer_from_cfg(cfg, logger, stats_handler, msg_marshaller):
     assert rawr_queue_yaml, 'Missing rawr queue config'
     rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller)
 
+    rawr_intersect_yaml = rawr_yaml.get('intersect')
+    assert rawr_intersect_yaml, 'Missing rawr intersect config'
+    intersect_type = rawr_intersect_yaml.get('type')
+    assert intersect_type, 'Missing rawr intersect type'
+
+    if rawr_toi_intersector is None:
+        if intersect_type == 'toi':
+            toi_yaml = cfg.yml.get('toi-store')
+            toi_type = toi_yaml.get('type')
+            assert toi_type == 's3', 'Rawr toi intersector requires toi on s3'
+            toi_s3_yaml = toi_yaml.get('s3')
+            assert toi_s3_yaml, 'Missing toi-store s3 config'
+            toi_bucket = toi_s3_yaml.get('bucket')
+            toi_key = toi_s3_yaml.get('key')
+            toi_region = toi_s3_yaml.get('region')
+            assert toi_bucket, 'Missing toi-store s3 bucket'
+            assert toi_key, 'Missing toi-store s3 key'
+            assert toi_region, 'Missing toi-store s3 region'
+            import boto3
+            s3_client = boto3.client('s3', region_name=toi_region)
+            from tilequeue.rawr import RawrToiIntersector
+            rawr_toi_intersector = RawrToiIntersector(
+                s3_client, toi_bucket, toi_key)
+        elif intersect_type == 'none':
+            from tilequeue.rawr import EmptyToiIntersector
+            rawr_toi_intersector = EmptyToiIntersector()
+        elif intersect_type == 'all':
+            from tilequeue.rawr import RawrAllIntersector
+            rawr_toi_intersector = RawrAllIntersector()
+        elif intersect_type == 'all-parents':
+            from tilequeue.rawr import RawrAllWithParentsIntersector
+            zoom_stop_inclusive = 0
+            rawr_toi_intersector = \
+                RawrAllWithParentsIntersector(zoom_stop_inclusive)
+        else:
+            assert 0, 'Invalid rawr intersect type: %s' % intersect_type
+
     return make_rawr_enqueuer(
-        rawr_queue, msg_marshaller, group_by_zoom, logger, stats_handler)
+        rawr_queue, rawr_toi_intersector, msg_marshaller, group_by_zoom,
+        logger, stats_handler)

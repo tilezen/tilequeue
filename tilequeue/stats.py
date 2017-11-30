@@ -33,16 +33,41 @@ class TileProcessingStatsHandler(object):
         self.stats.incr('process.errors.process', 1)
 
 
+def emit_time_dict(pipe, timing, prefix):
+    for timing_label, value in timing.items():
+        metric_name = '%s.%s' % (prefix, timing_label)
+        if isinstance(value, dict):
+            emit_time_dict(pipe, value, metric_name)
+        else:
+            pipe.timing(metric_name, value)
+
+
 class RawrTileEnqueueStatsHandler(object):
 
     def __init__(self, stats):
         self.stats = stats
 
-    def __call__(self, n_coords, n_payloads, n_msgs_sent):
+    def __call__(self, n_coords, n_payloads, n_msgs_sent,
+                 intersect_metrics, timing):
+
         with self.stats.pipeline() as pipe:
             pipe.gauge('rawr.enqueue.coords', n_coords)
             pipe.gauge('rawr.enqueue.groups', n_payloads)
             pipe.gauge('rawr.enqueue.calls', n_msgs_sent)
+
+            pipe.gauge('rawr.enqueue.intersect.toi',
+                       intersect_metrics['n_toi'])
+            pipe.gauge('rawr.enqueue.intersect.candidates',
+                       intersect_metrics['total'])
+            pipe.gauge('rawr.enqueue.intersect.hits',
+                       intersect_metrics['hits'])
+            pipe.gauge('rawr.enqueue.intersect.misses',
+                       intersect_metrics['misses'])
+            pipe.gauge('rawr.enqueue.intersect.cached',
+                       1 if intersect_metrics['cached'] else 0)
+
+            prefix = 'rawr.enqueue.toi.time'
+            emit_time_dict(pipe, timing, prefix)
 
 
 class RawrTilePipelineStatsHandler(object):
@@ -50,30 +75,16 @@ class RawrTilePipelineStatsHandler(object):
     def __init__(self, stats):
         self.stats = stats
 
-    def emit_time_dict(self, pipe, timing, prefix):
-        for timing_label, value in timing.items():
-            metric_name = '%s.%s' % (prefix, timing_label)
-            if isinstance(value, dict):
-                self.emit_time_dict(pipe, value, metric_name)
-            else:
-                pipe.timing(metric_name, value)
-
-    def __call__(self, intersect_metrics, n_enqueued, n_inflight, timing):
+    def __call__(self, n_enqueued, n_inflight, did_rawr_tile_gen, timing):
         with self.stats.pipeline() as pipe:
 
             pipe.incr('rawr.process.tiles', 1)
 
-            pipe.gauge('rawr.process.intersect.toi',
-                       intersect_metrics['n_toi'])
-            pipe.gauge('rawr.process.intersect.candidates',
-                       intersect_metrics['total'])
-            pipe.gauge('rawr.process.intersect.hits',
-                       intersect_metrics['hits'])
-            pipe.gauge('rawr.process.intersect.misses',
-                       intersect_metrics['misses'])
-
             pipe.gauge('rawr.process.enqueued', n_enqueued)
             pipe.gauge('rawr.process.inflight', n_inflight)
 
+            rawr_tile_gen_val = 1 if did_rawr_tile_gen else 0
+            pipe.gauge('rawr.process.rawr_tile_gen', rawr_tile_gen_val)
+
             prefix = 'rawr.process.time'
-            self.emit_time_dict(pipe, timing, prefix)
+            emit_time_dict(pipe, timing, prefix)
