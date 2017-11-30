@@ -217,18 +217,12 @@ class JsonRawrProcessingLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.error(json_str)
 
-    def processed(self, intersect_metrics, n_enqueued, n_inflight, timing,
+    def processed(self, n_enqueued, n_inflight, did_rawr_tile_gen, timing,
                   parent_coord):
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.RAWR_PROCESS),
-            intersect=dict(
-                toi=intersect_metrics['n_toi'],
-                total=intersect_metrics['total'],
-                hits=intersect_metrics['hits'],
-                misses=intersect_metrics['misses'],
-                cached=intersect_metrics['cached'],
-            ),
+            did_rawr_tile_gen=did_rawr_tile_gen,
             enqueued=n_enqueued,
             inflight=n_inflight,
             coord=make_coord_dict(parent_coord),
