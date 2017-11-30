@@ -137,7 +137,7 @@ def make_queue_mapper(queue_mapper_yaml, tile_queue_name_map, toi):
     queue_mapper_type = queue_mapper_yaml.get('type')
     assert queue_mapper_type, 'Missing queue mapper type'
     if queue_mapper_type == 'single':
-        queue_name = queue_mapper_yaml.get('queue-name')
+        queue_name = queue_mapper_yaml.get('name')
         assert queue_name, 'Missing queue name in queue mapper config'
         tile_queue = tile_queue_name_map.get(queue_name)
         assert tile_queue, 'No queue found in mapping for %s' % queue_name
@@ -1847,6 +1847,154 @@ def make_statsd_client_from_cfg(cfg):
     return stats
 
 
+def tilequeue_batch_enqueue(cfg, peripherals):
+    logger = make_logger(cfg, 'batch_enqueue')
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    import boto3
+    client = boto3.client('batch', region_name='us-east-1')
+
+    logger.info('Batch enqueue ...')
+
+    # enqueue jobs at z7
+    # this cuts down on the number of overall jobs that we have
+    # TODO ideally this would be configurable
+    enqueue_zoom = 7
+    dim = 2 ** enqueue_zoom
+    z = enqueue_zoom
+    i = 0
+    stop = False
+    for y in xrange(dim):
+        if stop:
+            break
+        for x in xrange(dim):
+            coord_str = '%d/%d/%d' % (z, x, y)
+            job_name = 'metatile-process-%d-%d-%d' % (z, x, y)
+            job_cmd = [
+                'tilequeue', 'batch-process',
+                '--config', '/etc/tilequeue/config.yaml',
+                '--tile', coord_str,
+            ]
+            job_opts = dict(
+                # TODO - fill these out
+                jobDefinition='tile-metatile-process',
+                jobQueue='tile-metatile-queue',
+                jobName=job_name,
+                containerOverrides={
+                    'command': job_cmd,
+                },
+                retryStrategy={
+                    'attempts': 5
+                }
+            )
+            resp = client.submit_job(**job_opts)
+            assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
+                'Failed to submit job: %s' % 'JobName'
+            i += 1
+            if i % 10000 == 0:
+                print i
+            stop = True
+            break
+
+    logger.info('Batch enqueue ... done')
+
+
+def tilequeue_batch_process(cfg, args):
+    from tilequeue.metatile import make_metatiles
+
+    logger = make_logger(cfg, 'batch_process')
+
+    # TODO log json
+
+    store = _make_store(cfg)
+
+    logger.info('batch process ... start')
+
+    coord_str = args.tile
+    # TODO ideally configurable
+    z7_coord = deserialize_coord(coord_str)
+    if not z7_coord:
+        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        sys.exit(2)
+
+    assert z7_coord.zoom == 7
+
+    logger.info('batch process: %s' % coord_str)
+
+    # TODO generalize and move to tile.py?
+    def find_z10_coords_for(coord):
+        xmin = coord.column
+        xmax = coord.column
+        ymin = coord.row
+        ymax = coord.row
+        assert 10 > coord.zoom
+        for i in xrange(10 - coord.zoom):
+            xmin *= 2
+            ymin *= 2
+            xmax = xmax * 2 + 1
+            ymax = ymax * 2 + 1
+        for y in xrange(ymin, ymax+1):
+            for x in xrange(xmin, xmax+1):
+                yield Coordinate(zoom=10, column=x, row=y)
+
+    with open(cfg.query_cfg) as query_cfg_fp:
+        query_cfg = yaml.load(query_cfg_fp)
+
+    all_layer_data, layer_data, post_process_data = (
+        parse_layer_data(
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
+    io_pool = ThreadPool(len(layer_data))
+
+    data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
+
+    z10 = 10
+    nominal_zoom = z10 + cfg.metatile_zoom
+
+    # NOTE: max_zoom looks to be inclusive
+    zoom_stop = cfg.max_zoom
+    formats = lookup_formats(cfg.output_formats)
+
+    z10_coords = find_z10_coords_for(z7_coord)
+    for z10coord in z10_coords:
+        # each coord here is the z10 unit of work now
+        pyramid_coords = [z10coord]
+        pyramid_coords.extend(coord_children_range(z10coord, zoom_stop))
+        unpadded_bounds = coord_to_mercator_bounds(z10coord)
+        coord_data = [dict(coord=x) for x in pyramid_coords]
+        for fetch, coord_datum in data_fetcher.fetch_tiles(coord_data):
+            coord = coord_datum['coord']
+            source_rows = fetch(nominal_zoom, unpadded_bounds)
+            feature_layers = convert_source_data_to_feature_layers(
+                source_rows, layer_data, unpadded_bounds, coord.zoom)
+
+            cut_coords = [coord]
+            if nominal_zoom > coord.zoom:
+                cut_coords.extend(coord_children_range(coord, nominal_zoom))
+
+            formatted_tiles, extra_data = process_coord(
+                coord, coord.zoom, feature_layers, post_process_data, formats,
+                unpadded_bounds, cut_coords, cfg.buffer_cfg,
+                output_calc_mapping
+            )
+
+            tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            for tile in tiles:
+                # TODO write_tile_if_changed?
+                store.write_tile(tile['tile'], tile['coord'], tile['format'],
+                                 tile['layer'])
+
+            # TODO log?
+
+    logger.info('batch process ... done')
+
+
 def tilequeue_main(argv_args=None):
     if argv_args is None:
         argv_args = sys.argv[1:]
@@ -1871,6 +2019,7 @@ def tilequeue_main(argv_args=None):
         ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
         ('rawr-process', tilequeue_rawr_process),
         ('rawr-seed-toi', tilequeue_rawr_seed_toi),
+        ('batch-enqueue', tilequeue_batch_enqueue),
     )
 
     def _make_peripherals(cfg):
@@ -1985,6 +2134,14 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--expiry-path', required=True,
                            help='path to tile expiry file')
     subparser.set_defaults(func=tilequeue_rawr_enqueue)
+
+    subparser = subparsers.add_parser('batch-process')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--tile', required=True,
+                           help='Tile coordinate as "z/x/y". '
+                           'Needs to be z7 for now.')
+    subparser.set_defaults(func=tilequeue_batch_process)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
