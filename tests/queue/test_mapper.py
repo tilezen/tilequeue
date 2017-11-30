@@ -145,3 +145,31 @@ class MultipleQueueMapperTest(unittest.TestCase):
         coord_groups = list(qm.group([deserialize_coord('15/0/0')]))
         self.assertEquals(1, len(coord_groups))
         self.assertEquals(2, coord_groups[0].queue_id)
+
+    def test_toi_priority(self):
+        from tilequeue.queue.mapper import ZoomRangeAndZoomGroupQueueMapper
+        from tilequeue.queue.mapper import ZoomRangeQueueSpec
+        from tilequeue.tile import create_coord
+
+        specs = [
+            ZoomRangeQueueSpec(0, 10, 'q1', object(), None, in_toi=True),
+            ZoomRangeQueueSpec(0, 10, 'q2', object(), None, in_toi=False),
+        ]
+
+        coord_in_toi = create_coord(1, 1, 1)
+        coord_not_in_toi = create_coord(2, 2, 2)
+
+        class FakeToi(object):
+            def __init__(self, toi):
+                self.toi = toi
+
+            def fetch_tiles_of_interest(self):
+                return self.toi
+
+        toi = FakeToi(set([coord_in_toi]))
+        mapper = ZoomRangeAndZoomGroupQueueMapper(specs, toi=toi)
+
+        for coord in (coord_in_toi, coord_not_in_toi):
+            group = list(mapper.group([coord]))
+            self.assertEquals(1, len(group))
+            self.assertEquals(coord == coord_in_toi, group[0].queue_id == 0)

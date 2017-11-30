@@ -133,7 +133,7 @@ def make_get_queue_name_for_zoom(zoom_queue_map_cfg, queue_names):
     return result
 
 
-def make_queue_mapper(queue_mapper_yaml, tile_queue_name_map):
+def make_queue_mapper(queue_mapper_yaml, tile_queue_name_map, toi):
     queue_mapper_type = queue_mapper_yaml.get('type')
     assert queue_mapper_type, 'Missing queue mapper type'
     if queue_mapper_type == 'single':
@@ -149,13 +149,13 @@ def make_queue_mapper(queue_mapper_yaml, tile_queue_name_map):
         assert isinstance(multi_queue_map_yaml, list), \
             'Mulitple queue mapper config should be a list'
         return make_multi_queue_group_mapper_from_cfg(
-            multi_queue_map_yaml, tile_queue_name_map)
+            multi_queue_map_yaml, tile_queue_name_map, toi)
     else:
         assert 0, 'Unknown queue mapper type: %s' % queue_mapper_type
 
 
 def make_multi_queue_group_mapper_from_cfg(
-        multi_queue_map_yaml, tile_queue_name_map):
+        multi_queue_map_yaml, tile_queue_name_map, toi):
     from tilequeue.queue.mapper import ZoomRangeAndZoomGroupQueueMapper
     from tilequeue.queue.mapper import ZoomRangeQueueSpec
     zoom_range_specs = []
@@ -172,11 +172,14 @@ def make_multi_queue_group_mapper_from_cfg(
         queue_name = zoom_range_spec_yaml['queue-name']
         queue = tile_queue_name_map[queue_name]
         group_by_zoom = zoom_range_spec_yaml.get('group-by-zoom')
+        in_toi = zoom_range_spec_yaml.get('in_toi')
         assert group_by_zoom is None or isinstance(group_by_zoom, int)
         zrs = ZoomRangeQueueSpec(
-                start_zoom, end_zoom, queue_name, queue, group_by_zoom)
+            start_zoom, end_zoom, queue_name, queue, group_by_zoom,
+            in_toi)
         zoom_range_specs.append(zrs)
-    queue_mapper = ZoomRangeAndZoomGroupQueueMapper(zoom_range_specs)
+    queue_mapper = ZoomRangeAndZoomGroupQueueMapper(
+        zoom_range_specs, toi=toi)
     return queue_mapper
 
 
@@ -1934,7 +1937,7 @@ def tilequeue_main(argv_args=None):
         queue_mapper_yaml = cfg.yml.get('queue-mapping')
         assert queue_mapper_yaml, 'Missing queue-mapping configuration'
         queue_mapper = make_queue_mapper(
-                queue_mapper_yaml, tile_queue_name_map)
+                queue_mapper_yaml, tile_queue_name_map, toi_helper)
 
         msg_marshall_yaml = cfg.yml.get('message-marshall')
         assert msg_marshall_yaml, 'Missing message-marshall config'
