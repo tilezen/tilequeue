@@ -1954,9 +1954,6 @@ def tilequeue_batch_process(cfg, args):
 
     data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
-    z10 = 10
-    nominal_zoom = z10 + cfg.metatile_zoom
-
     # NOTE: max_zoom looks to be inclusive
     zoom_stop = cfg.max_zoom
     formats = lookup_formats(cfg.output_formats)
@@ -1966,10 +1963,11 @@ def tilequeue_batch_process(cfg, args):
         # each coord here is the z10 unit of work now
         pyramid_coords = [z10coord]
         pyramid_coords.extend(coord_children_range(z10coord, zoom_stop))
-        unpadded_bounds = coord_to_mercator_bounds(z10coord)
         coord_data = [dict(coord=x) for x in pyramid_coords]
         for fetch, coord_datum in data_fetcher.fetch_tiles(coord_data):
             coord = coord_datum['coord']
+            nominal_zoom = coord.zoom + cfg.metatile_zoom
+            unpadded_bounds = coord_to_mercator_bounds(coord)
             source_rows = fetch(nominal_zoom, unpadded_bounds)
             feature_layers = convert_source_data_to_feature_layers(
                 source_rows, layer_data, unpadded_bounds, coord.zoom)
