@@ -377,3 +377,12 @@ rawr:
     type: toi
 # uncomment this to use RAWR tiles rather than go direct to the database.
 #use-rawr-tiles: true
+batch:
+  # zoom level to enqueue jobs
+  queue-zoom: 7
+  # name of batch job definition
+  job-definition: <job-definition>
+  # name of batch queue to use
+  job-queue: <job-queue>
+  # optional number of retry attempts, overrides job definition value
+  retry-attempts: 5
