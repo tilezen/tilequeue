@@ -1932,13 +1932,13 @@ def tilequeue_batch_process(cfg, args):
     logger.info('batch process: %s' % coord_str)
 
     # TODO generalize and move to tile.py?
-    def find_z10_coords_for(coord):
+    def find_job_coords_for(coord, target_zoom):
         xmin = coord.column
         xmax = coord.column
         ymin = coord.row
         ymax = coord.row
-        assert 10 > coord.zoom
-        for i in xrange(10 - coord.zoom):
+        assert target_zoom > coord.zoom
+        for i in xrange(target_zoom - coord.zoom):
             xmin *= 2
             ymin *= 2
             xmax = xmax * 2 + 1
@@ -1959,15 +1959,22 @@ def tilequeue_batch_process(cfg, args):
 
     data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
     # NOTE: max_zoom looks to be inclusive
     zoom_stop = cfg.max_zoom
+    assert zoom_stop > group_by_zoom
     formats = lookup_formats(cfg.output_formats)
 
-    z10_coords = find_z10_coords_for(queue_coord)
-    for z10coord in z10_coords:
-        # each coord here is the z10 unit of work now
-        pyramid_coords = [z10coord]
-        pyramid_coords.extend(coord_children_range(z10coord, zoom_stop))
+    job_coords = find_job_coords_for(queue_coord, group_by_zoom)
+    for job_coord in job_coords:
+        # each coord here is the unit of work now
+        pyramid_coords = [job_coord]
+        pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
         coord_data = [dict(coord=x) for x in pyramid_coords]
         for fetch, coord_datum in data_fetcher.fetch_tiles(coord_data):
             coord = coord_datum['coord']
@@ -2141,8 +2148,7 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
     subparser.add_argument('--tile', required=True,
-                           help='Tile coordinate as "z/x/y". '
-                           'Needs to be z7 for now.')
+                           help='Tile coordinate as "z/x/y".')
     subparser.set_defaults(func=tilequeue_batch_process)
 
     args = parser.parse_args(argv_args)
