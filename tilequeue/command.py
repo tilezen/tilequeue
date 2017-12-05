@@ -1811,8 +1811,7 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_pipeline()
 
 
-def tilequeue_rawr_seed_toi(cfg, peripherals):
-    """command to read the toi and enqueue the corresponding rawr tiles"""
+def _tilequeue_rawr_seed(cfg, peripherals, coords):
     from tilequeue.rawr import make_rawr_enqueuer_from_cfg
     from tilequeue.rawr import RawrAllIntersector
     from tilequeue.stats import RawrTileEnqueueStatsHandler
@@ -1824,10 +1823,37 @@ def tilequeue_rawr_seed_toi(cfg, peripherals):
         cfg, logger, stats_handler, peripherals.msg_marshaller,
         rawr_toi_intersector)
 
-    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
-    coords = map(coord_unmarshall_int, tiles_of_interest)
     rawr_enqueuer(coords)
     logger.info('%d coords enqueued', len(coords))
+
+
+def tilequeue_rawr_seed_toi(cfg, peripherals):
+    """command to read the toi and enqueue the corresponding rawr tiles"""
+    tiles_of_interest = peripherals.toi.fetch_tiles_of_interest()
+    coords = map(coord_unmarshall_int, tiles_of_interest)
+    _tilequeue_rawr_seed(cfg, peripherals, coords)
+
+
+def tilequeue_rawr_seed_all(cfg, peripherals):
+    """command to enqueue all the tiles at the group-by zoom"""
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    max_coord = 2 ** group_by_zoom
+
+    # creating the list of all coordinates here might be a lot of memory, but
+    # if we handle the TOI okay then we should be okay with z10. if the group
+    # by zoom is much larger, then it might start running into problems.
+    coords = []
+    for x in xrange(0, max_coord):
+        for y in xrange(0, max_coord):
+            coords.extend(Coordinate(zoom=group_by_zoom, column=x, row=y))
+
+    _tilequeue_rawr_seed(cfg, peripherals, coords)
 
 
 Peripherals = namedtuple(
@@ -2028,6 +2054,7 @@ def tilequeue_main(argv_args=None):
         ('delete-stuck-tiles', tilequeue_delete_stuck_tiles),
         ('rawr-process', tilequeue_rawr_process),
         ('rawr-seed-toi', tilequeue_rawr_seed_toi),
+        ('rawr-seed-all', tilequeue_rawr_seed_all),
         ('batch-enqueue', tilequeue_batch_enqueue),
     )
 
