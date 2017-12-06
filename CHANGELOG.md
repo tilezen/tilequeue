@@ -4,98 +4,100 @@ CHANGELOG
 v2.0.0
 -------------
 
+* **Release date**: 2017-12-06.
+* **Requirements**: `raw_tiles v0.1`, `mapbox-vector-tile v1.2.0`.
+
 ### Summary
 
 * New tilequeue commands have been added to help deal with common issues:
-* * `status` returns information about whether the tile is present in storage, the TOI and the in-flight list. This can help diagnosing issues with bad or stale tiles being returned.
+* * `status` returns information about whether the tile is present in storage, the tiles-of-interest (TOI) list and the in-flight list. This can help diagnosing issues with bad or stale tiles being returned.
 * * `stuck-tiles` lists tiles which are present in storage but not in the TOI. These might be causing problems, since they will not be updated. `delete-stuck-tiles` takes the list output by `stuck-tiles` and deletes them.
-* Database queries are now per-table rather than per-layer. This can help efficiency slightly, as the database may be able to optimise the number of blocks read from disk into a single pass. However, the main reason was to prepare for RAWR tiles, which are collected into per-table files.
+* Database queries are now per-table rather than per-layer. This can help efficiency slightly, as the database may be able to optimise the number of blocks read from disk into a single pass. However, the main reason was to prepare for RAWR tiles, which are [collected into per-table files](https://github.com/tilezen/raw_tiles).
 * Added support for RAWR tiles. These serialise the data for several tables into one static file, which can then be used to render tiles without needing further access to the database, which should allow it to scale more easily.
 * Added support for 4x4 metatiles, with optional "1024px" size tile.
 * Tilequeue process now logs in JSON format. This allows the use of some more advanced query features of the AWS CloudWatch system.
 * Added support for building a Docker image of tilequeue.
 * There are alternative, configurable implementations of the TOI, including all and none. The multiple queue job dispatcher can be configured to route based on TOI membership. These changes together mean it's possible to configure the cluster to run in "global build" mode, where all tiles are rendered, but the TOI decides priority, and in the normal mode, where only tiles in the TOI are rendered.
-* Requirements: `raw_tiles v0.1`.
 
 ### Details
 
 * Use pypi for mapbox-vector and edtf packages. See [#219](https://github.com/tilezen/tilequeue/pull/219).
-* Update output props processing for normalized sql. See [#221](https://github.com/tilezen/tilequeue/pull/221).
+* Update output props processing for normalized SQL. See [#221](https://github.com/tilezen/tilequeue/pull/221).
 * Create source metadata based on query results. See [#222](https://github.com/tilezen/tilequeue/pull/222).
-* Move kind calculation to python. See [#223](https://github.com/tilezen/tilequeue/pull/223).
+* Move kind calculation to Python. See [#223](https://github.com/tilezen/tilequeue/pull/223).
 * Enable Shapely speedups when they're available. See [#224](https://github.com/tilezen/tilequeue/pull/224).
-* Retry deleting tiles on S3.. See [#225](https://github.com/tilezen/tilequeue/pull/225).
+* Retry deleting tiles on S3. See [#225](https://github.com/tilezen/tilequeue/pull/225).
 * Makes queries per-table. See [#227](https://github.com/tilezen/tilequeue/pull/227).
-* Tidy things up for a data fetcher interface.. See [#228](https://github.com/tilezen/tilequeue/pull/228).
+* Tidy things up for a data fetcher interface. See [#228](https://github.com/tilezen/tilequeue/pull/228).
 * Fixture-based data source. See [#229](https://github.com/tilezen/tilequeue/pull/229).
 * Remove hard coded list of layers in conversion. See [#231](https://github.com/tilezen/tilequeue/pull/231).
 * Add a tile status command. See [#232](https://github.com/tilezen/tilequeue/pull/232).
 * Move min zoom check after yaml calculation. See [#233](https://github.com/tilezen/tilequeue/pull/233).
 * Support lists of templates per source. See [#234](https://github.com/tilezen/tilequeue/pull/234).
-* Move tilequeue.postgresql -> tilequeue.query.pool. See [#236](https://github.com/tilezen/tilequeue/pull/236).
+* Move `tilequeue.postgresql` -> `tilequeue.query.pool`. See [#236](https://github.com/tilezen/tilequeue/pull/236).
 * Correct function used for parser. See [#237](https://github.com/tilezen/tilequeue/pull/237).
 * Rename start/stop to be consistent with rest of system. See [#238](https://github.com/tilezen/tilequeue/pull/238).
 * Add tilequeue command to list stuck tiles. See [#239](https://github.com/tilezen/tilequeue/pull/239).
 * Add a command to process a single tile. See [#240](https://github.com/tilezen/tilequeue/pull/240).
-* Support for local fixtures. See [#241](https://github.com/tilezen/tilequeue/pull/241).
-* Add option to pass all relations to fixture data fetcher.. See [#242](https://github.com/tilezen/tilequeue/pull/242).
+* Add support for local fixtures. See [#241](https://github.com/tilezen/tilequeue/pull/241).
+* Add option to pass all relations to fixture data fetcher. See [#242](https://github.com/tilezen/tilequeue/pull/242).
 * Modify Unit of work on queue. See [#243](https://github.com/tilezen/tilequeue/pull/243).
 * Add RAWR data fetcher. See [#244](https://github.com/tilezen/tilequeue/pull/244).
-* Use enum34 package to provide enumerations.. See [#247](https://github.com/tilezen/tilequeue/pull/247).
-* Add rawr enqueue and process commands. See [#248](https://github.com/tilezen/tilequeue/pull/248).
-* Add logging to rawr commands. See [#249](https://github.com/tilezen/tilequeue/pull/249).
-* Update sample config with rawr options. See [#250](https://github.com/tilezen/tilequeue/pull/250).
-* Update wof process to enqueue to rawr queue. See [#251](https://github.com/tilezen/tilequeue/pull/251).
-* Remove legacy tilequeue intersect command. See [#252](https://github.com/tilezen/tilequeue/pull/252).
-* Update logging names. See [#253](https://github.com/tilezen/tilequeue/pull/253).
+* Add dependency on `enum34` package to provide enumerations. See [#247](https://github.com/tilezen/tilequeue/pull/247).
+* Add RAWR enqueue and process commands. See [#248](https://github.com/tilezen/tilequeue/pull/248).
+* Add logging to RAWR commands. See [#249](https://github.com/tilezen/tilequeue/pull/249).
+* Update sample config with RAWR options. See [#250](https://github.com/tilezen/tilequeue/pull/250).
+* Update WOF process to enqueue to RAWR queue. See [#251](https://github.com/tilezen/tilequeue/pull/251).
+* Remove legacy tilequeue `intersect` command. See [#252](https://github.com/tilezen/tilequeue/pull/252).
+* Update name used for logging RAWR expiry and job enqueueing activity. See [#253](https://github.com/tilezen/tilequeue/pull/253).
 * Remove unused commands. See [#254](https://github.com/tilezen/tilequeue/pull/254).
 * Hook up RAWR data fetcher. See [#255](https://github.com/tilezen/tilequeue/pull/255).
-* Add json logging to tilequeue processing. See [#256](https://github.com/tilezen/tilequeue/pull/256).
+* Add JSON logging to tilequeue processing. See [#256](https://github.com/tilezen/tilequeue/pull/256).
 * Fix fixture source property. See [#257](https://github.com/tilezen/tilequeue/pull/257).
 * Add stats handling. See [#258](https://github.com/tilezen/tilequeue/pull/258).
-* Add rawr-seed-toi command. See [#259](https://github.com/tilezen/tilequeue/pull/259).
+* Add `rawr-seed-toi` command. See [#259](https://github.com/tilezen/tilequeue/pull/259).
 * Set default loglevel for loggers to INFO. See [#260](https://github.com/tilezen/tilequeue/pull/260).
-* Emit json from rawr processing logging. See [#261](https://github.com/tilezen/tilequeue/pull/261).
+* Emit JSON from RAWR processing logging. See [#261](https://github.com/tilezen/tilequeue/pull/261).
 * Include VERSION file in package. See [#265](https://github.com/tilezen/tilequeue/pull/265).
-* Add region to boto3 sqs/s3 clients. See [#266](https://github.com/tilezen/tilequeue/pull/266).
+* Add region to boto3 SQS/S3 clients. See [#266](https://github.com/tilezen/tilequeue/pull/266).
 * Resolve new flake8 errors. See [#267](https://github.com/tilezen/tilequeue/pull/267).
 * Log coordinates as integers. See [#268](https://github.com/tilezen/tilequeue/pull/268).
 * Fix some RAWR-related TODOs. See [#269](https://github.com/tilezen/tilequeue/pull/269).
 * Dockerize Tilequeue. See [#270](https://github.com/tilezen/tilequeue/pull/270).
 * Use underscore as the separator instead of dash. See [#271](https://github.com/tilezen/tilequeue/pull/271).
 * Handle the case where the queue returns no msgs. See [#272](https://github.com/tilezen/tilequeue/pull/272).
-* Add support for local storage of RAWR tiles.. See [#273](https://github.com/tilezen/tilequeue/pull/273).
+* Add support for local storage of RAWR tiles. See [#273](https://github.com/tilezen/tilequeue/pull/273).
 * Emit more detailed timing and stats. See [#274](https://github.com/tilezen/tilequeue/pull/274).
-* Log when rawr processing starts/stops. See [#275](https://github.com/tilezen/tilequeue/pull/275).
-* Correct all calls to create rawr enqueuer's. See [#276](https://github.com/tilezen/tilequeue/pull/276).
-* Add configuration comment about metatile size 2. See [#278](https://github.com/tilezen/tilequeue/pull/278).
+* Log when RAWR processing starts/stops. See [#275](https://github.com/tilezen/tilequeue/pull/275).
+* Correct all calls to create RAWR enqueuer's. See [#276](https://github.com/tilezen/tilequeue/pull/276).
+* Add configuration comment about metatile size 2 (i.e: 512px tile support). See [#278](https://github.com/tilezen/tilequeue/pull/278).
 * Updates for tilequeue processing on dev. See [#279](https://github.com/tilezen/tilequeue/pull/279).
-* Remove gzip rawr formatter. See [#280](https://github.com/tilezen/tilequeue/pull/280).
+* Remove gzip RAWR formatter. See [#280](https://github.com/tilezen/tilequeue/pull/280).
 * Various RAWR tile fixes. See [#281](https://github.com/tilezen/tilequeue/pull/281).
-* Add a running section to README.. See [#282](https://github.com/tilezen/tilequeue/pull/282).
-* Update all packages to the latest versions.. See [#288](https://github.com/tilezen/tilequeue/pull/288).
-* Simplify coord -> queue msg handle mappings. See [#290](https://github.com/tilezen/tilequeue/pull/290).
-* Updates for sqs message visibility handling. See [#293](https://github.com/tilezen/tilequeue/pull/293).
-* Add support for configured nominal zoom to single tile processing.. See [#294](https://github.com/tilezen/tilequeue/pull/294).
-* Add command to enqueue randomly sampled pyramids. See [#295](https://github.com/tilezen/tilequeue/pull/295).
+* Add a running section to README. See [#282](https://github.com/tilezen/tilequeue/pull/282).
+* Update all packages to the latest versions. See [#288](https://github.com/tilezen/tilequeue/pull/288).
+* Simplify mapping from coordinate to queue message handle. See [#290](https://github.com/tilezen/tilequeue/pull/290).
+* Updates for SQS message visibility handling. See [#293](https://github.com/tilezen/tilequeue/pull/293).
+* Add support for configured nominal zoom to single tile processing. See [#294](https://github.com/tilezen/tilequeue/pull/294).
+* Add command to enqueue randomly sampled pyramids of tiles to the render queue. See [#295](https://github.com/tilezen/tilequeue/pull/295).
 * Log additional details on msg ack errors. See [#296](https://github.com/tilezen/tilequeue/pull/296).
 * Simplify `_fetch_and_output` function. See [#298](https://github.com/tilezen/tilequeue/pull/298).
 * Update tilequeue proc stats. See [#299](https://github.com/tilezen/tilequeue/pull/299).
-* Enqueue random samples to rawr queue. See [#300](https://github.com/tilezen/tilequeue/pull/300).
-* Add extra data tables. See [#301](https://github.com/tilezen/tilequeue/pull/301).
-* Add additional rawr intersector implementations. See [#302](https://github.com/tilezen/tilequeue/pull/302).
-* Update rawr intersect config parsing. See [#303](https://github.com/tilezen/tilequeue/pull/303).
-* Same precision for metatiles. See [#304](https://github.com/tilezen/tilequeue/pull/304).
+* Add support to enqueue random samples to RAWR queue. See [#300](https://github.com/tilezen/tilequeue/pull/300).
+* Add extra data tables for [Who's On First](https://whosonfirst.mapzen.com) neighbourhood data, [openstreetmapdata.com](https://www.openstreetmapdata.com) land and water polygons and [Natural Earth](https://naturalearthdata.com) urban area polygons. See [#301](https://github.com/tilezen/tilequeue/pull/301).
+* Add additional RAWR intersector implementations. See [#302](https://github.com/tilezen/tilequeue/pull/302).
+* Update RAWR intersect config parsing. See [#303](https://github.com/tilezen/tilequeue/pull/303).
+* Use consistent precision for different sizes of MVT tile. Previously, all had been 4096 coordinates per tile (a.k.a. "extent"), now the 256px are 4096, 512px are 8192, and so on. See [#304](https://github.com/tilezen/tilequeue/pull/304).
 * Fix some errors in workers. See [#305](https://github.com/tilezen/tilequeue/pull/305).
-* Add config for urban areas data source.. See [#306](https://github.com/tilezen/tilequeue/pull/306).
+* Add config for urban areas data source from [Natural Earth](https://naturalearthdata.com). See [#306](https://github.com/tilezen/tilequeue/pull/306).
 * Log parent if available on fetch errors. See [#308](https://github.com/tilezen/tilequeue/pull/308).
 * Optionally disable 1024px tile. See [#309](https://github.com/tilezen/tilequeue/pull/309).
 * Miscellaneous RAWR tile fixes. See [#310](https://github.com/tilezen/tilequeue/pull/310).
 * Configurable up-zooming of tiles from Redshift. See [#311](https://github.com/tilezen/tilequeue/pull/311).
 * Refactor store creation in command.py. See [#312](https://github.com/tilezen/tilequeue/pull/312).
-* Filter to different queue based on TOI membership.. See [#313](https://github.com/tilezen/tilequeue/pull/313).
-* Move intersection to rawr enqueue step. See [#314](https://github.com/tilezen/tilequeue/pull/314).
-* Add batch enqueue/process commands. See [#315](https://github.com/tilezen/tilequeue/pull/315).
+* Filter to different queue based on TOI membership. See [#313](https://github.com/tilezen/tilequeue/pull/313).
+* Move intersection to RAWR enqueue step. See [#314](https://github.com/tilezen/tilequeue/pull/314).
+* Add `batch-enqueue` command to start AWS Batch jobs to render tiles, and `batch-process` command which is run in a single instance of an AWS Batch job. See [#315](https://github.com/tilezen/tilequeue/pull/315).
 
 v1.9.1
 ------
