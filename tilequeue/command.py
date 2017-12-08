@@ -1851,7 +1851,7 @@ def tilequeue_rawr_seed_all(cfg, peripherals):
     coords = []
     for x in xrange(0, max_coord):
         for y in xrange(0, max_coord):
-            coords.extend(Coordinate(zoom=group_by_zoom, column=x, row=y))
+            coords.append(Coordinate(zoom=group_by_zoom, column=x, row=y))
 
     _tilequeue_rawr_seed(cfg, peripherals, coords)
 

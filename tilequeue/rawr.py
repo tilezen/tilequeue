@@ -30,13 +30,15 @@ class SqsQueue(object):
         self.queue_url = queue_url
         self.recv_wait_time_seconds = recv_wait_time_seconds
 
-    def send(self, payloads):
+    def send_without_retry(self, payloads):
         """
         enqueue a sequence of payloads to the sqs queue
 
         Each payload is already expected to be pre-formatted for the queue. At
         this time, it should be a comma separated list of coordinates strings
         that are grouped by their parent zoom.
+
+        This version does not retry, and returns any failed messages.
         """
         msgs = []
         for i, payload in enumerate(payloads):
@@ -54,12 +56,52 @@ class SqsQueue(object):
             raise Exception('Invalid status code from sqs: %s' %
                             resp['ResponseMetadata']['HTTPStatusCode'])
         failed_messages = resp.get('Failed')
-        if failed_messages:
-            # TODO maybe retry failed messages if not sender's fault? up to a
-            # certain maximum number of attempts?
-            # http://boto3.readthedocs.io/en/latest/reference/services/sqs.html#SQS.Client.send_message_batch # noqa
-            raise Exception('Messages failed to send to sqs: %s' %
-                            len(failed_messages))
+        return failed_messages
+
+    def send(self, payloads, logger, num_tries=5):
+        """
+        Enqueue payloads to the SQS queue, retrying failed messages with
+        exponential backoff.
+        """
+        from time import sleep
+
+        backoff_interval = 1
+        backoff_factor = 2
+
+        for try_counter in xrange(0, num_tries):
+            failed_messages = self.send_without_retry(payloads)
+
+            # success!
+            if not failed_messages:
+                payloads = []
+                break
+
+            # output some information about the failures for debugging
+            # purposes. we expect failures to be quite rare, so we can be
+            # pretty verbose.
+            if logger:
+                for msg in failed_messages:
+                    logger.warning("Failed to send message on try %d: Id=%r, "
+                                   "SenderFault=%r, Code=%r, Message=%r" %
+                                   (try_counter, msg['Id'],
+                                    msg.get('SenderFault'), msg.get('Code'),
+                                    msg.get('Message')))
+
+            # wait a little while, in case the problem is that we're talking
+            # too fast.
+            sleep(backoff_interval)
+            backoff_interval *= backoff_factor
+
+            # filter out the failed payloads for retry
+            retry_payloads = []
+            for msg in failed_messages:
+                i = int(msg['Id'])
+                retry_payloads.append(payloads[i])
+            payloads = retry_payloads
+
+        if payloads:
+            raise Exception('Messages failed to send to sqs after %d '
+                            'retries: %s' % (num_tries, len(payloads)))
 
     def read(self):
         """read a single message from the queue"""
@@ -144,7 +186,7 @@ class RawrEnqueuer(object):
         rawr_queue_batch_size = 10
         n_msgs_sent = 0
         for payloads_chunk in grouper(payloads, rawr_queue_batch_size):
-            self.rawr_queue.send(payloads_chunk)
+            self.rawr_queue.send(payloads_chunk, self.logger)
             n_msgs_sent += 1
 
         if self.logger:
