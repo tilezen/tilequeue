@@ -43,3 +43,65 @@ class TestCommon(unittest.TestCase):
         # should throw KeyError if the name isn't recognised
         with self.assertRaises(KeyError):
             ShapeType.parse_set(['MegaPolygon'])
+
+    def _route_layer_properties(self, route_tags):
+        from tilequeue.query.common import layer_properties
+        from shapely.geometry.linestring import LineString
+
+        class FakeOsm(object):
+            def __init__(self, test, tags):
+                tag_list = []
+                for k, v in tags.items():
+                    tag_list.append(k)
+                    tag_list.append(v)
+
+                self.test = test
+                self.tag_list = tag_list
+
+            def relations_using_way(self, way_id):
+                self.test.assertEqual(1, way_id)
+                return [2]
+
+            def relation(self, rel_id):
+                from tilequeue.query.common import Relation
+                self.test.assertEqual(2, rel_id)
+                return Relation(dict(
+                    id=2, way_off=0, rel_off=1,
+                    tags=self.tag_list,
+                    parts=[1]
+                ))
+
+        fid = 1
+        shape = LineString([(0, 0), (1, 0)])
+        props = {}
+        layer_name = 'roads'
+        zoom = 16
+        osm = FakeOsm(self, route_tags)
+
+        layer_props = layer_properties(
+            fid, shape, props, layer_name, zoom, osm)
+
+        return layer_props
+
+    def test_business_and_spur_routes(self):
+        # check that we extend the network specifier for US:I into
+        # US:I:Business when there's a modifier set to business on the
+        # route relation.
+
+        layer_props = self._route_layer_properties(dict(
+            type='route', route='road', network='US:I', ref='70',
+            modifier='business'))
+
+        self.assertEquals(['road', 'US:I:Business', '70'],
+                          layer_props.get('mz_networks'))
+
+    def test_business_and_spur_routes_existing(self):
+        # check that, if the network is _already_ a US:I:Business, we don't
+        # duplicate the suffix.
+
+        layer_props = self._route_layer_properties(dict(
+            type='route', route='road', network='US:I:Business', ref='70',
+            modifier='business'))
+
+        self.assertEquals(['road', 'US:I:Business', '70'],
+                          layer_props.get('mz_networks'))

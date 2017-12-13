@@ -349,6 +349,19 @@ def name_keys(props):
     return name_keys
 
 
+_US_ROUTE_MODIFIERS = set([
+    'Business',
+    'Spur',
+    'Truck',
+    'Alternate',
+    'Bypass',
+    'Connector',
+    'Historic',
+    'Toll',
+    'Scenic',
+])
+
+
 # properties for a feature (fid, shape, props) in layer `layer_name` at zoom
 # level `zoom`. also takes an `osm` parameter, which is an object which can
 # be used to look up nodes, ways and relations and the relationships between
@@ -385,8 +398,20 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
             rel = osm.relation(rel_id)
             if not rel:
                 continue
-            typ, route, network, ref = [rel.tags.get(k) for k in (
-                'type', 'route', 'network', 'ref')]
+            typ, route, network, ref, modifier = [rel.tags.get(k) for k in (
+                'type', 'route', 'network', 'ref', 'modifier')]
+
+            # the `modifier` tag gives extra information about the route, but
+            # we want that information to be part of the `network` property.
+            if network and modifier:
+                modifier = modifier.capitalize()
+                us_network = network.startswith('US:')
+                us_route_modifier = modifier in _US_ROUTE_MODIFIERS
+                # don't want to add the suffix if it's already there.
+                needs_suffix = not network.endswith(':' + modifier)
+                if us_network and us_route_modifier and needs_suffix:
+                    network += ':' + modifier
+
             if route and (network or ref):
                 mz_networks.extend([route, network, ref])
             if typ == 'route' and \
