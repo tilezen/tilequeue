@@ -408,9 +408,10 @@ def layer_properties(fid, shape, props, layer_name, zoom, osm):
                 us_network = network.startswith('US:')
                 us_route_modifier = modifier in _US_ROUTE_MODIFIERS
                 # don't want to add the suffix if it's already there.
-                needs_suffix = not network.endswith(':' + modifier)
+                suffix = ':' + modifier
+                needs_suffix = suffix not in network
                 if us_network and us_route_modifier and needs_suffix:
-                    network += ':' + modifier
+                    network += suffix
 
             if route and (network or ref):
                 mz_networks.extend([route, network, ref])

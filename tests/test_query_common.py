@@ -105,3 +105,14 @@ class TestCommon(unittest.TestCase):
 
         self.assertEquals(['road', 'US:I:Business', '70'],
                           layer_props.get('mz_networks'))
+
+    def test_business_not_at_end(self):
+        # check that, if the network contains 'Business', but it's not at the
+        # end, then we still don't append it.
+
+        layer_props = self._route_layer_properties(dict(
+            type='route', route='road', network='US:I:Business:Loop', ref='70',
+            modifier='business'))
+
+        self.assertEquals(['road', 'US:I:Business:Loop', '70'],
+                          layer_props.get('mz_networks'))
