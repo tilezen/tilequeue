@@ -2015,8 +2015,8 @@ def tilequeue_batch_process(cfg, args):
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
 
             formatted_tiles, extra_data = process_coord(
-                coord, coord.zoom, feature_layers, post_process_data, formats,
-                unpadded_bounds, cut_coords, cfg.buffer_cfg,
+                coord, nominal_zoom, feature_layers, post_process_data,
+                formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
                 output_calc_mapping
             )
 
