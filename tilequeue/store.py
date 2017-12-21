@@ -60,6 +60,8 @@ def parse_coordinate_from_path(path, extension, layer):
 
 
 def _backoff_and_retry(num_tries=5, factor=2, interval=1, logger=None):
+    from time import sleep
+
     # do the first num_tries-1 attempts wrapped in something to catch any
     # exceptions, optionally log them, and try again.
     for try_counter in xrange(1, num_tries):
