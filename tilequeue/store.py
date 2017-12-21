@@ -59,6 +59,27 @@ def parse_coordinate_from_path(path, extension, layer):
                         pass
 
 
+def _backoff_and_retry(num_tries=5, factor=2, interval=1, logger=None):
+    # do the first num_tries-1 attempts wrapped in something to catch any
+    # exceptions, optionally log them, and try again.
+    for try_counter in xrange(1, num_tries):
+        try:
+            yield
+            break
+
+        except Exception as e:
+            if logger:
+                logger.warning("Failed. Backing off and retrying. Error: %s"
+                               % str(e))
+
+        sleep(interval)
+        interval *= factor
+    else:
+        # do final attempt without try-except, so we get the exception
+        # in normal code.
+        yield
+
+
 class S3(object):
 
     def __init__(
@@ -74,12 +95,14 @@ class S3(object):
         key_name = s3_tile_key(
             self.date_prefix, self.path, layer, coord, format.extension)
         key = self.bucket.new_key(key_name)
-        key.set_contents_from_string(
-            tile_data,
-            headers={'Content-Type': format.mimetype},
-            policy='public-read',
-            reduced_redundancy=self.reduced_redundancy,
-        )
+
+        for _ in _backoff_and_retry():
+            key.set_contents_from_string(
+                tile_data,
+                headers={'Content-Type': format.mimetype},
+                policy='public-read',
+                reduced_redundancy=self.reduced_redundancy,
+            )
 
     def read_tile(self, coord, format, layer):
         key_name = s3_tile_key(
