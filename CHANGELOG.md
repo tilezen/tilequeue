@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.0.3
+------
+
+* Add backoff and retry to s3 PUTs. See [#321](https://github.com/tilezen/tilequeue/pull/321).
+
 v2.0.0
 -------------
 
