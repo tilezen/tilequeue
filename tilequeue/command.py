@@ -403,7 +403,8 @@ def _make_store(cfg):
     store_cfg = cfg.yml.get('store')
     assert store_cfg, "Store was not configured, but is necessary."
     credentials = cfg.subtree('aws credentials')
-    store = make_store(store_cfg, credentials=credentials)
+    logger = make_logger(cfg, 'process')
+    store = make_store(store_cfg, credentials=credentials, logger=logger)
     return store
 
 

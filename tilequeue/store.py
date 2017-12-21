@@ -97,19 +97,20 @@ class S3(object):
 
     def __init__(
             self, bucket, date_prefix, path, reduced_redundancy,
-            delete_retry_interval):
+            delete_retry_interval, logger):
         self.bucket = bucket
         self.date_prefix = date_prefix
         self.path = path
         self.reduced_redundancy = reduced_redundancy
         self.delete_retry_interval = delete_retry_interval
+        self.logger = logger
 
     def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
             self.date_prefix, self.path, layer, coord, format.extension)
         key = self.bucket.new_key(key_name)
 
-        @_backoff_and_retry(Exception)
+        @_backoff_and_retry(Exception, logger=self.logger)
         def write_to_s3():
             key.set_contents_from_string(
                 tile_data,
@@ -353,11 +354,11 @@ class Memory(object):
 def make_s3_store(bucket_name,
                   aws_access_key_id=None, aws_secret_access_key=None,
                   path='osm', reduced_redundancy=False, date_prefix='',
-                  delete_retry_interval=60):
+                  delete_retry_interval=60, logger=None):
     conn = connect_s3(aws_access_key_id, aws_secret_access_key)
     bucket = Bucket(conn, bucket_name)
     s3_store = S3(bucket, date_prefix, path, reduced_redundancy,
-                  delete_retry_interval)
+                  delete_retry_interval, logger)
     return s3_store
 
 
@@ -393,7 +394,7 @@ def write_tile_if_changed(store, tile_data, coord, format, layer):
         return False
 
 
-def make_store(yml, credentials={}):
+def make_store(yml, credentials={}, logger=None):
     store_type = yml.get('type')
 
     if store_type == 'directory':
@@ -416,7 +417,7 @@ def make_store(yml, credentials={}):
         return make_s3_store(
             bucket, aws_access_key_id, aws_secret_access_key, path=path,
             reduced_redundancy=reduced_redundancy, date_prefix=date_prefix,
-            delete_retry_interval=delete_retry_interval)
+            delete_retry_interval=delete_retry_interval, logger=logger)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
