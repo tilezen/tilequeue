@@ -59,27 +59,38 @@ def parse_coordinate_from_path(path, extension, layer):
                         pass
 
 
-def _backoff_and_retry(num_tries=5, factor=2, interval=1, logger=None):
+# decorates a function to back off and retry
+def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
+                       retry_interval=1, logger=None):
     from time import sleep
+    from functools import wraps
 
-    # do the first num_tries-1 attempts wrapped in something to catch any
-    # exceptions, optionally log them, and try again.
-    for try_counter in xrange(1, num_tries):
-        try:
-            yield
-            break
+    def decorator(f):
+        @wraps(f)
+        def func(*args, **kwargs):
+            # do the first num_tries-1 attempts wrapped in something to catch
+            # any exceptions, optionally log them, and try again.
+            interval = retry_interval
+            factor = retry_factor
 
-        except Exception as e:
-            if logger:
-                logger.warning("Failed. Backing off and retrying. Error: %s"
-                               % str(e))
+            for _ in xrange(1, num_tries):
+                try:
+                    return f(*args, **kwargs)
 
-        sleep(interval)
-        interval *= factor
-    else:
-        # do final attempt without try-except, so we get the exception
-        # in normal code.
-        yield
+                except ExceptionType as e:
+                    if logger:
+                        logger.warning("Failed. Backing off and retrying. "
+                                       "Error: %s" % str(e))
+
+                sleep(interval)
+                interval *= factor
+
+            # do final attempt without try-except, so we get the exception
+            # in normal code.
+            return f(*args, **kwargs)
+
+        return func
+    return decorator
 
 
 class S3(object):
@@ -98,13 +109,16 @@ class S3(object):
             self.date_prefix, self.path, layer, coord, format.extension)
         key = self.bucket.new_key(key_name)
 
-        for _ in _backoff_and_retry():
+        @_backoff_and_retry(Exception)
+        def write_to_s3():
             key.set_contents_from_string(
                 tile_data,
                 headers={'Content-Type': format.mimetype},
                 policy='public-read',
                 reduced_redundancy=self.reduced_redundancy,
             )
+
+        write_to_s3()
 
     def read_tile(self, coord, format, layer):
         key_name = s3_tile_key(
