@@ -399,11 +399,12 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def _make_store(cfg):
+def _make_store(cfg, logger=None):
     store_cfg = cfg.yml.get('store')
     assert store_cfg, "Store was not configured, but is necessary."
     credentials = cfg.subtree('aws credentials')
-    logger = make_logger(cfg, 'process')
+    if logger is None:
+        logger = make_logger(cfg, 'process')
     store = make_store(store_cfg, credentials=credentials, logger=logger)
     return store
 
@@ -1931,15 +1932,13 @@ def tilequeue_batch_enqueue(cfg, peripherals):
 
 
 def tilequeue_batch_process(cfg, args):
+    from tilequeue.log import BatchProcessLogger
     from tilequeue.metatile import make_metatiles
 
     logger = make_logger(cfg, 'batch_process')
+    batch_logger = BatchProcessLogger(logger)
 
-    # TODO log json
-
-    store = _make_store(cfg)
-
-    logger.info('batch process ... start')
+    store = _make_store(cfg, logger)
 
     coord_str = args.tile
 
@@ -1955,8 +1954,6 @@ def tilequeue_batch_process(cfg, args):
         sys.exit(2)
 
     assert queue_coord.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
-
-    logger.info('batch process: %s' % coord_str)
 
     # TODO generalize and move to tile.py?
     def find_job_coords_for(coord, target_zoom):
@@ -1997,38 +1994,66 @@ def tilequeue_batch_process(cfg, args):
     assert zoom_stop > group_by_zoom
     formats = lookup_formats(cfg.output_formats)
 
+    batch_logger.begin_run(queue_coord)
+
     job_coords = find_job_coords_for(queue_coord, group_by_zoom)
     for job_coord in job_coords:
+
+        batch_logger.begin_pyramid(job_coord)
+
         # each coord here is the unit of work now
         pyramid_coords = [job_coord]
         pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
         coord_data = [dict(coord=x) for x in pyramid_coords]
-        for fetch, coord_datum in data_fetcher.fetch_tiles(coord_data):
+
+        try:
+            fetched_coord_data = data_fetcher.fetch_tiles(coord_data)
+        except Exception as e:
+            batch_logger.pyramid_fetch_failed(e, job_coord)
+            continue
+
+        for fetch, coord_datum in fetched_coord_data:
             coord = coord_datum['coord']
             nominal_zoom = coord.zoom + cfg.metatile_zoom
             unpadded_bounds = coord_to_mercator_bounds(coord)
-            source_rows = fetch(nominal_zoom, unpadded_bounds)
-            feature_layers = convert_source_data_to_feature_layers(
-                source_rows, layer_data, unpadded_bounds, coord.zoom)
+
+            try:
+                source_rows = fetch(nominal_zoom, unpadded_bounds)
+                feature_layers = convert_source_data_to_feature_layers(
+                    source_rows, layer_data, unpadded_bounds, coord.zoom)
+            except Exception as e:
+                batch_logger.tile_fetch_failed(e, coord)
+                continue
 
             cut_coords = [coord]
             if nominal_zoom > coord.zoom:
                 cut_coords.extend(coord_children_range(coord, nominal_zoom))
 
-            formatted_tiles, extra_data = process_coord(
-                coord, nominal_zoom, feature_layers, post_process_data,
-                formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
-                output_calc_mapping
-            )
+            try:
+                formatted_tiles, extra_data = process_coord(
+                    coord, nominal_zoom, feature_layers, post_process_data,
+                    formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
+                    output_calc_mapping
+                )
+            except Exception as e:
+                batch_logger.tile_process_failed(e, coord)
+                continue
 
-            tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
-            for tile in tiles:
-                store.write_tile(tile['tile'], tile['coord'], tile['format'],
-                                 tile['layer'])
+            try:
+                tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+                for tile in tiles:
+                    store.write_tile(
+                        tile['tile'], tile['coord'], tile['format'],
+                        tile['layer'])
+            except Exception as e:
+                batch_logger.metatile_storage_failed(e, coord)
+                continue
 
-            # TODO log?
+            batch_logger.tile_processed(coord)
 
-    logger.info('batch process ... done')
+        batch_logger.end_pyramid(job_coord)
+
+    batch_logger.end_run(queue_coord)
 
 
 def tilequeue_main(argv_args=None):
