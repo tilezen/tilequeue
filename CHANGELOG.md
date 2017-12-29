@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+v2.0.5
+------
+
+* Add option to check for metatile before processing
+* Add optional batch memory override
+
 v2.0.4
 ------
 
