@@ -1,4 +1,5 @@
 from enum import Enum
+from tilequeue.utils import format_stacktrace_one_line
 import json
 import logging
 import sys
@@ -263,3 +264,57 @@ class MultipleMessagesTrackerLogger(object):
 
     def unknown_coord_id(self, coord_id, queue_handle_id):
         self._log('Unknown coord_id', coord_id, queue_handle_id)
+
+
+class BatchProcessLogger(object):
+
+    def __init__(self, logger):
+        self.logger = logger
+
+    def _log(self, msg, coord):
+        json_obj = dict(
+            coord=make_coord_dict(coord),
+            type=log_level_name(LogLevel.INFO),
+            msg=msg,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+    def begin_run(self, coord):
+        self._log('batch process run begin', coord)
+
+    def end_run(self, coord):
+        self._log('batch process run end', coord)
+
+    def begin_pyramid(self, coord):
+        self._log('pyramid begin', coord)
+
+    def end_pyramid(self, coord):
+        self._log('pyramid end', coord)
+
+    def tile_processed(self, coord):
+        self._log('tile processed', coord)
+
+    def _log_exception(self, msg, exception, coord):
+        stacktrace = format_stacktrace_one_line()
+        json_obj = dict(
+            coord=make_coord_dict(coord),
+            type=log_level_name(LogLevel.ERROR),
+            msg=msg,
+            exception=str(exception),
+            stacktrace=stacktrace,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
+    def pyramid_fetch_failed(self, exception, coord):
+        self._log_exception('pyramid fetch failed', exception, coord)
+
+    def tile_fetch_failed(self, exception, coord):
+        self._log_exception('tile fetch failed', exception, coord)
+
+    def tile_process_failed(self, exception, coord):
+        self._log_exception('tile process failed', exception, coord)
+
+    def metatile_storage_failed(self, exception, coord):
+        self._log_exception('metatile storage failed', exception, coord)
