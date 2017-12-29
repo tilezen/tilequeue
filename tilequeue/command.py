@@ -1895,6 +1895,7 @@ def tilequeue_batch_enqueue(cfg, peripherals):
     assert job_queue, 'Missing batch job-queue config'
 
     retry_attempts = batch_yaml.get('retry-attempts')
+    memory = batch_yaml.get('memory')
 
     dim = 2 ** queue_zoom
     z = queue_zoom
@@ -1911,16 +1912,17 @@ def tilequeue_batch_enqueue(cfg, peripherals):
                 '--config', '/etc/tilequeue/config.yaml',
                 '--tile', coord_str,
             ]
+            container_overrides = dict(command=job_cmd)
             job_opts = dict(
                 jobDefinition=job_def,
                 jobQueue=job_queue,
                 jobName=job_name,
-                containerOverrides={
-                    'command': job_cmd,
-                },
+                containerOverrides=container_overrides,
             )
             if retry_attempts is not None:
                 job_opts['retryStrategy'] = dict(attempts=retry_attempts)
+            if memory:
+                container_overrides['memory'] = memory
             resp = client.submit_job(**job_opts)
             assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
                 'Failed to submit job: %s' % 'JobName'
