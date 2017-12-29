@@ -388,3 +388,7 @@ batch:
   retry-attempts: 5
   # check store if metatile already exists, and if so skip processing
   check-metatile-exists: true
+  # optional override memory reserved for container when submiting job
+  # NOTE: in megabytes
+  # https://docs.aws.amazon.com/batch/latest/APIReference/API_ContainerOverrides.html
+  memory:
