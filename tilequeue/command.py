@@ -1948,6 +1948,8 @@ def tilequeue_batch_process(cfg, args):
     queue_zoom = batch_yaml.get('queue-zoom')
     assert queue_zoom, 'Missing batch queue-zoom config'
 
+    check_metatile_exists = bool(batch_yaml.get('check-metatile-exists'))
+
     queue_coord = deserialize_coord(coord_str)
     if not queue_coord:
         print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
@@ -1996,6 +1998,10 @@ def tilequeue_batch_process(cfg, args):
 
     batch_logger.begin_run(queue_coord)
 
+    layer = 'all'
+    zip_format = lookup_format_by_extension('zip')
+    assert zip_format
+
     job_coords = find_job_coords_for(queue_coord, group_by_zoom)
     for job_coord in job_coords:
 
@@ -2016,6 +2022,12 @@ def tilequeue_batch_process(cfg, args):
             coord = coord_datum['coord']
             nominal_zoom = coord.zoom + cfg.metatile_zoom
             unpadded_bounds = coord_to_mercator_bounds(coord)
+
+            if check_metatile_exists:
+                existing_data = store.read_tile(coord, zip_format, layer)
+                if existing_data is not None:
+                    batch_logger.metatile_already_exists(coord)
+                    continue
 
             try:
                 source_rows = fetch(nominal_zoom, unpadded_bounds)
