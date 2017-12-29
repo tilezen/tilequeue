@@ -1927,8 +1927,8 @@ def tilequeue_batch_enqueue(cfg, peripherals):
             assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
                 'Failed to submit job: %s' % 'JobName'
             i += 1
-            if i % 10000 == 0:
-                print i
+            if i % 1000 == 0:
+                print '%d jobs submitted' % i
 
     logger.info('Batch enqueue ... done')
 
