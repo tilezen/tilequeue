@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.0.4
+------
+
+* Add logging to batch process and skip individual failures. See [#322](https://github.com/tilezen/tilequeue/pull/322).
+
 v2.0.3
 ------
 
