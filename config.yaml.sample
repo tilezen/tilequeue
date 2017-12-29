@@ -386,3 +386,5 @@ batch:
   job-queue: <job-queue>
   # optional number of retry attempts, overrides job definition value
   retry-attempts: 5
+  # check store if metatile already exists, and if so skip processing
+  check-metatile-exists: true

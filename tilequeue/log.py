@@ -318,3 +318,6 @@ class BatchProcessLogger(object):
 
     def metatile_storage_failed(self, exception, coord):
         self._log_exception('metatile storage failed', exception, coord)
+
+    def metatile_already_exists(self, coord):
+        self._log('metatile already exists', coord)
