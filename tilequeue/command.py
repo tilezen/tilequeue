@@ -971,6 +971,23 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
     logger.info('%d tiles of interest processed' % n_toi)
 
 
+def tilequeue_enqueue_stdin(cfg, peripherals):
+    logger = make_logger(cfg, 'enqueue_stdin')
+
+    def _stdin_coord_generator():
+        for line in sys.stdin:
+            line = line.strip()
+            coord = deserialize_coord(line)
+            if coord is not None:
+                yield coord
+
+    queue_writer = peripherals.queue_writer
+    coords = _stdin_coord_generator()
+    n_queued, n_in_flight = queue_writer.enqueue_batch(coords)
+
+    logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
+
+
 def coord_pyramid(coord, zoom_start, zoom_stop):
     """
     generate full pyramid for coord
@@ -2085,6 +2102,7 @@ def tilequeue_main(argv_args=None):
         ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
         ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
         ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
+        ('enqueue-stdin', tilequeue_enqueue_stdin),
         ('prune-tiles-of-interest', tilequeue_prune_tiles_of_interest),
         ('wof-process-neighbourhoods', tilequeue_process_wof_neighbourhoods),
         ('wof-load-initial-neighbourhoods',
