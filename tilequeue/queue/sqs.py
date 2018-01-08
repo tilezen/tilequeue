@@ -45,6 +45,7 @@ class VisibilityManager(object):
             else:
                 state = VisibilityState(now, self.extend_secs)
                 self.handle_state_map[handle] = state
+        return state
 
     def done(self, handle):
         try:
@@ -143,7 +144,7 @@ class SqsQueue(object):
 
     def job_progress(self, handle):
         if self.visibility_mgr.should_extend(handle):
-            self.visibility_mgr.extend(handle)
+            visibility_state = self.visibility_mgr.extend(handle)
 
             try:
                 self.sqs_client.change_message_visibility(
@@ -152,7 +153,6 @@ class SqsQueue(object):
                     VisibilityTimeout=self.visibility_mgr.extend_secs,
                 )
             except Exception as e:
-                visibility_state = self.visibility_mgr.lookup(handle)
                 err_details = dict(
                     visibility=dict(
                         last=visibility_state.last.isoformat(),
