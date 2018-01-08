@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.0.6
+------
+
+* Add command to enqueue coords from stdin.
+
 v2.0.5
 ------
 
