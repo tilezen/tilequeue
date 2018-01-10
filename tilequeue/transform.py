@@ -8,6 +8,7 @@ from tilequeue.format import vtm_format
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import normalize_geometry_type
 import math
+import shapely.errors
 
 
 half_circumference_meters = 20037508.342789244
@@ -153,7 +154,10 @@ def _clip_shape(shape, buffer_padded_bounds, is_clipped, clip_factor):
             shape = _intersect_multipolygon(
                 shape, shape_buf_bounds, layer_padded_bounds)
         else:
-            shape = shape.intersection(layer_padded_bounds)
+            try:
+                shape = shape.intersection(layer_padded_bounds)
+            except shapely.errors.TopologicalError:
+                return None
 
     return shape
 
