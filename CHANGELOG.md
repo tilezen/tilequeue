@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.0.7
+------
+
+* Add guard against intersection errors.
+
 v2.0.6
 ------
 
