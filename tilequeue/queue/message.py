@@ -82,7 +82,7 @@ class SingleMessagePerCoordTracker(object):
     one-to-one mapping between queue handles and coordinates
     """
 
-    def track(self, queue_handle, coords):
+    def track(self, queue_handle, coords, parent_tile=None):
         assert len(coords) == 1
         return [queue_handle]
 
