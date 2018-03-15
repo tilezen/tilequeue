@@ -1850,20 +1850,20 @@ def tilequeue_rawr_tile(cfg, args):
 
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
-    coord_str = args.tile
-    coord = deserialize_coord(coord_str)
-    if not coord:
-        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
-        sys.exit(2)
-    rawr_tile_coord = convert_coord_object(coord)
+    for coord_str in args.tile:
+        coord = deserialize_coord(coord_str)
+        if not coord:
+            print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+            continue
+        rawr_tile_coord = convert_coord_object(coord)
 
-    with conn_ctx() as conn:
-        # commit transaction
-        with conn as conn:
-            # cleanup cursor resources
-            with conn.cursor() as cur:
-                table_reader = TableReader(cur)
-                rawr_gen(table_reader, rawr_tile_coord)
+        with conn_ctx() as conn:
+            # commit transaction
+            with conn as conn:
+                # cleanup cursor resources
+                with conn.cursor() as cur:
+                    table_reader = TableReader(cur)
+                    rawr_gen(table_reader, rawr_tile_coord)
 
 
 def _tilequeue_rawr_seed(cfg, peripherals, coords):
@@ -2278,8 +2278,8 @@ def tilequeue_main(argv_args=None):
     subparser = subparsers.add_parser('rawr-tile')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
-    subparser.add_argument('--tile', required=True,
-                           help='Tile coordinate as "z/x/y".')
+    subparser.add_argument('tile', nargs='+',
+                           help='Tile coordinate(s) as "z/x/y".')
     subparser.set_defaults(func=tilequeue_rawr_tile)
 
     args = parser.parse_args(argv_args)
