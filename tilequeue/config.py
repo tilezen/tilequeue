@@ -267,11 +267,64 @@ def merge_cfg(dest, source):
     return dest
 
 
+def _override_cfg(container, yamlkeys, value):
+    """
+    Override a hierarchical key in the config, setting it to the value.
+
+    Note that yamlkeys should be a non-empty list of strings.
+    """
+
+    key = yamlkeys[0]
+    rest = yamlkeys[1:]
+
+    if len(rest) == 0:
+        # no rest means we found the key to update.
+        container[key] = value
+
+    elif key in container:
+        # still need to find the leaf in the tree, so recurse.
+        _override_cfg(container, rest, value)
+
+    else:
+        # need to create a sub-tree down to the leaf to insert into.
+        subtree = {}
+        _override_cfg(subtree, rest, value)
+        container[key] = subtree
+
+
+def _make_yaml_key(s):
+    """
+    Turn an environment variable into a yaml key
+
+    Keys in YAML files are generally lower case and use dashes instead of
+    underscores. This isn't a universal rule, though, so we'll have to
+    either change the keys to conform to this, or have some way of indicating
+    this from the environment.
+    """
+
+    return s.lower().replace("_", "-")
+
+
 def make_config_from_argparse(config_file_handle, default_yml=None):
     if default_yml is None:
         default_yml = default_yml_config()
+
+    # override defaults from config file
     yml_data = load(config_file_handle)
     cfg = merge_cfg(default_yml, yml_data)
+
+    # override config file with values from the environment
+    for k in os.environ:
+        # keys in the environment have the form TILEQUEUE__FOO__BAR (note the
+        # _double_ underscores), which will decode the value as YAML and insert
+        # it in cfg['foo']['bar'].
+        #
+        # TODO: should the prefix TILEQUEUE be configurable?
+        if k.startswith('TILEQUEUE__'):
+            keys = map(_make_yaml_key, k.split('__')[1:])
+            value = load(os.environ[k])
+            _override_cfg(cfg, keys, value)
+
     return Configuration(cfg)
 
 
