@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
