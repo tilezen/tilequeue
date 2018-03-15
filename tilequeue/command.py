@@ -1756,23 +1756,10 @@ def tilequeue_rawr_enqueue(cfg, args):
         rawr_enqueuer(coords)
 
 
-def tilequeue_rawr_process(cfg, peripherals):
+def _tilequeue_rawr_setup(cfg):
     """command to read from rawr queue and generate rawr tiles"""
-    from tilequeue.rawr import make_rawr_queue_from_yaml
-
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
-
-    group_by_zoom = rawr_yaml.get('group-zoom')
-    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-
-    msg_marshall_yaml = cfg.yml.get('message-marshall')
-    assert msg_marshall_yaml, 'Missing message-marshall config'
-    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
-
-    rawr_queue_yaml = rawr_yaml.get('queue')
-    assert rawr_queue_yaml, 'Missing rawr queue config'
-    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller)
 
     rawr_postgresql_yaml = rawr_yaml.get('postgresql')
     assert rawr_postgresql_yaml, 'Missing rawr postgresql config'
@@ -1782,11 +1769,8 @@ def tilequeue_rawr_process(cfg, peripherals):
     from raw_tiles.source.conn import ConnectionContextManager
     from raw_tiles.source import parse_sources
     from raw_tiles.source import DEFAULT_SOURCES as DEFAULT_RAWR_SOURCES
-    from tilequeue.log import JsonRawrProcessingLogger
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
-    from tilequeue.rawr import RawrTileGenerationPipeline
-    from tilequeue.stats import RawrTilePipelineStatsHandler
     import boto3
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
@@ -1818,17 +1802,68 @@ def tilequeue_rawr_process(cfg, peripherals):
         s3_client = boto3.client('s3', region_name=sink_region)
         rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
 
-    logger = make_logger(cfg, 'rawr_process')
     rawr_source = parse_sources(rawr_source_list)
     rawr_formatter = Msgpack()
     rawr_gen = RawrGenerator(rawr_source, rawr_formatter, rawr_sink)
+
+    return rawr_gen, conn_ctx
+
+
+# run RAWR tile processing in a loop, reading from queue
+def tilequeue_rawr_process(cfg, peripherals):
+    from tilequeue.rawr import RawrTileGenerationPipeline
+    from tilequeue.log import JsonRawrProcessingLogger
+    from tilequeue.stats import RawrTilePipelineStatsHandler
+    from tilequeue.rawr import make_rawr_queue_from_yaml
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    msg_marshall_yaml = cfg.yml.get('message-marshall')
+    assert msg_marshall_yaml, 'Missing message-marshall config'
+    msg_marshaller = make_message_marshaller(msg_marshall_yaml)
+
+    rawr_queue_yaml = rawr_yaml.get('queue')
+    assert rawr_queue_yaml, 'Missing rawr queue config'
+    rawr_queue = make_rawr_queue_from_yaml(rawr_queue_yaml, msg_marshaller)
+
+    logger = make_logger(cfg, 'rawr_process')
     stats_handler = RawrTilePipelineStatsHandler(peripherals.stats)
     rawr_proc_logger = JsonRawrProcessingLogger(logger)
+
+    rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
+
     rawr_pipeline = RawrTileGenerationPipeline(
             rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
             peripherals.queue_writer, stats_handler,
             rawr_proc_logger, conn_ctx)
     rawr_pipeline()
+
+
+# run a single RAWR tile generation
+def tilequeue_rawr_tile(cfg, args):
+    from tilequeue.rawr import convert_coord_object
+    from raw_tiles.source.table_reader import TableReader
+
+    rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
+
+    coord_str = args.tile
+    coord = deserialize_coord(coord_str)
+    if not coord:
+        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        sys.exit(2)
+    rawr_tile_coord = convert_coord_object(coord)
+
+    with conn_ctx() as conn:
+        # commit transaction
+        with conn as conn:
+            # cleanup cursor resources
+            with conn.cursor() as cur:
+                table_reader = TableReader(cur)
+                rawr_gen(table_reader, rawr_tile_coord)
 
 
 def _tilequeue_rawr_seed(cfg, peripherals, coords):
@@ -1979,6 +2014,9 @@ def tilequeue_batch_process(cfg, args):
 
     # TODO generalize and move to tile.py?
     def find_job_coords_for(coord, target_zoom):
+        if coord.zoom == target_zoom:
+            yield coord
+            return
         xmin = coord.column
         xmax = coord.column
         ymin = coord.row
@@ -2236,6 +2274,13 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--tile', required=True,
                            help='Tile coordinate as "z/x/y".')
     subparser.set_defaults(func=tilequeue_batch_process)
+
+    subparser = subparsers.add_parser('rawr-tile')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--tile', required=True,
+                           help='Tile coordinate as "z/x/y".')
+    subparser.set_defaults(func=tilequeue_rawr_tile)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
