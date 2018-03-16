@@ -1848,6 +1848,10 @@ def tilequeue_rawr_tile(cfg, args):
     from tilequeue.rawr import convert_coord_object
     from raw_tiles.source.table_reader import TableReader
 
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
     for coord_str in args.tile:
@@ -1855,15 +1859,16 @@ def tilequeue_rawr_tile(cfg, args):
         if not coord:
             print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
             continue
-        rawr_tile_coord = convert_coord_object(coord)
-
-        with conn_ctx() as conn:
-            # commit transaction
-            with conn as conn:
-                # cleanup cursor resources
-                with conn.cursor() as cur:
-                    table_reader = TableReader(cur)
-                    rawr_gen(table_reader, rawr_tile_coord)
+        job_coords = find_job_coords_for(coord, group_by_zoom)
+        for coord in job_coords:
+            rawr_tile_coord = convert_coord_object(coord)
+            with conn_ctx() as conn:
+                # commit transaction
+                with conn as conn:
+                    # cleanup cursor resources
+                    with conn.cursor() as cur:
+                        table_reader = TableReader(cur)
+                        rawr_gen(table_reader, rawr_tile_coord)
 
 
 def _tilequeue_rawr_seed(cfg, peripherals, coords):
@@ -1986,6 +1991,26 @@ def tilequeue_batch_enqueue(cfg, peripherals):
     logger.info('Batch enqueue ... done')
 
 
+# TODO move to tile.py?
+def find_job_coords_for(coord, target_zoom):
+    assert target_zoom >= coord.zoom
+    if coord.zoom == target_zoom:
+        yield coord
+        return
+    xmin = coord.column
+    xmax = coord.column
+    ymin = coord.row
+    ymax = coord.row
+    for i in xrange(target_zoom - coord.zoom):
+        xmin *= 2
+        ymin *= 2
+        xmax = xmax * 2 + 1
+        ymax = ymax * 2 + 1
+    for y in xrange(ymin, ymax+1):
+        for x in xrange(xmin, xmax+1):
+            yield Coordinate(zoom=10, column=x, row=y)
+
+
 def tilequeue_batch_process(cfg, args):
     from tilequeue.log import BatchProcessLogger
     from tilequeue.metatile import make_metatiles
@@ -2011,25 +2036,6 @@ def tilequeue_batch_process(cfg, args):
         sys.exit(2)
 
     assert queue_coord.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
-
-    # TODO generalize and move to tile.py?
-    def find_job_coords_for(coord, target_zoom):
-        if coord.zoom == target_zoom:
-            yield coord
-            return
-        xmin = coord.column
-        xmax = coord.column
-        ymin = coord.row
-        ymax = coord.row
-        assert target_zoom > coord.zoom
-        for i in xrange(target_zoom - coord.zoom):
-            xmin *= 2
-            ymin *= 2
-            xmax = xmax * 2 + 1
-            ymax = ymax * 2 + 1
-        for y in xrange(ymin, ymax+1):
-            for x in xrange(xmin, xmax+1):
-                yield Coordinate(zoom=10, column=x, row=y)
 
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
