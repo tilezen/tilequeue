@@ -283,7 +283,7 @@ def _override_cfg(container, yamlkeys, value):
 
     elif key in container:
         # still need to find the leaf in the tree, so recurse.
-        _override_cfg(container, rest, value)
+        _override_cfg(container[key], rest, value)
 
     else:
         # need to create a sub-tree down to the leaf to insert into.
