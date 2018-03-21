@@ -36,6 +36,7 @@ class LogCategory(Enum):
     LIFECYCLE = 2
     QUEUE_SIZES = 3
     RAWR_PROCESS = 4
+    RAWR_TILE = 5
 
 
 class MsgType(Enum):
@@ -202,6 +203,8 @@ class JsonTileProcessingLogger(object):
 
 class JsonRawrProcessingLogger(object):
 
+    """Json logger for rawr tile generation and enqueue pipeline"""
+
     def __init__(self, logger):
         self.logger = logger
 
@@ -237,6 +240,61 @@ class JsonRawrProcessingLogger(object):
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.LIFECYCLE),
             msg=msg,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+
+class JsonRawrTileLogger(object):
+
+    """Json logger for generating rawr tiles"""
+
+    def __init__(self, logger):
+        self.logger = logger
+
+    def error(self, exception, coord, parent):
+        stacktrace = format_stacktrace_one_line()
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.RAWR_TILE),
+            exception=str(exception),
+            stacktrace=stacktrace,
+            coord=make_coord_dict(coord),
+            parent=make_coord_dict(parent),
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
+    def lifecycle(self, msg, *args):
+        if args:
+            msg = msg % args
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.LIFECYCLE),
+            msg=msg,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+    def coord_done(self, coord, parent, timing):
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            msg_type=log_msg_type_name(MsgType.INDIVIDUAL),
+            category=log_category_name(LogCategory.RAWR_TILE),
+            coord=make_coord_dict(coord),
+            parent=make_coord_dict(parent),
+            timing=timing,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+    def parent_coord_done(self, coord, timing):
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            msg_type=log_msg_type_name(MsgType.PYRAMID),
+            category=log_category_name(LogCategory.RAWR_TILE),
+            coord=make_coord_dict(coord),
+            timing=timing,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)

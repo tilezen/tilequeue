@@ -38,6 +38,7 @@ from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.utils import parse_log_file
+from tilequeue.utils import time_block
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
@@ -1790,17 +1791,27 @@ def _tilequeue_rawr_setup(cfg):
     else:
         rawr_sink_yaml = rawr_yaml.get('sink')
         assert rawr_sink_yaml, 'Missing rawr sink config'
-        bucket = rawr_sink_yaml.get('bucket')
-        assert bucket, 'Missing rawr sink bucket'
-        sink_region = rawr_sink_yaml.get('region')
-        assert sink_region, 'Missing rawr sink region'
-        prefix = rawr_sink_yaml.get('prefix')
-        assert prefix, 'Missing rawr sink prefix'
-        suffix = rawr_sink_yaml.get('suffix')
-        assert suffix, 'Missing rawr sink suffix'
+        sink_type = rawr_sink_yaml.get('type')
+        assert sink_type, 'Missing rawr sink type'
+        if sink_type == 's3':
+            s3_cfg = rawr_sink_yaml.get('s3')
+            assert s3_cfg, 'Missing s3 config'
+            bucket = s3_cfg.get('bucket')
+            assert bucket, 'Missing rawr sink bucket'
+            sink_region = s3_cfg.get('region')
+            assert sink_region, 'Missing rawr sink region'
+            prefix = s3_cfg.get('prefix')
+            assert prefix, 'Missing rawr sink prefix'
+            suffix = s3_cfg.get('suffix')
+            assert suffix, 'Missing rawr sink suffix'
 
-        s3_client = boto3.client('s3', region_name=sink_region)
-        rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
+            s3_client = boto3.client('s3', region_name=sink_region)
+            rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
+        elif sink_type == 'none':
+            from tilequeue.rawr import RawrNullSink
+            rawr_sink = RawrNullSink()
+        else:
+            assert 0, 'Unknown rawr sink type %s' % sink_type
 
     rawr_source = parse_sources(rawr_source_list)
     rawr_formatter = Msgpack()
@@ -1845,8 +1856,13 @@ def tilequeue_rawr_process(cfg, peripherals):
 
 # run a single RAWR tile generation
 def tilequeue_rawr_tile(cfg, args):
-    from tilequeue.rawr import convert_coord_object
     from raw_tiles.source.table_reader import TableReader
+    from tilequeue.log import JsonRawrTileLogger
+    from tilequeue.rawr import convert_coord_object
+
+    parent_coord_str = args.tile
+    parent = deserialize_coord(parent_coord_str)
+    assert parent, 'Invalid tile coordinate: %s' % parent_coord_str
 
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
@@ -1854,21 +1870,35 @@ def tilequeue_rawr_tile(cfg, args):
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
-    for coord_str in args.tile:
-        coord = deserialize_coord(coord_str)
-        if not coord:
-            print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
-            continue
-        job_coords = find_job_coords_for(coord, group_by_zoom)
+    logger = make_logger(cfg, 'rawr_tile')
+    rawr_tile_logger = JsonRawrTileLogger(logger)
+    rawr_tile_logger.lifecycle(
+        'Rawr tile generation started: %s', parent_coord_str)
+
+    parent_timing = {}
+    with time_block(parent_timing, 'total'):
+        job_coords = find_job_coords_for(parent, group_by_zoom)
         for coord in job_coords:
-            rawr_tile_coord = convert_coord_object(coord)
-            with conn_ctx() as conn:
-                # commit transaction
-                with conn as conn:
-                    # cleanup cursor resources
-                    with conn.cursor() as cur:
-                        table_reader = TableReader(cur)
-                        rawr_gen(table_reader, rawr_tile_coord)
+            try:
+                coord_timing = {}
+                with time_block(coord_timing, 'total'):
+                    rawr_tile_coord = convert_coord_object(coord)
+                    with conn_ctx() as conn:
+                        # commit transaction
+                        with conn as conn:
+                            # cleanup cursor resources
+                            with conn.cursor() as cur:
+                                table_reader = TableReader(cur)
+                                rawr_gen_timing = rawr_gen(
+                                    table_reader, rawr_tile_coord)
+                                coord_timing['gen'] = rawr_gen_timing
+                rawr_tile_logger.coord_done(coord, parent, coord_timing)
+            except Exception as e:
+                rawr_tile_logger.error(e, coord, parent)
+    rawr_tile_logger.parent_coord_done(parent, parent_timing)
+
+    rawr_tile_logger.lifecycle(
+        'Rawr tile generation finished: %s', parent_coord_str)
 
 
 def _tilequeue_rawr_seed(cfg, peripherals, coords):
@@ -1933,7 +1963,7 @@ def make_statsd_client_from_cfg(cfg):
     return stats
 
 
-def tilequeue_batch_enqueue(cfg, peripherals):
+def tilequeue_batch_enqueue(cfg, args):
     logger = make_logger(cfg, 'batch_enqueue')
 
     import boto3
@@ -1952,8 +1982,12 @@ def tilequeue_batch_enqueue(cfg, peripherals):
     job_queue = batch_yaml.get('job-queue')
     assert job_queue, 'Missing batch job-queue config'
 
+    job_name_prefix = batch_yaml.get('job-name-prefix')
+    assert job_name_prefix, 'Missing batch job-name-prefix config'
+
     retry_attempts = batch_yaml.get('retry-attempts')
     memory = batch_yaml.get('memory')
+    vcpus = batch_yaml.get('vcpus')
 
     dim = 2 ** queue_zoom
     z = queue_zoom
@@ -1961,37 +1995,31 @@ def tilequeue_batch_enqueue(cfg, peripherals):
     for y in xrange(dim):
         for x in xrange(dim):
             coord_str = '%d/%d/%d' % (z, x, y)
-            job_name = 'metatile-process-%d-%d-%d' % (z, x, y)
-            # TODO maybe passing the tile through an environment variable is
-            # cleaner, and we won't have to know about where the tilequeue
-            # binary and config file are in the image
-            job_cmd = [
-                'tilequeue', 'batch-process',
-                '--config', '/etc/tilequeue/config.yaml',
-                '--tile', coord_str,
-            ]
-            container_overrides = dict(command=job_cmd)
+            job_name = '%s-%d-%d-%d' % (job_name_prefix, z, x, y)
             job_opts = dict(
                 jobDefinition=job_def,
                 jobQueue=job_queue,
                 jobName=job_name,
-                containerOverrides=container_overrides,
+                parameters=dict(tile=coord_str),
             )
             if retry_attempts is not None:
                 job_opts['retryStrategy'] = dict(attempts=retry_attempts)
+            container_overrides = {}
             if memory:
                 container_overrides['memory'] = memory
+            if vcpus:
+                container_overrides['vcpus'] = vcpus
+            if container_overrides:
+                job_opts['containerOverrides'] = container_overrides
             resp = client.submit_job(**job_opts)
             assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
                 'Failed to submit job: %s' % 'JobName'
             i += 1
             if i % 1000 == 0:
-                print '%d jobs submitted' % i
-
+                logger.info('%d jobs submitted', i)
     logger.info('Batch enqueue ... done')
 
 
-# TODO move to tile.py?
 def find_job_coords_for(coord, target_zoom):
     assert target_zoom >= coord.zoom
     if coord.zoom == target_zoom:
@@ -2158,7 +2186,6 @@ def tilequeue_main(argv_args=None):
         ('rawr-process', tilequeue_rawr_process),
         ('rawr-seed-toi', tilequeue_rawr_seed_toi),
         ('rawr-seed-all', tilequeue_rawr_seed_all),
-        ('batch-enqueue', tilequeue_batch_enqueue),
     )
 
     def _make_peripherals(cfg):
@@ -2284,9 +2311,14 @@ def tilequeue_main(argv_args=None):
     subparser = subparsers.add_parser('rawr-tile')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
-    subparser.add_argument('tile', nargs='+',
-                           help='Tile coordinate(s) as "z/x/y".')
+    subparser.add_argument('--tile', required=True,
+                           help='Tile coordinate as "z/x/y".')
     subparser.set_defaults(func=tilequeue_rawr_tile)
+
+    subparser = subparsers.add_parser('batch-enqueue')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.set_defaults(func=tilequeue_batch_enqueue)
 
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \

@@ -312,10 +312,13 @@ rawr:
     user: dbuser
     password: dbpassword
   sink:
-    bucket: s3-bucket-name
-    region: us-east-1
-    prefix: s3-bucket-prefix
-    suffix: .zip
+    # type can also be "none" which ignores all writes
+    type: s3
+    s3:
+      bucket: s3-bucket-name
+      region: us-east-1
+      prefix: s3-bucket-prefix
+      suffix: .zip
   # alternatively, provide a "store" config - same as elsewhere, can be s3 or directory
   #store:
   #  type: directory

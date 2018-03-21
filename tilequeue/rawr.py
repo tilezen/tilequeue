@@ -598,6 +598,11 @@ class RawrS3Sink(object):
         )
 
 
+class RawrNullSink(object):
+    def __call__(self, rawr_tile):
+        pass
+
+
 class RawrStoreSink(object):
 
     """Rawr sink to write to tilequeue store."""
