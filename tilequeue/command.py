@@ -27,10 +27,10 @@ from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import metatile_zoom_from_str
-from tilequeue.tile import parse_expired_coord_string
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
+from tilequeue.tile import tile_generator_for_range
 from tilequeue.tile import tile_generator_for_single_bounds
 from tilequeue.tile import zoom_mask
 from tilequeue.toi import load_set_from_fp
@@ -69,7 +69,7 @@ def create_coords_generator_from_tiles_file(fp, logger=None):
         line = line.strip()
         if not line:
             continue
-        coord = parse_expired_coord_string(line)
+        coord = deserialize_coord(line)
         if coord is None:
             if logger is not None:
                 logger.warning('Could not parse coordinate from line: ' % line)
@@ -1989,34 +1989,39 @@ def tilequeue_batch_enqueue(cfg, args):
     memory = batch_yaml.get('memory')
     vcpus = batch_yaml.get('vcpus')
 
-    dim = 2 ** queue_zoom
-    z = queue_zoom
-    i = 0
-    for y in xrange(dim):
-        for x in xrange(dim):
-            coord_str = '%d/%d/%d' % (z, x, y)
-            job_name = '%s-%d-%d-%d' % (job_name_prefix, z, x, y)
-            job_opts = dict(
-                jobDefinition=job_def,
-                jobQueue=job_queue,
-                jobName=job_name,
-                parameters=dict(tile=coord_str),
-            )
-            if retry_attempts is not None:
-                job_opts['retryStrategy'] = dict(attempts=retry_attempts)
-            container_overrides = {}
-            if memory:
-                container_overrides['memory'] = memory
-            if vcpus:
-                container_overrides['vcpus'] = vcpus
-            if container_overrides:
-                job_opts['containerOverrides'] = container_overrides
-            resp = client.submit_job(**job_opts)
-            assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
-                'Failed to submit job: %s' % 'JobName'
-            i += 1
-            if i % 1000 == 0:
-                logger.info('%d jobs submitted', i)
+    if args.file:
+        with open(args.file) as coords_fh:
+            coords = list(create_coords_generator_from_tiles_file(coords_fh))
+    else:
+        dim = 2 ** queue_zoom
+        coords = tile_generator_for_range(
+            0, 0, dim-1, dim-1, queue_zoom, queue_zoom)
+
+    for i, coord in enumerate(coords):
+        coord_str = serialize_coord(coord)
+        job_name = '%s-%d-%d-%d' % (
+            job_name_prefix, coord.zoom, coord.column, coord.row)
+        job_opts = dict(
+            jobDefinition=job_def,
+            jobQueue=job_queue,
+            jobName=job_name,
+            parameters=dict(tile=coord_str),
+        )
+        if retry_attempts is not None:
+            job_opts['retryStrategy'] = dict(attempts=retry_attempts)
+        container_overrides = {}
+        if memory:
+            container_overrides['memory'] = memory
+        if vcpus:
+            container_overrides['vcpus'] = vcpus
+        if container_overrides:
+            job_opts['containerOverrides'] = container_overrides
+        resp = client.submit_job(**job_opts)
+        assert resp['ResponseMetadata']['HTTPStatusCode'] == 200, \
+            'Failed to submit job: %s' % 'JobName'
+        i += 1
+        if i % 1000 == 0:
+            logger.info('%d jobs submitted', i)
     logger.info('Batch enqueue ... done')
 
 
@@ -2318,6 +2323,8 @@ def tilequeue_main(argv_args=None):
     subparser = subparsers.add_parser('batch-enqueue')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
+    subparser.add_argument('--file', required=False,
+                           help='Path to file containing coords to enqueue')
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
     args = parser.parse_args(argv_args)
