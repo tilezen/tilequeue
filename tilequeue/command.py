@@ -2022,7 +2022,7 @@ def tilequeue_batch_enqueue(cfg, args):
         i += 1
         if i % 1000 == 0:
             logger.info('%d jobs submitted', i)
-    logger.info('Batch enqueue ... done')
+    logger.info('Batch enqueue ... done - %d coords enqueued', i)
 
 
 def find_job_coords_for(coord, target_zoom):
