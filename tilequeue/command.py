@@ -1854,6 +1854,16 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_pipeline()
 
 
+def make_default_run_id(include_clock_time, now=None):
+    if now is None:
+        now = datetime.datetime.now()
+    if include_clock_time:
+        fmt = '%Y%m%d-%H:%M:%S'
+    else:
+        fmt = '%Y%m%d'
+    return now.strftime(fmt)
+
+
 # run a single RAWR tile generation
 def tilequeue_rawr_tile(cfg, args):
     from raw_tiles.source.table_reader import TableReader
@@ -1864,6 +1874,10 @@ def tilequeue_rawr_tile(cfg, args):
     parent = deserialize_coord(parent_coord_str)
     assert parent, 'Invalid tile coordinate: %s' % parent_coord_str
 
+    run_id = args.run_id
+    if not run_id:
+        run_id = make_default_run_id(include_clock_time=False)
+
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
     group_by_zoom = rawr_yaml.get('group-zoom')
@@ -1871,7 +1885,7 @@ def tilequeue_rawr_tile(cfg, args):
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
     logger = make_logger(cfg, 'rawr_tile')
-    rawr_tile_logger = JsonRawrTileLogger(logger)
+    rawr_tile_logger = JsonRawrTileLogger(logger, run_id)
     rawr_tile_logger.lifecycle(
         'Rawr tile generation started: %s', parent_coord_str)
 
@@ -1988,10 +2002,17 @@ def tilequeue_batch_enqueue(cfg, args):
     retry_attempts = batch_yaml.get('retry-attempts')
     memory = batch_yaml.get('memory')
     vcpus = batch_yaml.get('vcpus')
+    run_id = batch_yaml.get('run_id')
+    if not run_id:
+        run_id = make_default_run_id(include_clock_time=True)
 
     if args.file:
         with open(args.file) as coords_fh:
             coords = list(create_coords_generator_from_tiles_file(coords_fh))
+    elif args.tile:
+        coord = deserialize_coord(args.tile)
+        assert coord, 'Invalid coord: %s' % args.tile
+        coords = [coord]
     else:
         dim = 2 ** queue_zoom
         coords = tile_generator_for_range(
@@ -2001,11 +2022,15 @@ def tilequeue_batch_enqueue(cfg, args):
         coord_str = serialize_coord(coord)
         job_name = '%s-%d-%d-%d' % (
             job_name_prefix, coord.zoom, coord.column, coord.row)
+        job_parameters = dict(
+            tile=coord_str,
+            run_id=run_id,
+        )
         job_opts = dict(
             jobDefinition=job_def,
             jobQueue=job_queue,
             jobName=job_name,
-            parameters=dict(tile=coord_str),
+            parameters=job_parameters,
         )
         if retry_attempts is not None:
             job_opts['retryStrategy'] = dict(attempts=retry_attempts)
@@ -2044,16 +2069,19 @@ def find_job_coords_for(coord, target_zoom):
             yield Coordinate(zoom=10, column=x, row=y)
 
 
-def tilequeue_batch_process(cfg, args):
-    from tilequeue.log import BatchProcessLogger
+def tilequeue_meta_tile(cfg, args):
+    from tilequeue.log import JsonMetaTileLogger
     from tilequeue.metatile import make_metatiles
 
+    coord_str = args.tile
+    run_id = args.run_id
+    if not run_id:
+        run_id = make_default_run_id(include_clock_time=False)
+
     logger = make_logger(cfg, 'batch_process')
-    batch_logger = BatchProcessLogger(logger)
+    meta_tile_logger = JsonMetaTileLogger(logger, run_id)
 
     store = _make_store(cfg, logger)
-
-    coord_str = args.tile
 
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2064,9 +2092,7 @@ def tilequeue_batch_process(cfg, args):
     check_metatile_exists = bool(batch_yaml.get('check-metatile-exists'))
 
     queue_coord = deserialize_coord(coord_str)
-    if not queue_coord:
-        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
-        sys.exit(2)
+    assert queue_coord, 'Invalid coordinate: %s' % coord_str
 
     assert queue_coord.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
 
@@ -2093,7 +2119,7 @@ def tilequeue_batch_process(cfg, args):
     assert zoom_stop > group_by_zoom
     formats = lookup_formats(cfg.output_formats)
 
-    batch_logger.begin_run(queue_coord)
+    meta_tile_logger.begin_run(queue_coord)
 
     layer = 'all'
     zip_format = lookup_format_by_extension('zip')
@@ -2102,7 +2128,7 @@ def tilequeue_batch_process(cfg, args):
     job_coords = find_job_coords_for(queue_coord, group_by_zoom)
     for job_coord in job_coords:
 
-        batch_logger.begin_pyramid(job_coord)
+        meta_tile_logger.begin_pyramid(job_coord)
 
         # each coord here is the unit of work now
         pyramid_coords = [job_coord]
@@ -2112,7 +2138,7 @@ def tilequeue_batch_process(cfg, args):
         try:
             fetched_coord_data = data_fetcher.fetch_tiles(coord_data)
         except Exception as e:
-            batch_logger.pyramid_fetch_failed(e, job_coord)
+            meta_tile_logger.pyramid_fetch_failed(e, job_coord)
             continue
 
         for fetch, coord_datum in fetched_coord_data:
@@ -2123,7 +2149,7 @@ def tilequeue_batch_process(cfg, args):
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format, layer)
                 if existing_data is not None:
-                    batch_logger.metatile_already_exists(coord)
+                    meta_tile_logger.metatile_already_exists(coord)
                     continue
 
             try:
@@ -2131,7 +2157,7 @@ def tilequeue_batch_process(cfg, args):
                 feature_layers = convert_source_data_to_feature_layers(
                     source_rows, layer_data, unpadded_bounds, coord.zoom)
             except Exception as e:
-                batch_logger.tile_fetch_failed(e, coord)
+                meta_tile_logger.tile_fetch_failed(e, coord)
                 continue
 
             cut_coords = [coord]
@@ -2145,7 +2171,7 @@ def tilequeue_batch_process(cfg, args):
                     output_calc_mapping
                 )
             except Exception as e:
-                batch_logger.tile_process_failed(e, coord)
+                meta_tile_logger.tile_process_failed(e, coord)
                 continue
 
             try:
@@ -2155,14 +2181,14 @@ def tilequeue_batch_process(cfg, args):
                         tile['tile'], tile['coord'], tile['format'],
                         tile['layer'])
             except Exception as e:
-                batch_logger.metatile_storage_failed(e, coord)
+                meta_tile_logger.metatile_storage_failed(e, coord)
                 continue
 
-            batch_logger.tile_processed(coord)
+            meta_tile_logger.tile_processed(coord)
 
-        batch_logger.end_pyramid(job_coord)
+        meta_tile_logger.end_pyramid(job_coord)
 
-    batch_logger.end_run(queue_coord)
+    meta_tile_logger.end_run(queue_coord)
 
 
 def tilequeue_main(argv_args=None):
@@ -2306,18 +2332,22 @@ def tilequeue_main(argv_args=None):
                            help='path to tile expiry file')
     subparser.set_defaults(func=tilequeue_rawr_enqueue)
 
-    subparser = subparsers.add_parser('batch-process')
+    subparser = subparsers.add_parser('meta-tile')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
     subparser.add_argument('--tile', required=True,
                            help='Tile coordinate as "z/x/y".')
-    subparser.set_defaults(func=tilequeue_batch_process)
+    subparser.add_argument('--run_id', required=False,
+                           help='optional run_id used for logging')
+    subparser.set_defaults(func=tilequeue_meta_tile)
 
     subparser = subparsers.add_parser('rawr-tile')
     subparser.add_argument('--config', required=True,
                            help='The path to the tilequeue config file.')
     subparser.add_argument('--tile', required=True,
                            help='Tile coordinate as "z/x/y".')
+    subparser.add_argument('--run_id', required=False,
+                           help='optional run_id used for logging')
     subparser.set_defaults(func=tilequeue_rawr_tile)
 
     subparser = subparsers.add_parser('batch-enqueue')
@@ -2325,6 +2355,8 @@ def tilequeue_main(argv_args=None):
                            help='The path to the tilequeue config file.')
     subparser.add_argument('--file', required=False,
                            help='Path to file containing coords to enqueue')
+    subparser.add_argument('--tile', required=False,
+                           help='Single coordinate to enqueue')
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
     args = parser.parse_args(argv_args)

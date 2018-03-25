@@ -395,3 +395,5 @@ batch:
   # NOTE: in megabytes
   # https://docs.aws.amazon.com/batch/latest/APIReference/API_ContainerOverrides.html
   memory:
+  vcpus:
+  run_id: optional-string-which-gets-logged

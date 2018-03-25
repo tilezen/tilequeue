@@ -37,6 +37,7 @@ class LogCategory(Enum):
     QUEUE_SIZES = 3
     RAWR_PROCESS = 4
     RAWR_TILE = 5
+    META_TILE = 6
 
 
 class MsgType(Enum):
@@ -249,8 +250,9 @@ class JsonRawrTileLogger(object):
 
     """Json logger for generating rawr tiles"""
 
-    def __init__(self, logger):
+    def __init__(self, logger, run_id):
         self.logger = logger
+        self.run_id = run_id
 
     def error(self, exception, coord, parent):
         stacktrace = format_stacktrace_one_line()
@@ -261,6 +263,7 @@ class JsonRawrTileLogger(object):
             stacktrace=stacktrace,
             coord=make_coord_dict(coord),
             parent=make_coord_dict(parent),
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.error(json_str)
@@ -272,6 +275,7 @@ class JsonRawrTileLogger(object):
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.LIFECYCLE),
             msg=msg,
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
@@ -284,6 +288,7 @@ class JsonRawrTileLogger(object):
             coord=make_coord_dict(coord),
             parent=make_coord_dict(parent),
             timing=timing,
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
@@ -295,6 +300,7 @@ class JsonRawrTileLogger(object):
             category=log_category_name(LogCategory.RAWR_TILE),
             coord=make_coord_dict(coord),
             timing=timing,
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
@@ -324,16 +330,18 @@ class MultipleMessagesTrackerLogger(object):
         self._log('Unknown coord_id', coord_id, queue_handle_id)
 
 
-class BatchProcessLogger(object):
-
-    def __init__(self, logger):
+class JsonMetaTileLogger(object):
+    def __init__(self, logger, run_id):
         self.logger = logger
+        self.run_id = run_id
 
     def _log(self, msg, coord):
         json_obj = dict(
             coord=make_coord_dict(coord),
             type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.META_TILE),
             msg=msg,
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
@@ -358,9 +366,11 @@ class BatchProcessLogger(object):
         json_obj = dict(
             coord=make_coord_dict(coord),
             type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.META_TILE),
             msg=msg,
             exception=str(exception),
             stacktrace=stacktrace,
+            run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.error(json_str)
