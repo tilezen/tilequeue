@@ -254,7 +254,7 @@ class JsonRawrTileLogger(object):
         self.logger = logger
         self.run_id = run_id
 
-    def error(self, exception, coord, parent):
+    def error(self, exception, parent, coord):
         stacktrace = format_stacktrace_one_line()
         json_obj = dict(
             type=log_level_name(LogLevel.ERROR),
@@ -268,19 +268,20 @@ class JsonRawrTileLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.error(json_str)
 
-    def lifecycle(self, msg, *args):
+    def lifecycle(self, parent, msg, *args):
         if args:
             msg = msg % args
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.LIFECYCLE),
             msg=msg,
+            parent=make_coord_dict(parent),
             run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
-    def coord_done(self, coord, parent, timing):
+    def coord_done(self, parent, coord, timing):
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             msg_type=log_msg_type_name(MsgType.INDIVIDUAL),
@@ -293,12 +294,12 @@ class JsonRawrTileLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
-    def parent_coord_done(self, coord, timing):
+    def parent_coord_done(self, parent, timing):
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             msg_type=log_msg_type_name(MsgType.PYRAMID),
             category=log_category_name(LogCategory.RAWR_TILE),
-            coord=make_coord_dict(coord),
+            parent=make_coord_dict(parent),
             timing=timing,
             run_id=self.run_id,
         )
@@ -331,40 +332,52 @@ class MultipleMessagesTrackerLogger(object):
 
 
 class JsonMetaTileLogger(object):
+    """
+    handle logging for metatile generation command
+
+    parent:  coordinate specified on command line, z7
+    pyramid: the top level pyramid coordinate, z10
+    work:    metatile coordinate being generated: z10+
+    """
     def __init__(self, logger, run_id):
         self.logger = logger
         self.run_id = run_id
 
-    def _log(self, msg, coord):
+    def _log(self, msg, parent, pyramid=None, coord=None):
         json_obj = dict(
-            coord=make_coord_dict(coord),
+            parent=make_coord_dict(parent),
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.META_TILE),
             msg=msg,
             run_id=self.run_id,
         )
+        if pyramid:
+            json_obj['pyramid'] = make_coord_dict(pyramid)
+        if coord:
+            json_obj['coord'] = make_coord_dict(coord)
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
-    def begin_run(self, coord):
-        self._log('batch process run begin', coord)
+    def begin_run(self, parent):
+        self._log('batch process run begin', parent)
 
-    def end_run(self, coord):
-        self._log('batch process run end', coord)
+    def end_run(self, parent):
+        self._log('batch process run end', parent)
 
-    def begin_pyramid(self, coord):
-        self._log('pyramid begin', coord)
+    def begin_pyramid(self, parent, pyramid):
+        self._log('pyramid begin', parent, pyramid)
 
-    def end_pyramid(self, coord):
-        self._log('pyramid end', coord)
+    def end_pyramid(self, parent, pyramid):
+        self._log('pyramid end', parent, pyramid)
 
-    def tile_processed(self, coord):
-        self._log('tile processed', coord)
+    def tile_processed(self, parent, pyramid, coord):
+        self._log('tile processed', parent, pyramid, coord)
 
-    def _log_exception(self, msg, exception, coord):
+    def _log_exception(self, msg, exception, parent, pyramid, coord=None):
         stacktrace = format_stacktrace_one_line()
         json_obj = dict(
-            coord=make_coord_dict(coord),
+            parent=make_coord_dict(parent),
+            pyramid=make_coord_dict(pyramid),
             type=log_level_name(LogLevel.ERROR),
             category=log_category_name(LogCategory.META_TILE),
             msg=msg,
@@ -372,20 +385,25 @@ class JsonMetaTileLogger(object):
             stacktrace=stacktrace,
             run_id=self.run_id,
         )
+        if coord:
+            json_obj['coord'] = make_coord_dict(coord)
         json_str = json.dumps(json_obj)
         self.logger.error(json_str)
 
-    def pyramid_fetch_failed(self, exception, coord):
-        self._log_exception('pyramid fetch failed', exception, coord)
+    def pyramid_fetch_failed(self, exception, parent, pyramid):
+        self._log_exception('pyramid fetch failed', exception, parent, pyramid)
 
-    def tile_fetch_failed(self, exception, coord):
-        self._log_exception('tile fetch failed', exception, coord)
+    def tile_fetch_failed(self, exception, parent, pyramid, coord):
+        self._log_exception(
+            'tile fetch failed', exception, parent, pyramid, coord)
 
-    def tile_process_failed(self, exception, coord):
-        self._log_exception('tile process failed', exception, coord)
+    def tile_process_failed(self, exception, parent, pyramid, coord):
+        self._log_exception(
+            'tile process failed', exception, parent, pyramid, coord)
 
-    def metatile_storage_failed(self, exception, coord):
-        self._log_exception('metatile storage failed', exception, coord)
+    def metatile_storage_failed(self, exception, parent, pyramid, coord):
+        self._log_exception(
+            'metatile storage failed', exception, parent, pyramid, coord)
 
-    def metatile_already_exists(self, coord):
-        self._log('metatile already exists', coord)
+    def metatile_already_exists(self, parent, pyramid, coord):
+        self._log('metatile already exists', parent, pyramid, coord)

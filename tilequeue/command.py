@@ -1886,8 +1886,7 @@ def tilequeue_rawr_tile(cfg, args):
 
     logger = make_logger(cfg, 'rawr_tile')
     rawr_tile_logger = JsonRawrTileLogger(logger, run_id)
-    rawr_tile_logger.lifecycle(
-        'Rawr tile generation started: %s', parent_coord_str)
+    rawr_tile_logger.lifecycle(parent, 'Rawr tile generation started')
 
     parent_timing = {}
     with time_block(parent_timing, 'total'):
@@ -1906,13 +1905,12 @@ def tilequeue_rawr_tile(cfg, args):
                                 rawr_gen_timing = rawr_gen(
                                     table_reader, rawr_tile_coord)
                                 coord_timing['gen'] = rawr_gen_timing
-                rawr_tile_logger.coord_done(coord, parent, coord_timing)
+                rawr_tile_logger.coord_done(parent, coord, coord_timing)
             except Exception as e:
-                rawr_tile_logger.error(e, coord, parent)
+                rawr_tile_logger.error(e, parent, coord)
     rawr_tile_logger.parent_coord_done(parent, parent_timing)
 
-    rawr_tile_logger.lifecycle(
-        'Rawr tile generation finished: %s', parent_coord_str)
+    rawr_tile_logger.lifecycle(parent, 'Rawr tile generation finished')
 
 
 def _tilequeue_rawr_seed(cfg, peripherals, coords):
@@ -2091,10 +2089,10 @@ def tilequeue_meta_tile(cfg, args):
 
     check_metatile_exists = bool(batch_yaml.get('check-metatile-exists'))
 
-    queue_coord = deserialize_coord(coord_str)
-    assert queue_coord, 'Invalid coordinate: %s' % coord_str
+    parent = deserialize_coord(coord_str)
+    assert parent, 'Invalid coordinate: %s' % coord_str
 
-    assert queue_coord.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
+    assert parent.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
 
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
@@ -2119,16 +2117,16 @@ def tilequeue_meta_tile(cfg, args):
     assert zoom_stop > group_by_zoom
     formats = lookup_formats(cfg.output_formats)
 
-    meta_tile_logger.begin_run(queue_coord)
+    meta_tile_logger.begin_run(parent)
 
     layer = 'all'
     zip_format = lookup_format_by_extension('zip')
     assert zip_format
 
-    job_coords = find_job_coords_for(queue_coord, group_by_zoom)
+    job_coords = find_job_coords_for(parent, group_by_zoom)
     for job_coord in job_coords:
 
-        meta_tile_logger.begin_pyramid(job_coord)
+        meta_tile_logger.begin_pyramid(parent, job_coord)
 
         # each coord here is the unit of work now
         pyramid_coords = [job_coord]
@@ -2138,7 +2136,7 @@ def tilequeue_meta_tile(cfg, args):
         try:
             fetched_coord_data = data_fetcher.fetch_tiles(coord_data)
         except Exception as e:
-            meta_tile_logger.pyramid_fetch_failed(e, job_coord)
+            meta_tile_logger.pyramid_fetch_failed(e, parent, job_coord)
             continue
 
         for fetch, coord_datum in fetched_coord_data:
@@ -2149,7 +2147,8 @@ def tilequeue_meta_tile(cfg, args):
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format, layer)
                 if existing_data is not None:
-                    meta_tile_logger.metatile_already_exists(coord)
+                    meta_tile_logger.metatile_already_exists(
+                        parent, job_coord, coord)
                     continue
 
             try:
@@ -2157,7 +2156,7 @@ def tilequeue_meta_tile(cfg, args):
                 feature_layers = convert_source_data_to_feature_layers(
                     source_rows, layer_data, unpadded_bounds, coord.zoom)
             except Exception as e:
-                meta_tile_logger.tile_fetch_failed(e, coord)
+                meta_tile_logger.tile_fetch_failed(e, parent, job_coord, coord)
                 continue
 
             cut_coords = [coord]
@@ -2171,7 +2170,8 @@ def tilequeue_meta_tile(cfg, args):
                     output_calc_mapping
                 )
             except Exception as e:
-                meta_tile_logger.tile_process_failed(e, coord)
+                meta_tile_logger.tile_process_failed(
+                    e, parent, job_coord, coord)
                 continue
 
             try:
@@ -2181,14 +2181,15 @@ def tilequeue_meta_tile(cfg, args):
                         tile['tile'], tile['coord'], tile['format'],
                         tile['layer'])
             except Exception as e:
-                meta_tile_logger.metatile_storage_failed(e, coord)
+                meta_tile_logger.metatile_storage_failed(
+                    e, parent, job_coord, coord)
                 continue
 
-            meta_tile_logger.tile_processed(coord)
+            meta_tile_logger.tile_processed(parent, job_coord, coord)
 
-        meta_tile_logger.end_pyramid(job_coord)
+        meta_tile_logger.end_pyramid(parent, job_coord)
 
-    meta_tile_logger.end_run(queue_coord)
+    meta_tile_logger.end_run(parent)
 
 
 def tilequeue_main(argv_args=None):
