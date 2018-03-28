@@ -51,7 +51,14 @@ class TestCoordToBounds(unittest.TestCase):
         bounds = coord_to_bounds(coord)
         exp_bounds = (-74.00390625, 40.69729900863674,
                       -73.98193359375, 40.713955826286046)
-        self.assertEqual(exp_bounds, bounds)
+        self.assertEqual(tuple, type(bounds))
+        self.assertEqual(len(exp_bounds), len(bounds))
+        for i in range(0, len(exp_bounds)):
+            exp = exp_bounds[i]
+            act = bounds[i]
+            self.assertAlmostEqual(
+                exp, act, msg="Expected %r but got %r at index %d" %
+                (exp, act, i))
 
 
 class TestTileGeneration(unittest.TestCase):
