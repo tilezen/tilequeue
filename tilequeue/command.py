@@ -2134,7 +2134,7 @@ def tilequeue_meta_tile(cfg, args):
         coord_data = [dict(coord=x) for x in pyramid_coords]
 
         try:
-            fetched_coord_data = data_fetcher.fetch_tiles(coord_data)
+            fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
         except Exception as e:
             meta_tile_logger.pyramid_fetch_failed(e, parent, job_coord)
             continue
