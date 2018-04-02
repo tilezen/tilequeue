@@ -2011,6 +2011,8 @@ def tilequeue_batch_enqueue(cfg, args):
         coord = deserialize_coord(args.tile)
         assert coord, 'Invalid coord: %s' % args.tile
         coords = [coord]
+    elif args.pyramid:
+        coords = tile_generator_for_range(0, 0, 0, 0, 0, 7)
     else:
         dim = 2 ** queue_zoom
         coords = tile_generator_for_range(
@@ -2491,6 +2493,8 @@ def tilequeue_main(argv_args=None):
                            help='Path to file containing coords to enqueue')
     subparser.add_argument('--tile', required=False,
                            help='Single coordinate to enqueue')
+    subparser.add_argument('--pyramid', type=bool, required=False,
+                           help='Enqueue all coordinates below queue zoom')
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
     args = parser.parse_args(argv_args)
