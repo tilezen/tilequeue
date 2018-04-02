@@ -337,7 +337,7 @@ class JsonMetaTileLogger(object):
 
     parent:  coordinate specified on command line, z7
     pyramid: the top level pyramid coordinate, z10
-    work:    metatile coordinate being generated: z10+
+    coord:   metatile coordinate being generated: z10+
     """
     def __init__(self, logger, run_id):
         self.logger = logger
