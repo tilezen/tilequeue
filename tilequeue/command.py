@@ -2076,7 +2076,7 @@ def tilequeue_meta_tile(cfg, args):
     if not run_id:
         run_id = make_default_run_id(include_clock_time=False)
 
-    logger = make_logger(cfg, 'batch_process')
+    logger = make_logger(cfg, 'meta_tile')
     meta_tile_logger = JsonMetaTileLogger(logger, run_id)
 
     store = _make_store(cfg, logger)
@@ -2190,6 +2190,130 @@ def tilequeue_meta_tile(cfg, args):
         meta_tile_logger.end_pyramid(parent, job_coord)
 
     meta_tile_logger.end_run(parent)
+
+
+def tilequeue_meta_tile_low_zoom(cfg, args):
+    from tilequeue.log import JsonMetaTileLowZoomLogger
+    from tilequeue.metatile import make_metatiles
+
+    coord_str = args.tile
+    parent = deserialize_coord(coord_str)
+    assert parent, 'Invalid tile coordinate: %s' % coord_str
+
+    run_id = args.run_id
+    if not run_id:
+        run_id = make_default_run_id(include_clock_time=False)
+
+    logger = make_logger(cfg, 'meta_tile_low_zoom')
+    meta_low_zoom_logger = JsonMetaTileLowZoomLogger(logger, run_id)
+
+    store = _make_store(cfg, logger)
+    batch_yaml = cfg.yml.get('batch')
+    assert batch_yaml, 'Missing batch config'
+
+    # NOTE: the queue zoom is the zoom at which jobs will mean that
+    # children should be processed as well
+    # before then, we will only generate meta tiles for individual tiles
+    queue_zoom = batch_yaml.get('queue-zoom')
+    assert queue_zoom, 'Missing batch queue-zoom config'
+
+    assert 0 <= parent.zoom <= queue_zoom
+
+    check_metatile_exists = bool(batch_yaml.get('check-metatile-exists'))
+
+    with open(cfg.query_cfg) as query_cfg_fp:
+        query_cfg = yaml.load(query_cfg_fp)
+
+    all_layer_data, layer_data, post_process_data = (
+        parse_layer_data(
+            query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
+
+    output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
+    io_pool = ThreadPool(len(layer_data))
+
+    data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
+
+    rawr_yaml = cfg.yml.get('rawr')
+    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
+
+    # group by zoom is the exclusive stop for tiles if the command
+    # line coordinate is queue zoom
+    group_by_zoom = rawr_yaml.get('group-zoom')
+    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    assert queue_zoom < group_by_zoom
+
+    formats = lookup_formats(cfg.output_formats)
+    layer = 'all'
+    zip_format = lookup_format_by_extension('zip')
+    assert zip_format
+
+    meta_low_zoom_logger.begin_run(parent)
+
+    coords = [parent]
+    if parent.zoom == queue_zoom:
+        # we will be multiple meta tile coordinates in this run
+        coords.extend(coord_children_range(parent, group_by_zoom - 1))
+
+    for coord in coords:
+        if check_metatile_exists:
+            existing_data = store.read_tile(coord, zip_format, layer)
+            if existing_data is not None:
+                meta_low_zoom_logger.metatile_already_exists(parent, coord)
+                continue
+
+        coord_data = [dict(coord=coord)]
+        try:
+            fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
+        except Exception as e:
+            # the postgres db fetch doesn't perform the fetch at
+            # this step, which would make failures here very
+            # surprising
+            meta_low_zoom_logger.fetch_failed(e, parent, coord)
+            continue
+
+        assert len(fetched_coord_data) == 1
+        fetch, coord_datum = fetched_coord_data[0]
+        coord = coord_datum['coord']
+        nominal_zoom = coord.zoom + cfg.metatile_zoom
+        unpadded_bounds = coord_to_mercator_bounds(coord)
+        try:
+            source_rows = fetch(nominal_zoom, unpadded_bounds)
+            feature_layers = convert_source_data_to_feature_layers(
+                source_rows, layer_data, unpadded_bounds, coord.zoom)
+        except Exception as e:
+            meta_low_zoom_logger.fetch_failed(e, parent, coord)
+            continue
+
+        cut_coords = [coord]
+        if nominal_zoom > coord.zoom:
+            cut_coords.extend(coord_children_range(coord, nominal_zoom))
+
+        try:
+            formatted_tiles, extra_data = process_coord(
+                coord, nominal_zoom, feature_layers, post_process_data,
+                formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
+                output_calc_mapping
+            )
+        except Exception as e:
+            meta_low_zoom_logger.tile_process_failed(
+                e, parent, coord)
+            continue
+
+        try:
+            tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            for tile in tiles:
+                store.write_tile(
+                    tile['tile'], tile['coord'], tile['format'],
+                    tile['layer'])
+        except Exception as e:
+            meta_low_zoom_logger.metatile_storage_failed(
+                e, parent, coord)
+            continue
+
+        meta_low_zoom_logger.tile_processed(parent, coord)
+
+    meta_low_zoom_logger.end_run(parent)
 
 
 def tilequeue_main(argv_args=None):
@@ -2341,6 +2465,15 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
     subparser.set_defaults(func=tilequeue_meta_tile)
+
+    subparser = subparsers.add_parser('meta-tile-low-zoom')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--tile', required=True,
+                           help='Tile coordinate as "z/x/y".')
+    subparser.add_argument('--run_id', required=False,
+                           help='optional run_id used for logging')
+    subparser.set_defaults(func=tilequeue_meta_tile_low_zoom)
 
     subparser = subparsers.add_parser('rawr-tile')
     subparser.add_argument('--config', required=True,

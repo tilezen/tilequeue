@@ -38,6 +38,7 @@ class LogCategory(Enum):
     RAWR_PROCESS = 4
     RAWR_TILE = 5
     META_TILE = 6
+    META_TILE_LOW_ZOOM = 7
 
 
 class MsgType(Enum):
@@ -407,3 +408,66 @@ class JsonMetaTileLogger(object):
 
     def metatile_already_exists(self, parent, pyramid, coord):
         self._log('metatile already exists', parent, pyramid, coord)
+
+
+class JsonMetaTileLowZoomLogger(object):
+    """
+    handle logging for low zoom metatile generation command
+
+    parent: coordinate specified on command line, [z0,z7]
+    coord:  metatile coordinate being generated: [z0-z9]
+            same as parent unless [z8,z9]
+    """
+    def __init__(self, logger, run_id):
+        self.logger = logger
+        self.run_id = run_id
+
+    def _log(self, msg, parent, coord=None):
+        json_obj = dict(
+            type=log_level_name(LogLevel.INFO),
+            category=log_category_name(LogCategory.META_TILE_LOW_ZOOM),
+            msg=msg,
+            run_id=self.run_id,
+            parent=make_coord_dict(parent),
+        )
+        if coord:
+            json_obj['coord'] = make_coord_dict(coord)
+        json_str = json.dumps(json_obj)
+        self.logger.info(json_str)
+
+    def _log_exception(self, msg, exception, parent, coord):
+        stacktrace = format_stacktrace_one_line()
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.META_TILE_LOW_ZOOM),
+            msg=msg,
+            exception=str(exception),
+            stacktrace=stacktrace,
+            run_id=self.run_id,
+            parent=make_coord_dict(parent),
+            coord=make_coord_dict(coord),
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
+
+    def metatile_already_exists(self, parent, coord):
+        self._log('metatile already exists', parent, coord)
+
+    def fetch_failed(self, exception, parent, coord):
+        self._log_exception('fetch failed', exception, parent, coord)
+
+    def tile_process_failed(self, exception, parent, coord):
+        self._log_exception('process failed', exception, parent, coord)
+
+    def metatile_storage_failed(self, exception, parent, coord):
+        self._log_exception(
+            'metatile storage failed', exception, parent, coord)
+
+    def tile_processed(self, parent, coord):
+        self._log('tile processed', parent, coord)
+
+    def begin_run(self, parent):
+        self._log('low zoom tile run begin', parent)
+
+    def end_run(self, parent):
+        self._log('low zoom tile run end', parent)
