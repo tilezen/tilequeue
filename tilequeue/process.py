@@ -242,6 +242,8 @@ def lookup_source(source):
         result = Source('shp', source)
     elif source == 'whosonfirst.mapzen.com':
         result = Source('wof', source)
+    elif source == 'tilezen.org':
+        result = Source('shp', source)
 
     return result
 
