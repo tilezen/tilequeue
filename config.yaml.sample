@@ -190,7 +190,7 @@ wof:
   macrohoods-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-macrohood-latest.csv
   boroughs-meta-url: https://github.com/whosonfirst/whosonfirst-data/raw/master/meta/wof-borough-latest.csv
   # url path prefix for wof raw data
-  data-prefix-url: http://whosonfirst.mapzen.com/data
+  data-prefix-url: https://data.whosonfirst.org
   # filesystem path to wof data checkout
   data-path: /tmp/whosonfirst-data
   postgresql:
@@ -207,7 +207,7 @@ metatile:
   # The metatile size setting has the following effects:
   #
   #   - null or omitted entry: Individual tiles, one for each format, will be
-  #     saved on disk. This can be a good choice for local development use, or to 
+  #     saved on disk. This can be a good choice for local development use, or to
   #     save files to be served directly from storage (i.e: without tapalcatl).
   #
   #   - 1: Tiles with the same coordinate will be saved together in a .zip file,
@@ -340,7 +340,7 @@ rawr:
       planet_osm_polygon: *osm
       planet_osm_ways: *osm
       planet_osm_rels: *osm
-      wof_neighbourhood: { name: wof, value: whosonfirst.mapzen.com }
+      wof_neighbourhood: { name: wof, value: whosonfirst.org }
       water_polygons: &osmdata { name: shp, value: openstreetmapdata.com }
       land_polygons: *osmdata
       ne_10m_urban_areas: { name: ne, value: naturalearthdata.com }
