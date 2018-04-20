@@ -223,7 +223,7 @@ Metadata = namedtuple('Metadata', 'source')
 #
 # for example:
 #   osm = Source('osm', 'openstreetmap.org'),
-#   wof = Source('wof', 'whosonfirst.mapzen.com'),
+#   wof = Source('wof', 'whosonfirst.org'),
 Source = namedtuple('Source', 'name value')
 
 
@@ -240,7 +240,7 @@ def lookup_source(source):
         result = Source('ne', source)
     elif source == 'openstreetmapdata.com':
         result = Source('shp', source)
-    elif source == 'whosonfirst.mapzen.com':
+    elif source == 'whosonfirst.org':
         result = Source('wof', source)
     elif source == 'tilezen.org':
         result = Source('shp', source)
