@@ -50,6 +50,12 @@ store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>
   # The following store properties are s3 specific.
+  # NOTE: for s3 storage an additonal non configurable hash prefix is added
+  # that tapalcatl uses. You can manually remove this from the code if you want
+  # to directly access cached tiles in s3. But s3 storage is really meant to
+  # have tapalcatl in front of it with zipped tiles because s3 pricing
+  # per get request is uneconomical with raw tiles since the file size
+  # is very small and a large amount are requested when viewing a map.
   path: osm
   reduced-redundancy: true
   date-prefix: 19851026
