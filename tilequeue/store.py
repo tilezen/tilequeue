@@ -33,7 +33,7 @@ def s3_tile_key(date, path, layer, coord, extension):
         ext=extension,
     )
     md5_hash = calc_hash(path_to_hash)
-    s3_path = '/%(date)s/%(md5)s%(path_to_hash)s' % dict(
+    s3_path = '%(date)s/%(md5)s%(path_to_hash)s' % dict(
         date=date,
         md5=md5_hash,
         path_to_hash=path_to_hash,
@@ -98,7 +98,8 @@ class S3(object):
 
     def __init__(
             self, s3_client, bucket_name, date_prefix, path,
-            reduced_redundancy, delete_retry_interval, logger):
+            reduced_redundancy, delete_retry_interval, logger,
+            object_acl):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
@@ -106,6 +107,7 @@ class S3(object):
         self.reduced_redundancy = reduced_redundancy
         self.delete_retry_interval = delete_retry_interval
         self.logger = logger
+        self.object_acl = object_acl
 
     def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
@@ -117,14 +119,21 @@ class S3(object):
 
         @_backoff_and_retry(Exception, logger=self.logger)
         def write_to_s3():
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=key_name,
-                Body=tile_data,
-                ContentType=format.mimetype,
-                ACL='public-read',
-                StorageClass=storage_class,
-            )
+            try:
+                self.s3_client.put_object(
+                    Bucket=self.bucket_name,
+                    Key=key_name,
+                    Body=tile_data,
+                    ContentType=format.mimetype,
+                    ACL=self.object_acl,
+                    StorageClass=storage_class,
+                )
+            except ClientError as e:
+                # it's really useful for debugging if we know exactly what
+                # request is failing.
+                raise RuntimeError(
+                    "Error while trying to write %r to bucket %r: %s"
+                    % (key_name, self.bucket_name, str(e)))
 
         write_to_s3()
 
@@ -381,10 +390,11 @@ class Memory(object):
 
 def make_s3_store(bucket_name,
                   path='osm', reduced_redundancy=False, date_prefix='',
-                  delete_retry_interval=60, logger=None):
-    s3 = boto3.resource('s3')
+                  delete_retry_interval=60, logger=None,
+                  object_acl='public-read'):
+    s3 = boto3.client('s3')
     s3_store = S3(s3, bucket_name, date_prefix, path, reduced_redundancy,
-                  delete_retry_interval, logger)
+                  delete_retry_interval, logger, object_acl)
     return s3_store
 
 
@@ -434,11 +444,13 @@ def make_store(yml, credentials={}, logger=None):
         reduced_redundancy = yml.get('reduced-redundancy')
         date_prefix = yml.get('date-prefix')
         delete_retry_interval = yml.get('delete-retry-interval')
+        object_acl = yml.get('object-acl', 'public-read')
 
         return make_s3_store(
             bucket, path=path,
             reduced_redundancy=reduced_redundancy, date_prefix=date_prefix,
-            delete_retry_interval=delete_retry_interval, logger=logger)
+            delete_retry_interval=delete_retry_interval, logger=logger,
+            object_acl=object_acl)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
