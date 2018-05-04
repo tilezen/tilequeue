@@ -1979,7 +1979,8 @@ def tilequeue_batch_enqueue(cfg, args):
     logger = make_logger(cfg, 'batch_enqueue')
 
     import boto3
-    client = boto3.client('batch', region_name='us-east-1')
+    region_name = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+    client = boto3.client('batch', region_name=region_name)
 
     logger.info('Batch enqueue ...')
 
