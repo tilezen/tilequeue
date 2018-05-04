@@ -4,6 +4,7 @@ from psycopg2.extras import register_hstore, register_json
 import psycopg2
 import threading
 import ujson
+import random
 
 
 class ConnectionsContextManager(object):
@@ -38,6 +39,14 @@ class DBConnectionPool(object):
         self.readonly = readonly
 
     def _make_conn(self, conn_info):
+        # if multiple hosts are provided, select one at random as a kind of
+        # simple load balancing.
+        host = conn_info.get('host')
+        if host and isinstance(host, list):
+            host = random.choice(host)
+            conn_info = conn_info.copy()
+            conn_info['host'] = host
+
         conn = psycopg2.connect(**conn_info)
         conn.set_session(readonly=self.readonly, autocommit=True)
         register_hstore(conn)
