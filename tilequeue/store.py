@@ -144,7 +144,7 @@ class S3(object):
         try:
             io = StringIO()
             self.s3_client.download_fileobj(self.bucket_name, key_name, io)
-            return io.bytes()
+            return io.getvalue()
 
         except ClientError as e:
             if e.response['Error']['Code'] != '404':
