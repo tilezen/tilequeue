@@ -534,6 +534,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
             roads=row.pop('__roads_properties__', None),
             transit=row.pop('__transit_properties__', None),
             water=row.pop('__water_properties__', None),
+            admin_areas=row.pop('__admin_areas_properties__', None),
         )
 
         # TODO at first pass, simulate the structure that we're
