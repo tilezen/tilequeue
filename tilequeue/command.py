@@ -603,6 +603,13 @@ def make_min_zoom_calc_mapping(process_yaml_cfg):
     return min_zoom_calc_mapping
 
 
+def calc_cut_coords(coord, nominal_zoom):
+    cut_coords = [coord]
+    if nominal_zoom > coord.zoom:
+        cut_coords.extend(coord_children_range(coord, nominal_zoom))
+    return cut_coords
+
+
 def tilequeue_process(cfg, peripherals):
     from tilequeue.log import JsonTileProcessingLogger
     logger = make_logger(cfg, 'process')
@@ -1718,10 +1725,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     feature_layers = convert_source_data_to_feature_layers(
         source_rows, layer_data, unpadded_bounds, coord.zoom)
 
-    cut_coords = [coord]
-    if nominal_zoom > coord.zoom:
-        cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
+    cut_coords = calc_cut_coords(coord, nominal_zoom)
     formats = lookup_formats(cfg.output_formats)
     formatted_tiles, extra_data = process_coord(
         coord, coord.zoom, feature_layers, post_process_data, formats,
@@ -2162,10 +2166,7 @@ def tilequeue_meta_tile(cfg, args):
                 meta_tile_logger.tile_fetch_failed(e, parent, job_coord, coord)
                 continue
 
-            cut_coords = [coord]
-            if nominal_zoom > coord.zoom:
-                cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
+            cut_coords = calc_cut_coords(coord, nominal_zoom)
             try:
                 formatted_tiles, extra_data = process_coord(
                     coord, nominal_zoom, feature_layers, post_process_data,
@@ -2288,10 +2289,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
             meta_low_zoom_logger.fetch_failed(e, parent, coord)
             continue
 
-        cut_coords = [coord]
-        if nominal_zoom > coord.zoom:
-            cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
+        cut_coords = calc_cut_coords(coord, nominal_zoom)
         try:
             formatted_tiles, extra_data = process_coord(
                 coord, nominal_zoom, feature_layers, post_process_data,
