@@ -7,6 +7,7 @@ from shapely.wkb import loads
 from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.tile import calc_meters_per_pixel_dim
+from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
@@ -580,3 +581,49 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
         feature_layers.append(feature_layer)
 
     return feature_layers
+
+
+class TileFetchFailed(RuntimeError):
+    def __init__(self, cause, coord):
+        self.cause = cause
+        self.coord = coord
+
+
+class TileProcessFailed(RuntimeError):
+    def __init__(self, cause, coord):
+        self.cause = cause
+        self.coord = coord
+
+
+def _calc_cut_coords(self, coord, nominal_zoom):
+    cut_coords = [coord]
+    if nominal_zoom > coord.zoom:
+        cut_coords.extend(coord_children_range(coord, nominal_zoom))
+    return cut_coords
+
+
+def process(coord, metatile_zoom, fetch, layer_data, post_process_data,
+            formats, buffer_cfg, output_calc_mapping):
+    nominal_zoom = coord.zoom + metatile_zoom
+    unpadded_bounds = coord_to_mercator_bounds(coord)
+
+    try:
+        source_rows = fetch(nominal_zoom, unpadded_bounds)
+        feature_layers = convert_source_data_to_feature_layers(
+            source_rows, layer_data, unpadded_bounds, coord.zoom)
+    except Exception as e:
+        raise TileFetchFailed(e, coord)
+
+    try:
+        cut_coords = _calc_cut_coords(coord, nominal_zoom)
+
+        formatted_tiles, extra_data = process_coord(
+            coord, nominal_zoom, feature_layers, post_process_data, formats,
+            unpadded_bounds, cut_coords, buffer_cfg, output_calc_mapping
+        )
+        return formatted_tiles, extra_data
+
+    except Exception as e:
+        raise TileProcessFailed(e, coord)
+
+    return formatted_tiles, extra_data
