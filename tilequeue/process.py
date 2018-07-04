@@ -9,7 +9,6 @@ from shapely.wkb import loads
 from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.tile import calc_meters_per_pixel_dim
-from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
@@ -585,18 +584,6 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
     return feature_layers
 
 
-class TileFetchFailed(RuntimeError):
-    def __init__(self, cause, coord):
-        self.cause = cause
-        self.coord = coord
-
-
-class TileProcessFailed(RuntimeError):
-    def __init__(self, cause, coord):
-        self.cause = cause
-        self.coord = coord
-
-
 def _is_power_of_2(x):
     """
     Returns True if `x` is a power of 2.
@@ -725,38 +712,61 @@ def calculate_cut_coords_by_zoom(
     return cut_coords_by_zoom
 
 
-def process(coord, metatile_zoom, fetch, layer_data, post_process_data,
-            formats, buffer_cfg, output_calc_mapping, max_zoom,
-            cfg_tile_sizes):
-    unpadded_bounds = coord_to_mercator_bounds(coord)
+class Processor(object):
+    def __init__(self, coord, metatile_zoom, fetch_fn, layer_data,
+                 post_process_data, formats, buffer_cfg, output_calc_mapping,
+                 max_zoom, cfg_tile_sizes):
+        self.coord = coord
+        self.metatile_zoom = metatile_zoom
+        self.fetch_fn = fetch_fn
+        self.layer_data = layer_data
+        self.post_process_data = post_process_data
+        self.formats = formats
+        self.buffer_cfg = buffer_cfg
+        self.output_calc_mapping = output_calc_mapping
+        self.max_zoom = max_zoom
+        self.cfg_tile_sizes = cfg_tile_sizes
 
-    cut_coords_by_zoom = calculate_cut_coords_by_zoom(
-        coord, metatile_zoom, cfg_tile_sizes, max_zoom)
-    feature_layers_by_zoom = {}
+    def fetch(self):
+        unpadded_bounds = coord_to_mercator_bounds(self.coord)
 
-    try:
-        for nominal_zoom, _ in cut_coords_by_zoom:
-            source_rows = fetch(nominal_zoom, unpadded_bounds)
+        cut_coords_by_zoom = calculate_cut_coords_by_zoom(
+            self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
+        feature_layers_by_zoom = {}
+
+        for nominal_zoom, _ in cut_coords_by_zoom.items():
+            source_rows = self.fetch_fn(nominal_zoom, unpadded_bounds)
             feature_layers = convert_source_data_to_feature_layers(
-                source_rows, layer_data, unpadded_bounds, coord.zoom)
+                source_rows, self.layer_data, unpadded_bounds, self.coord.zoom)
             feature_layers_by_zoom[nominal_zoom] = feature_layers
-    except Exception as e:
-        raise TileFetchFailed(e, coord)
 
-    all_formatted_tiles = []
-    all_extra_data = {}
+        self.cut_coords_by_zoom = cut_coords_by_zoom
+        self.feature_layers_by_zoom = feature_layers_by_zoom
 
-    try:
-        for nominal_zoom, cut_coords in cut_coords_by_zoom:
+    def process_tiles(self):
+        unpadded_bounds = coord_to_mercator_bounds(self.coord)
+
+        all_formatted_tiles = []
+        all_extra_data = {}
+
+        for nominal_zoom, cut_coords in self.cut_coords_by_zoom.items():
+            feature_layers = self.feature_layers_by_zoom[nominal_zoom]
             formatted_tiles, extra_data = process_coord(
-                coord, nominal_zoom, feature_layers, post_process_data,
-                formats, unpadded_bounds, cut_coords, buffer_cfg,
-                output_calc_mapping
+                self.coord, nominal_zoom, feature_layers,
+                self.post_process_data, self.formats, unpadded_bounds,
+                cut_coords, self.buffer_cfg, self.output_calc_mapping
             )
             all_formatted_tiles.extend(formatted_tiles)
             all_extra_data.update(extra_data)
 
-    except Exception as e:
-        raise TileProcessFailed(e, coord)
+        return all_formatted_tiles, all_extra_data
 
-    return all_formatted_tiles, all_extra_data
+
+def process(coord, metatile_zoom, fetch_fn, layer_data, post_process_data,
+            formats, buffer_cfg, output_calc_mapping, max_zoom,
+            cfg_tile_sizes):
+    p = Processor(coord, metatile_zoom, fetch_fn, layer_data,
+                  post_process_data, formats, buffer_cfg, output_calc_mapping,
+                  max_zoom, cfg_tile_sizes)
+    p.fetch()
+    return p.process_tiles()

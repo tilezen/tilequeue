@@ -11,9 +11,8 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.process import TileFetchFailed
-from tilequeue.process import TileProcessFailed
 from tilequeue.process import process
+from tilequeue.process import Processor
 from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
@@ -2141,20 +2140,25 @@ def tilequeue_meta_tile(cfg, args):
                         parent, job_coord, coord)
                     continue
 
-            try:
-                formatted_tiles, extra_data = process(
-                    coord, cfg.metatile_zoom, fetch, layer_data,
-                    post_process_data, formats, cfg.buffer_cfg,
-                    output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+            processor = Processor(
+                coord, cfg.metatile_zoom, fetch, layer_data,
+                post_process_data, formats, cfg.buffer_cfg,
+                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
 
-            except TileFetchFailed as e:
+            try:
+                processor.fetch()
+
+            except Exception as e:
                 meta_tile_logger.tile_fetch_failed(
-                    e.cause, parent, job_coord, e.coord)
+                    e, parent, job_coord, coord)
                 continue
 
-            except TileProcessFailed as e:
+            try:
+                formatted_tiles, _ = processor.process_tiles()
+
+            except Exception as e:
                 meta_tile_logger.tile_process_failed(
-                    e.cause, parent, job_coord, e.coord)
+                    e, parent, job_coord, coord)
 
             try:
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
@@ -2257,20 +2261,26 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         assert len(fetched_coord_data) == 1
         fetch, coord_datum = fetched_coord_data[0]
         coord = coord_datum['coord']
-        try:
-            formatted_tiles, extra_data = process(
-                coord, cfg.metatile_zoom, fetch, layer_data, post_process_data,
-                formats, cfg.buffer_cfg, output_calc_mapping, cfg.max_zoom,
-                cfg.tile_sizes)
 
-        except TileFetchFailed as e:
+        processor = Processor(
+            coord, cfg.metatile_zoom, fetch, layer_data,
+            post_process_data, formats, cfg.buffer_cfg,
+            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+
+        try:
+            processor.fetch()
+
+        except Exception as e:
             meta_low_zoom_logger.fetch_failed(
-                e.cause, parent, e.coord)
+                e, parent, coord)
             continue
 
-        except TileProcessFailed as e:
+        try:
+            formatted_tiles, _ = processor.process_tiles()
+
+        except Exception as e:
             meta_low_zoom_logger.tile_process_failed(
-                e.cause, parent, e.coord)
+                e, parent, coord)
             continue
 
         try:
