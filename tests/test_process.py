@@ -206,6 +206,292 @@ class TestProcess(unittest.TestCase):
         self.assertNotIn(coord, [t['coord'] for t in tiles])
 
 
+class TestCalculateCutZooms(unittest.TestCase):
+
+    def test_max_zoom(self):
+        from tilequeue.process import calculate_sizes_by_zoom
+        from tilequeue.tile import metatile_zoom_from_size
+
+        def _calc(metatile_size, tile_sizes, max_zoom):
+            metatile_zoom = metatile_zoom_from_size(metatile_size)
+            coord = Coordinate(zoom=max_zoom - metatile_zoom, row=0, column=0)
+
+            return calculate_sizes_by_zoom(
+                coord, metatile_zoom, tile_sizes, max_zoom)
+
+        # sweep max zoom to check the output is the same nominal max zoom.
+        self.assertEqual({16: [256]}, _calc(8, [256], 16))
+        self.assertEqual({15: [256]}, _calc(8, [256], 15))
+        self.assertEqual({14: [256]}, _calc(8, [256], 14))
+
+        # check we get 256 tiles as well as 512 at max zoom, even when the
+        # configured tile size is only 512.
+        self.assertEqual({16: [512, 256]}, _calc(8, [512], 16))
+
+        # we should get _both_ 512 and 256 tiles if we've configured to only
+        # have 1024 tiles at mid zooms.
+        self.assertEqual({16: [1024, 512, 256]}, _calc(8, [1024], 16))
+
+    def test_mid_zoom(self):
+        from tilequeue.process import calculate_sizes_by_zoom
+        from tilequeue.tile import metatile_zoom_from_size
+
+        max_zoom = 16
+        tile_sizes = [512]
+        metatile_size = 8
+        metatile_zoom = metatile_zoom_from_size(metatile_size)
+
+        for zoom in range(1, max_zoom - metatile_zoom):
+            coord = Coordinate(zoom=zoom, row=0, column=0)
+            sizes_by_zoom = calculate_sizes_by_zoom(
+                coord, metatile_zoom, tile_sizes, max_zoom)
+            nominal_zoom = zoom + metatile_zoom
+            self.assertEqual({nominal_zoom: tile_sizes}, sizes_by_zoom)
+
+    def test_zoom_zero(self):
+        from tilequeue.process import calculate_sizes_by_zoom
+        from tilequeue.tile import metatile_zoom_from_size
+
+        def _calc(metatile_size, tile_sizes):
+            coord = Coordinate(zoom=0, row=0, column=0)
+            max_zoom = 16
+            metatile_zoom = metatile_zoom_from_size(metatile_size)
+
+            return calculate_sizes_by_zoom(
+                coord, metatile_zoom, tile_sizes, max_zoom)
+
+        # for an 8x8 metatile configured for 512 tiles, then by default we
+        # would get a 0/0/0 metatile with 4x4 nominal zoom 3 512px tiles. we
+        # want to extend that "upwards" towards nominal zoom 0, so we should
+        # also get: 2x2 nominal zoom 2 512px tiles plus 1x1 nominal zoom 1
+        # 512px tile.
+        self.assertEqual({
+            1: [512],
+            2: [512],
+            3: [512],
+        }, _calc(8, [512]))
+
+        # when we do the same with 256px tiles, we should get a nominal zoom
+        # zero tile.
+        self.assertEqual({
+            0: [256],
+            1: [256],
+            2: [256],
+            3: [256],
+        }, _calc(8, [256]))
+
+        # when we configure both 256 and 512px tiles, we should only get the
+        # 256 ones at the largest nominal zoom.
+        self.assertEqual({
+            1: [512],
+            2: [512],
+            3: [512, 256],
+        }, _calc(8, [512, 256]))
+
+        self.assertEqual({
+            2: [1024],
+            3: [1024, 512, 256],
+        }, _calc(8, [1024, 512, 256]))
+
+        # with a smaller metatile, we just get fewer nominal zooms in the range
+        # inside the metatile.
+        self.assertEqual({
+            1: [512],
+            2: [512, 256],
+        }, _calc(4, [512, 256]))
+
+        # with a 1x1 metatile (i.e: not really a metatile) then we just get
+        # the configured size.
+        for z in xrange(0, 3):
+            meta_sz = 1 << z
+            tile_sz = 256 * meta_sz
+            self.assertEqual({z: [tile_sz]}, _calc(meta_sz, [tile_sz]))
+
+
+class TestMetatileChildrenWithSize(unittest.TestCase):
+
+    def test_single_tile(self):
+        from tilequeue.process import metatile_children_with_size
+        coord = Coordinate(zoom=0, column=0, row=0)
+        result = metatile_children_with_size(coord, 0, 0, 256)
+        self.assertEqual([coord], result)
+
+    def test_2x2_tile(self):
+        from tilequeue.process import metatile_children_with_size
+        coord = Coordinate(zoom=0, column=0, row=0)
+        result = metatile_children_with_size(coord, 1, 1, 256)
+        self.assertEqual(set([
+            Coordinate(zoom=1, column=0, row=0),
+            Coordinate(zoom=1, column=1, row=0),
+            Coordinate(zoom=1, column=0, row=1),
+            Coordinate(zoom=1, column=1, row=1),
+        ]), set(result))
+
+    def test_8x8_512_tile(self):
+        from tilequeue.process import metatile_children_with_size
+        coord = Coordinate(zoom=0, column=0, row=0)
+        result = metatile_children_with_size(coord, 3, 3, 512)
+        self.assertEqual(set([
+            Coordinate(zoom=2, column=0, row=0),
+            Coordinate(zoom=2, column=1, row=0),
+            Coordinate(zoom=2, column=2, row=0),
+            Coordinate(zoom=2, column=3, row=0),
+            Coordinate(zoom=2, column=0, row=1),
+            Coordinate(zoom=2, column=1, row=1),
+            Coordinate(zoom=2, column=2, row=1),
+            Coordinate(zoom=2, column=3, row=1),
+            Coordinate(zoom=2, column=0, row=2),
+            Coordinate(zoom=2, column=1, row=2),
+            Coordinate(zoom=2, column=2, row=2),
+            Coordinate(zoom=2, column=3, row=2),
+            Coordinate(zoom=2, column=0, row=3),
+            Coordinate(zoom=2, column=1, row=3),
+            Coordinate(zoom=2, column=2, row=3),
+            Coordinate(zoom=2, column=3, row=3),
+        ]), set(result))
+
+    def test_2x2_tile_nominal_1(self):
+        from tilequeue.process import metatile_children_with_size
+        coord = Coordinate(zoom=0, column=0, row=0)
+        result = metatile_children_with_size(coord, 1, 0, 256)
+        self.assertEqual(set([
+            Coordinate(zoom=0, column=0, row=0),
+        ]), set(result))
+
+
+class TestCalculateCutCoords(unittest.TestCase):
+
+    def test_1x1(self):
+        from tilequeue.process import calculate_cut_coords_by_zoom
+
+        # note! not using zoom level 0 because that has special properties!
+        coord = Coordinate(zoom=1, column=0, row=0)
+        cut_coords = calculate_cut_coords_by_zoom(
+            coord, 0, [256], 16)
+        self.assertEqual({1: [coord]}, cut_coords)
+
+    def test_2x2_256(self):
+        from tilequeue.process import calculate_cut_coords_by_zoom
+
+        def _c(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        # note! not using zoom level 0 because that has special properties!
+        cut_coords = calculate_cut_coords_by_zoom(
+            _c(1, 0, 0), 1, [256], 16)
+        self.assertEqual({
+            2: [
+                _c(2, 0, 0),
+                _c(2, 0, 1),
+                _c(2, 1, 0),
+                _c(2, 1, 1),
+            ]
+        }, cut_coords)
+
+    def test_4x4_512(self):
+        from tilequeue.process import calculate_cut_coords_by_zoom
+
+        def _c(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        # note! not using zoom level 0 because that has special properties!
+        cut_coords = calculate_cut_coords_by_zoom(
+            _c(1, 0, 0), 2, [512], 16)
+        self.assertEqual({
+            3: [  # <- note nominal zoom is _3_ here.
+                _c(2, 0, 0),
+                _c(2, 0, 1),
+                _c(2, 1, 0),
+                _c(2, 1, 1),
+            ]
+        }, cut_coords)
+
+    def test_4x4_512_max(self):
+        from tilequeue.process import calculate_cut_coords_by_zoom
+
+        def _c(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        # even though we only configured 512 tiles, we get 256 ones as well at
+        # max zoom.
+        max_zoom = 16
+        metatile_zoom = 2
+        cut_coords = calculate_cut_coords_by_zoom(
+            _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512], max_zoom)
+        self.assertEqual([max_zoom], cut_coords.keys())
+        self.assertEqual(set([
+            # some 512 tiles
+            _c(max_zoom - 1, 0, 0),
+            _c(max_zoom - 1, 0, 1),
+            _c(max_zoom - 1, 1, 0),
+            _c(max_zoom - 1, 1, 1),
+
+            # some 256 tiles
+            _c(max_zoom, 0, 0),
+            _c(max_zoom, 1, 0),
+            _c(max_zoom, 2, 0),
+            _c(max_zoom, 3, 0),
+            _c(max_zoom, 0, 1),
+            _c(max_zoom, 1, 1),
+            _c(max_zoom, 2, 1),
+            _c(max_zoom, 3, 1),
+            _c(max_zoom, 0, 2),
+            _c(max_zoom, 1, 2),
+            _c(max_zoom, 2, 2),
+            _c(max_zoom, 3, 2),
+            _c(max_zoom, 0, 3),
+            _c(max_zoom, 1, 3),
+            _c(max_zoom, 2, 3),
+            _c(max_zoom, 3, 3),
+        ]), set(cut_coords[max_zoom]))
+
+    def test_8x8_512_min(self):
+        from tilequeue.process import calculate_cut_coords_by_zoom
+
+        def _c(z, x, y):
+            return Coordinate(zoom=z, column=x, row=y)
+
+        # we get the 512px tiles at nominal zoom 3, plus additional ones at 2
+        # & 1.
+        metatile_zoom = 3
+        cut_coords = calculate_cut_coords_by_zoom(
+            _c(0, 0, 0), metatile_zoom, [512], 16)
+        self.assertEqual([1, 2, 3], cut_coords.keys())
+
+        # we get 1x1 nominal zoom 1 tile
+        self.assertEqual(set([
+            _c(0, 0, 0),
+        ]), set(cut_coords[1]))
+
+        # we get 2x2 nominal zoom 2 tiles
+        self.assertEqual(set([
+            _c(1, 0, 0),
+            _c(1, 0, 1),
+            _c(1, 1, 0),
+            _c(1, 1, 1),
+        ]), set(cut_coords[2]))
+
+        # we get 4x4 nominal zoom 3 tiles
+        self.assertEqual(set([
+            _c(2, 0, 0),
+            _c(2, 0, 1),
+            _c(2, 0, 2),
+            _c(2, 0, 3),
+            _c(2, 1, 0),
+            _c(2, 1, 1),
+            _c(2, 1, 2),
+            _c(2, 1, 3),
+            _c(2, 2, 0),
+            _c(2, 2, 1),
+            _c(2, 2, 2),
+            _c(2, 2, 3),
+            _c(2, 3, 0),
+            _c(2, 3, 1),
+            _c(2, 3, 2),
+            _c(2, 3, 3),
+        ]), set(cut_coords[3]))
+
+
 def _only_zoom(ctx, zoom):
     layer = ctx.feature_layers[0]
 

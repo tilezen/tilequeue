@@ -11,7 +11,6 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.process import convert_source_data_to_feature_layers
 from tilequeue.process import TileFetchFailed
 from tilequeue.process import TileProcessFailed
 from tilequeue.process import process
@@ -24,7 +23,6 @@ from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
@@ -1716,8 +1714,8 @@ def tilequeue_process_tile(cfg, peripherals, args):
     for fetch, _ in data_fetcher.fetch_tiles([dict(coord=coord)]):
         formatted_tiles, extra_data = process(
             coord, cfg.metatile_zoom, fetch, layer_data, post_process_data,
-            formats, cfg.buffer_cfg, output_calc_mapping)
-        process
+            formats, cfg.buffer_cfg, output_calc_mapping, cfg.max_zoom,
+            cfg.tile_sizes)
 
     # can think about making this configurable
     # but this is intended for debugging anyway
@@ -2147,7 +2145,7 @@ def tilequeue_meta_tile(cfg, args):
                 formatted_tiles, extra_data = process(
                     coord, cfg.metatile_zoom, fetch, layer_data,
                     post_process_data, formats, cfg.buffer_cfg,
-                    output_calc_mapping)
+                    output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
 
             except TileFetchFailed as e:
                 meta_tile_logger.tile_fetch_failed(
@@ -2262,7 +2260,8 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         try:
             formatted_tiles, extra_data = process(
                 coord, cfg.metatile_zoom, fetch, layer_data, post_process_data,
-                formats, cfg.buffer_cfg, output_calc_mapping)
+                formats, cfg.buffer_cfg, output_calc_mapping, cfg.max_zoom,
+                cfg.tile_sizes)
 
         except TileFetchFailed as e:
             meta_low_zoom_logger.fetch_failed(
