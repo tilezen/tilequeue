@@ -124,3 +124,31 @@ class WriteTileIfChangedTest(unittest.TestCase):
         did_write = self._call_fut('data')
         self.assertFalse(did_write)
         self.assertIsNone(self._out)
+
+
+class S3Test(unittest.TestCase):
+
+    def _make_stub_s3_client(self):
+        class stub_s3_client(object):
+            def put_object(self, **props):
+                self.put_props = props
+        return stub_s3_client()
+
+    def test_metadata(self):
+        from tilequeue.store import S3
+        s3_client = self._make_stub_s3_client()
+        metadata = None
+        store = S3(s3_client, 'bucket', 'prefix', 'path', False, 60, None,
+                   'public-read', metadata)
+
+        tile_data = 'data'
+        from tilequeue.tile import deserialize_coord
+        coord = deserialize_coord('14/1/2')
+        from tilequeue.format import mvt_format
+        store.write_tile(tile_data, coord, mvt_format, 'all')
+        self.assertIsNone(store.s3_client.put_props.get('Metadata'))
+
+        store.metadata = dict(prefix='foo')
+        store.write_tile(tile_data, coord, mvt_format, 'all')
+        self.assertEquals(dict(prefix='foo'),
+                          store.s3_client.put_props.get('Metadata'))
