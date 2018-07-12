@@ -565,7 +565,7 @@ def unpack_rawr_zip_payload(table_sources, payload):
 def make_rawr_s3_path(tile, prefix, suffix):
     path_to_hash = '%d/%d/%d%s' % (tile.z, tile.x, tile.y, suffix)
     path_hash = calc_hash(path_to_hash)
-    path_with_hash = '%s/%s/%s' % (prefix, path_hash, path_to_hash)
+    path_with_hash = '%s/%s/%s' % (path_hash, prefix, path_to_hash)
     return path_with_hash
 
 

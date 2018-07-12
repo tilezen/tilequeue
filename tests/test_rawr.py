@@ -28,3 +28,14 @@ class RawrS3SinkTest(unittest.TestCase):
         sink(rawr_tile)
         self.assertEquals('prefix=foo&runid=bar',
                           sink.s3_client.put_props.get('Tagging'))
+
+
+class RawrKeyTest(unittest.TestCase):
+    def test_s3_path(self):
+        from raw_tiles.tile import Tile
+        from tilequeue.rawr import make_rawr_s3_path
+        tile = Tile(10, 1, 2)
+        prefix = '19851026'
+        suffix = '.zip'
+        path = make_rawr_s3_path(tile, prefix, suffix)
+        self.assertEqual('c35b6/19851026/10/1/2.zip', path)
