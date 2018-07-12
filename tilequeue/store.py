@@ -23,18 +23,15 @@ def calc_hash(s):
     return md5_hash[:5]
 
 
-def s3_tile_key(date, path, layer, coord, extension):
-    prefix = '/%s' % path if path else ''
-    path_to_hash = '%(prefix)s/%(layer)s/%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
-        prefix=prefix,
-        layer=layer,
+def s3_tile_key(date, coord, extension):
+    path_to_hash = '%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
         z=coord.zoom,
         x=coord.column,
         y=coord.row,
         ext=extension,
     )
     md5_hash = calc_hash(path_to_hash)
-    s3_path = '%(md5)s/%(date)s%(path_to_hash)s' % dict(
+    s3_path = '%(md5)s/%(date)s/%(path_to_hash)s' % dict(
         date=date,
         md5=md5_hash,
         path_to_hash=path_to_hash,
@@ -42,23 +39,22 @@ def s3_tile_key(date, path, layer, coord, extension):
     return s3_path
 
 
-def parse_coordinate_from_path(path, extension, layer):
+def parse_coordinate_from_path(path, extension):
     if path.endswith(extension):
-        fields = path.rsplit('/', 4)
-        if len(fields) == 5:
-            _, tile_layer, z_str, x_str, y_fmt = fields
-            if tile_layer == layer:
-                y_fields = y_fmt.split('.')
-                if y_fields:
-                    y_str = y_fields[0]
-                    try:
-                        z = int(z_str)
-                        x = int(x_str)
-                        y = int(y_str)
-                        coord = Coordinate(zoom=z, column=x, row=y)
-                        return coord
-                    except ValueError:
-                        pass
+        fields = path.rsplit('/', 3)
+        if len(fields) == 4:
+            _, z_str, x_str, y_fmt = fields
+            y_fields = y_fmt.split('.')
+            if y_fields:
+                y_str = y_fields[0]
+                try:
+                    z = int(z_str)
+                    x = int(x_str)
+                    y = int(y_str)
+                    coord = Coordinate(zoom=z, column=x, row=y)
+                    return coord
+                except ValueError:
+                    pass
 
 
 # decorates a function to back off and retry
@@ -98,22 +94,20 @@ def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
 class S3(object):
 
     def __init__(
-            self, s3_client, bucket_name, date_prefix, path,
+            self, s3_client, bucket_name, date_prefix,
             reduced_redundancy, delete_retry_interval, logger,
             object_acl, tags):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
-        self.path = path
         self.reduced_redundancy = reduced_redundancy
         self.delete_retry_interval = delete_retry_interval
         self.logger = logger
         self.object_acl = object_acl
         self.tags = tags
 
-    def write_tile(self, tile_data, coord, format, layer):
-        key_name = s3_tile_key(
-            self.date_prefix, self.path, layer, coord, format.extension)
+    def write_tile(self, tile_data, coord, format):
+        key_name = s3_tile_key(self.date_prefix, coord, format.extension)
 
         storage_class = 'STANDARD'
         if self.reduced_redundancy:
@@ -142,9 +136,8 @@ class S3(object):
 
         write_to_s3()
 
-    def read_tile(self, coord, format, layer):
-        key_name = s3_tile_key(
-            self.date_prefix, self.path, layer, coord, format.extension)
+    def read_tile(self, coord, format):
+        key_name = s3_tile_key(self.date_prefix, coord, format.extension)
 
         try:
             io = StringIO()
@@ -157,10 +150,9 @@ class S3(object):
 
         return None
 
-    def delete_tiles(self, coords, format, layer):
+    def delete_tiles(self, coords, format):
         key_names = [
-            s3_tile_key(self.date_prefix, self.path, layer, coord,
-                        format.extension).lstrip('/')
+            s3_tile_key(self.date_prefix, coord, format.extension).lstrip('/')
             for coord in coords
         ]
 
@@ -198,7 +190,7 @@ class S3(object):
 
         return num_deleted
 
-    def list_tiles(self, format, layer):
+    def list_tiles(self, format):
         ext = '.' + format.extension
         paginator = self.s3_client.get_paginator('list_objects_v2')
         page_iter = paginator.paginate(
@@ -208,20 +200,20 @@ class S3(object):
         for page in page_iter:
             for key_obj in page['Contents']:
                 key = key_obj['Key']
-                coord = parse_coordinate_from_path(key, ext, layer)
+                coord = parse_coordinate_from_path(key, ext)
                 if coord:
                     yield coord
 
 
-def make_dir_path(base_path, coord, layer):
+def make_dir_path(base_path, coord):
     path = os.path.join(
-        base_path, layer, str(int(coord.zoom)), str(int(coord.column)))
+        base_path, str(int(coord.zoom)), str(int(coord.column)))
     return path
 
 
-def make_file_path(base_path, coord, layer, extension):
+def make_file_path(base_path, coord, extension):
     basefile_path = os.path.join(
-        base_path, layer,
+        base_path,
         str(int(coord.zoom)), str(int(coord.column)), str(int(coord.row)))
     ext_str = '.%s' % extension
     full_path = basefile_path + ext_str
@@ -306,15 +298,14 @@ class TileDirectory(object):
 
         self.base_path = base_path
 
-    def write_tile(self, tile_data, coord, format, layer):
-        dir_path = make_dir_path(self.base_path, coord, layer)
+    def write_tile(self, tile_data, coord, format):
+        dir_path = make_dir_path(self.base_path, coord)
         try:
             os.makedirs(dir_path)
         except OSError:
             pass
 
-        file_path = make_file_path(self.base_path, coord, layer,
-                                   format.extension)
+        file_path = make_file_path(self.base_path, coord, format.extension)
         swap_file_path = '%s.swp-%s-%s-%s' % (
             file_path,
             os.getpid(),
@@ -335,9 +326,8 @@ class TileDirectory(object):
                 pass
             raise e
 
-    def read_tile(self, coord, format, layer):
-        file_path = make_file_path(self.base_path, coord, layer,
-                                   format.extension)
+    def read_tile(self, coord, format):
+        file_path = make_file_path(self.base_path, coord, format.extension)
         try:
             with open(file_path, 'r') as tile_fp:
                 tile_data = tile_fp.read()
@@ -345,23 +335,23 @@ class TileDirectory(object):
         except IOError:
             return None
 
-    def delete_tiles(self, coords, format, layer):
+    def delete_tiles(self, coords, format):
         delete_count = 0
         for coord in coords:
             file_path = make_file_path(
-                self.base_path, coord, layer, format.extension)
+                self.base_path, coord, format.extension)
             if os.path.isfile(file_path):
                 os.remove(file_path)
                 delete_count += 1
 
         return delete_count
 
-    def list_tiles(self, format, layer):
+    def list_tiles(self, format):
         ext = '.' + format.extension
         for root, dirs, files in os.walk(self.base_path):
             for name in files:
                 tile_path = '%s/%s' % (root, name)
-                coord = parse_coordinate_from_path(tile_path, ext, layer)
+                coord = parse_coordinate_from_path(tile_path, ext)
                 if coord:
                     yield coord
 
@@ -377,28 +367,28 @@ class Memory(object):
     def __init__(self):
         self.data = None
 
-    def write_tile(self, tile_data, coord, format, layer):
-        self.data = tile_data, coord, format, layer
+    def write_tile(self, tile_data, coord, format):
+        self.data = tile_data, coord, format
 
-    def read_tile(self, coord, format, layer):
+    def read_tile(self, coord, format):
         if self.data is None:
             return None
-        tile_data, coord, format, layer = self.data
+        tile_data, coord, format = self.data
         return tile_data
 
-    def delete_tiles(self, coords, format, layer):
+    def delete_tiles(self, coords, format):
         pass
 
-    def list_tiles(self, format, layer):
+    def list_tiles(self, format):
         return [self.data] if self.data else []
 
 
 def make_s3_store(bucket_name,
-                  path='osm', reduced_redundancy=False, date_prefix='',
+                  reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
     s3 = boto3.client('s3')
-    s3_store = S3(s3, bucket_name, date_prefix, path, reduced_redundancy,
+    s3_store = S3(s3, bucket_name, date_prefix, reduced_redundancy,
                   delete_retry_interval, logger, object_acl, tags)
     return s3_store
 
@@ -418,7 +408,7 @@ def tiles_are_equal(tile_data_1, tile_data_2, fmt):
         return tile_data_1 == tile_data_2
 
 
-def write_tile_if_changed(store, tile_data, coord, format, layer):
+def write_tile_if_changed(store, tile_data, coord, format):
     """
     Only write tile data if different from existing.
 
@@ -426,10 +416,10 @@ def write_tile_if_changed(store, tile_data, coord, format, layer):
     data matches, don't write. Returns whether the tile was written.
     """
 
-    existing_data = store.read_tile(coord, format, layer)
+    existing_data = store.read_tile(coord, format)
     if not existing_data or \
        not tiles_are_equal(existing_data, tile_data, format):
-        store.write_tile(tile_data, coord, format, layer)
+        store.write_tile(tile_data, coord, format)
         return True
     else:
         return False
@@ -445,7 +435,6 @@ def make_store(yml, credentials={}, logger=None):
 
     elif store_type == 's3':
         bucket = yml.get('name')
-        path = yml.get('path')
         reduced_redundancy = yml.get('reduced-redundancy')
         date_prefix = yml.get('date-prefix')
         delete_retry_interval = yml.get('delete-retry-interval')
@@ -453,8 +442,8 @@ def make_store(yml, credentials={}, logger=None):
         tags = yml.get('tags')
 
         return make_s3_store(
-            bucket, path=path,
-            reduced_redundancy=reduced_redundancy, date_prefix=date_prefix,
+            bucket, reduced_redundancy=reduced_redundancy,
+            date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,
             object_acl=object_acl, tags=tags)
 

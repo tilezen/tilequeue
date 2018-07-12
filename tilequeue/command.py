@@ -1601,7 +1601,6 @@ def tilequeue_tile_status(cfg, peripherals, args):
 
     # TODO: make these configurable!
     tile_format = lookup_format_by_extension('zip')
-    tile_layer = 'all'
     store = _make_store(cfg)
 
     for coord_str in args.coords:
@@ -1632,7 +1631,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
             in_toi = coord_int in toi
             logger.info('in TOI: %r' % (in_toi,))
 
-        data = store.read_tile(coord, tile_format, tile_layer)
+        data = store.read_tile(coord, tile_format)
         logger.info('tile in store: %r', bool(data))
 
 
@@ -2118,7 +2117,6 @@ def tilequeue_meta_tile(cfg, args):
 
     meta_tile_logger.begin_run(parent)
 
-    layer = 'all'
     zip_format = lookup_format_by_extension('zip')
     assert zip_format
 
@@ -2141,7 +2139,7 @@ def tilequeue_meta_tile(cfg, args):
         for fetch, coord_datum in fetched_coord_data:
             coord = coord_datum['coord']
             if check_metatile_exists:
-                existing_data = store.read_tile(coord, zip_format, layer)
+                existing_data = store.read_tile(coord, zip_format)
                 if existing_data is not None:
                     meta_tile_logger.metatile_already_exists(
                         parent, job_coord, coord)
@@ -2171,8 +2169,7 @@ def tilequeue_meta_tile(cfg, args):
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
                 for tile in tiles:
                     store.write_tile(
-                        tile['tile'], tile['coord'], tile['format'],
-                        tile['layer'])
+                        tile['tile'], tile['coord'], tile['format'])
             except Exception as e:
                 meta_tile_logger.metatile_storage_failed(
                     e, parent, job_coord, coord)
@@ -2237,7 +2234,6 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
     assert queue_zoom < group_by_zoom
 
     formats = lookup_formats(cfg.output_formats)
-    layer = 'all'
     zip_format = lookup_format_by_extension('zip')
     assert zip_format
 
@@ -2250,7 +2246,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
     for coord in coords:
         if check_metatile_exists:
-            existing_data = store.read_tile(coord, zip_format, layer)
+            existing_data = store.read_tile(coord, zip_format)
             if existing_data is not None:
                 meta_low_zoom_logger.metatile_already_exists(parent, coord)
                 continue
@@ -2293,9 +2289,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
             for tile in tiles:
-                store.write_tile(
-                    tile['tile'], tile['coord'], tile['format'],
-                    tile['layer'])
+                store.write_tile(tile['tile'], tile['coord'], tile['format'])
         except Exception as e:
             meta_low_zoom_logger.metatile_storage_failed(
                 e, parent, coord)

@@ -50,7 +50,6 @@ store:
   type: s3 # Can also be `directory`, which would dump the tiles to disk.
   name: <s3 bucket/tile directory name>
   # The following store properties are s3 specific.
-  path: osm
   reduced-redundancy: true
   date-prefix: 19851026
   # optional tags that get saved onto the s3 objects

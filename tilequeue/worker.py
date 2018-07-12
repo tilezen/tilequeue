@@ -561,8 +561,7 @@ class S3Storage(object):
                     # cut children tiles that have separate zooms
                     # too
                     tile['coord'],
-                    tile['format'],
-                    tile['layer']))
+                    tile['format']))
             async_jobs.append(async_result)
 
         return async_jobs

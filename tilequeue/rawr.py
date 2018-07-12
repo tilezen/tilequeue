@@ -619,8 +619,7 @@ class RawrStoreSink(object):
         payload = make_rawr_zip_payload(rawr_tile)
         coord = unconvert_coord_object(rawr_tile.tile)
         format = zip_format
-        layer = 'rawr'
-        self.store.write_tile(payload, coord, format, layer)
+        self.store.write_tile(payload, coord, format)
 
 
 # implement the "get_table" interface, but always return an empty list. this
@@ -688,8 +687,7 @@ class RawrStoreSource(object):
     def _get_object(self, tile):
         coord = unconvert_coord_object(tile)
         format = zip_format
-        layer = 'rawr'
-        payload = self.store.read_tile(coord, format, layer)
+        payload = self.store.read_tile(coord, format)
         return payload
 
     def __call__(self, tile):
