@@ -323,6 +323,10 @@ rawr:
       region: us-east-1
       prefix: s3-bucket-prefix
       suffix: .zip
+      # optional metadata that gets saved onto the s3 objects
+      metadata:
+        prefix: 19851026
+        runid: 19851026-1
   # alternatively, provide a "store" config - same as elsewhere, can be s3 or directory
   #store:
   #  type: directory
