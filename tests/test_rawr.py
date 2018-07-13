@@ -1,5 +1,6 @@
 import unittest
 
+
 class RawrS3SinkTest(unittest.TestCase):
 
     def _make_stub_s3_client(self):
