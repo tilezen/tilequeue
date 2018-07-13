@@ -11,8 +11,8 @@ from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
-from tilequeue.process import convert_source_data_to_feature_layers
-from tilequeue.process import process_coord
+from tilequeue.process import process
+from tilequeue.process import Processor
 from tilequeue.query import DBConnectionPool
 from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
@@ -22,7 +22,6 @@ from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
@@ -1706,26 +1705,16 @@ def tilequeue_process_tile(cfg, peripherals, args):
             query_cfg, cfg.buffer_cfg, os.path.dirname(cfg.query_cfg)))
 
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
-    io_pool = ThreadPool(len(layer_data))
+    formats = lookup_formats(cfg.output_formats)
 
+    io_pool = ThreadPool(len(layer_data))
     data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
 
-    nominal_zoom = coord.zoom + cfg.metatile_zoom
-    unpadded_bounds = coord_to_mercator_bounds(coord)
-
     for fetch, _ in data_fetcher.fetch_tiles([dict(coord=coord)]):
-        source_rows = fetch(nominal_zoom, unpadded_bounds)
-    feature_layers = convert_source_data_to_feature_layers(
-        source_rows, layer_data, unpadded_bounds, coord.zoom)
-
-    cut_coords = [coord]
-    if nominal_zoom > coord.zoom:
-        cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
-    formats = lookup_formats(cfg.output_formats)
-    formatted_tiles, extra_data = process_coord(
-        coord, coord.zoom, feature_layers, post_process_data, formats,
-        unpadded_bounds, cut_coords, cfg.buffer_cfg, output_calc_mapping)
+        formatted_tiles, extra_data = process(
+            coord, cfg.metatile_zoom, fetch, layer_data, post_process_data,
+            formats, cfg.buffer_cfg, output_calc_mapping, cfg.max_zoom,
+            cfg.tile_sizes)
 
     # can think about making this configurable
     # but this is intended for debugging anyway
@@ -2144,9 +2133,6 @@ def tilequeue_meta_tile(cfg, args):
 
         for fetch, coord_datum in fetched_coord_data:
             coord = coord_datum['coord']
-            nominal_zoom = coord.zoom + cfg.metatile_zoom
-            unpadded_bounds = coord_to_mercator_bounds(coord)
-
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format, layer)
                 if existing_data is not None:
@@ -2154,28 +2140,25 @@ def tilequeue_meta_tile(cfg, args):
                         parent, job_coord, coord)
                     continue
 
+            processor = Processor(
+                coord, cfg.metatile_zoom, fetch, layer_data,
+                post_process_data, formats, cfg.buffer_cfg,
+                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+
             try:
-                source_rows = fetch(nominal_zoom, unpadded_bounds)
-                feature_layers = convert_source_data_to_feature_layers(
-                    source_rows, layer_data, unpadded_bounds, coord.zoom)
+                processor.fetch()
+
             except Exception as e:
-                meta_tile_logger.tile_fetch_failed(e, parent, job_coord, coord)
+                meta_tile_logger.tile_fetch_failed(
+                    e, parent, job_coord, coord)
                 continue
 
-            cut_coords = [coord]
-            if nominal_zoom > coord.zoom:
-                cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
             try:
-                formatted_tiles, extra_data = process_coord(
-                    coord, nominal_zoom, feature_layers, post_process_data,
-                    formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
-                    output_calc_mapping
-                )
+                formatted_tiles, _ = processor.process_tiles()
+
             except Exception as e:
                 meta_tile_logger.tile_process_failed(
                     e, parent, job_coord, coord)
-                continue
 
             try:
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
@@ -2278,26 +2261,23 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         assert len(fetched_coord_data) == 1
         fetch, coord_datum = fetched_coord_data[0]
         coord = coord_datum['coord']
-        nominal_zoom = coord.zoom + cfg.metatile_zoom
-        unpadded_bounds = coord_to_mercator_bounds(coord)
+
+        processor = Processor(
+            coord, cfg.metatile_zoom, fetch, layer_data,
+            post_process_data, formats, cfg.buffer_cfg,
+            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+
         try:
-            source_rows = fetch(nominal_zoom, unpadded_bounds)
-            feature_layers = convert_source_data_to_feature_layers(
-                source_rows, layer_data, unpadded_bounds, coord.zoom)
+            processor.fetch()
+
         except Exception as e:
-            meta_low_zoom_logger.fetch_failed(e, parent, coord)
+            meta_low_zoom_logger.fetch_failed(
+                e, parent, coord)
             continue
 
-        cut_coords = [coord]
-        if nominal_zoom > coord.zoom:
-            cut_coords.extend(coord_children_range(coord, nominal_zoom))
-
         try:
-            formatted_tiles, extra_data = process_coord(
-                coord, nominal_zoom, feature_layers, post_process_data,
-                formats, unpadded_bounds, cut_coords, cfg.buffer_cfg,
-                output_calc_mapping
-            )
+            formatted_tiles, _ = processor.process_tiles()
+
         except Exception as e:
             meta_low_zoom_logger.tile_process_failed(
                 e, parent, coord)

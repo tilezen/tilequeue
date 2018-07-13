@@ -132,6 +132,11 @@ class Configuration(object):
 
         self.group_by_zoom = self.subtree('rawr group-zoom')
 
+        self.tile_sizes = self._cfg('metatile tile-sizes')
+        if self.tile_sizes is None:
+            self.tile_sizes = [256 * (1 << z) for z in
+                               reversed(xrange(0, self.metatile_zoom + 1))]
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml
@@ -248,6 +253,7 @@ def default_yml_config():
         'metatile': {
             'size': None,
             'start-zoom': 0,
+            'tile-sizes': None,
         },
         'queue_buffer_size': {
             'sql': None,

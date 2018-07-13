@@ -208,7 +208,8 @@ wof:
 # tiles together can be beneficial by reducing the number of writes to disk when
 # storing and loading them.
 metatile:
-  # The metatile size setting has the following effects:
+  # The metatile size setting has the following effects by itself. But please
+  # note that the `tile-sizes` setting can affect this too!
   #
   #   - null or omitted entry: Individual tiles, one for each format, will be
   #     saved on disk. This can be a good choice for local development use, or to
@@ -234,6 +235,36 @@ metatile:
   #
   # optional: defaults to zero.
   start-zoom: 0
+
+  # if specificed, the tile sizes to render in each metatile. by default, this
+  # is all the sizes for the metatile, i.e: for `size=4`, then `tile-sizes`
+  # will default to [1024, 512, 256].
+  #
+  # if you don't need some of the sizes, then setting this to a reduced set
+  # can make your metatiles smaller. however, with a reduced set of sizes, the
+  # following special behaviour applies:
+  #
+  #  - at the maximum nominal zoom (see `tile.max-zoom-with-changes`), the
+  #    metatile will additionally contain all the smaller tiles at the same
+  #    nominal zoom. for example, if `tile-sizes` is [1024], `metatile.size`
+  #    is 4 and the `max-zoom-with-changes` is 16, then the highest zoom
+  #    metatile will be 14/x/y and will contain one 1024px tile, 2x2 512px
+  #    tiles and 4x4 256px tiles all at the `max-zoom-with-changes` nominal
+  #    zoom. this allows programs such as tapalcatl to serve smaller tiles
+  #    for a few zoom levels of "overzoom".
+  #
+  #  - at zoom zero, the metatile will additionally contain the same size of
+  #    tile at lower nominal and coordinate zooms. for example, if the
+  #    `tile-sizes` is [512, 256] and the metatile size is 8, then in addition
+  #    to the 512px and 256px tiles at nominal zoom 3, the tile will also
+  #    contain 512px tiles at nominal zooms 2 and 1. (because the 512px tile
+  #    at nominal zoom 1 covers the whole world, there is no tile output at
+  #    nominal zoom 0).
+  #
+  # optional: default behaviour is all the tile sizes, as described in the
+  # `size` parameter description.
+  #
+  #tile-sizes: [512, 256]
 
 # Configuration for where to store the tiles of interest set
 toi-store:

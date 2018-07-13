@@ -90,24 +90,28 @@ class TestMetatileConfiguration(unittest.TestCase):
         cfg = self._call_fut(config_dict)
         self.assertIsNone(cfg.metatile_size)
         self.assertEquals(cfg.metatile_zoom, 0)
+        self.assertEquals(cfg.tile_sizes, [256])
 
     def test_metatile_size_1(self):
         config_dict = dict(metatile=dict(size=1))
         cfg = self._call_fut(config_dict)
         self.assertEquals(cfg.metatile_size, 1)
         self.assertEquals(cfg.metatile_zoom, 0)
+        self.assertEquals(cfg.tile_sizes, [256])
 
     def test_metatile_size_2(self):
         config_dict = dict(metatile=dict(size=2))
         cfg = self._call_fut(config_dict)
         self.assertEquals(cfg.metatile_size, 2)
         self.assertEquals(cfg.metatile_zoom, 1)
+        self.assertEquals(cfg.tile_sizes, [512, 256])
 
     def test_metatile_size_4(self):
         config_dict = dict(metatile=dict(size=4))
         cfg = self._call_fut(config_dict)
         self.assertEquals(cfg.metatile_size, 4)
         self.assertEquals(cfg.metatile_zoom, 2)
+        self.assertEquals(cfg.tile_sizes, [1024, 512, 256])
 
     def test_max_zoom(self):
         config_dict = dict(metatile=dict(size=2))

@@ -1,3 +1,5 @@
+from __future__ import division
+
 from collections import defaultdict
 from collections import namedtuple
 from cStringIO import StringIO
@@ -580,3 +582,191 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
         feature_layers.append(feature_layer)
 
     return feature_layers
+
+
+def _is_power_of_2(x):
+    """
+    Returns True if `x` is a power of 2.
+    """
+
+    # see:
+    # https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2
+    return x != 0 and (x & (x - 1)) == 0
+
+
+def metatile_children_with_size(coord, metatile_zoom, nominal_zoom, tile_size):
+    """
+    Return a list of all the coords which are children of the input metatile
+    at `coord` with zoom `metatile_zoom` (i.e: 0 for a single tile metatile,
+    1 for 2x2, 2 for 4x4, etc...) with size `tile_size` corrected for the
+    `nominal_zoom`.
+
+    For example, in a single tile metatile, the `tile_size` must be 256 and the
+    returned list contains only `coord`.
+
+    For an 8x8 metatile (`metatile_zoom = 3`), requesting the 512px children
+    would give a list of the 4x4 512px children at `coord.zoom + 2` with
+    nominal zoom `nominal_zoom`.
+
+    Correcting for nominal zoom means that some tiles may have coordinate zooms
+    lower than they would otherwise be. For example, the 0/0/0 tile with
+    metatile zoom 3 (8x8 256px tiles) would have 4x4 512px tiles at coordinate
+    zoom 2 and nominal zoom 3. At nominal zoom 2, there would be 2x2 512px
+    tiles at coordinate zoom 1.
+    """
+
+    from tilequeue.tile import coord_children_subrange
+    from tilequeue.tile import metatile_zoom_from_size
+
+    assert tile_size >= 256
+    assert tile_size <= 256 * (1 << metatile_zoom)
+    assert _is_power_of_2(tile_size)
+
+    # delta is how many zoom levels _lower_ we want the child tiles, based on
+    # their tile size. 256px tiles are defined as being at nominal zoom, so
+    # delta = 0 for them.
+    delta = metatile_zoom_from_size(tile_size // 256)
+
+    zoom = nominal_zoom - delta
+
+    return list(coord_children_subrange(coord, zoom, zoom))
+
+
+def calculate_sizes_by_zoom(coord, metatile_zoom, cfg_tile_sizes, max_zoom):
+    """
+    Returns a map of nominal zoom to the list of tile sizes to generate at that
+    zoom.
+
+    This is because we want to generate different metatile contents at
+    different zoom levels. At the most detailed zoom level, we want to generate
+    the smallest tiles possible, as this allows "overzooming" by simply
+    extracting the smaller tiles. At the minimum zoom, we want to get as close
+    as we can to zero nominal zoom by using any "unused" space in the metatile
+    for larger tile sizes that we're not generating.
+
+    For example, with 1x1 metatiles, the tile size is always 256px, and the
+    function will return {coord.zoom: [256]}
+    """
+
+    from tilequeue.tile import metatile_zoom_from_size
+
+    tile_size_by_zoom = {}
+    nominal_zoom = coord.zoom + metatile_zoom
+
+    # check that the tile sizes are correct and within range.
+    for tile_size in cfg_tile_sizes:
+        assert tile_size >= 256
+        assert tile_size <= 256 * (1 << metatile_zoom)
+        assert _is_power_of_2(tile_size)
+
+    if nominal_zoom >= max_zoom:
+        # all the tile_sizes down to 256 at the nominal zoom.
+        tile_sizes = []
+        tile_sizes.extend(cfg_tile_sizes)
+
+        lowest_tile_size = min(tile_sizes)
+        while lowest_tile_size > 256:
+            lowest_tile_size //= 2
+            tile_sizes.append(lowest_tile_size)
+
+        tile_size_by_zoom[nominal_zoom] = tile_sizes
+
+    elif coord.zoom <= 0:
+        # the tile_sizes, plus max(tile_sizes) size at nominal zooms decreasing
+        # down to 0 (or as close as we can get)
+        tile_size_by_zoom[nominal_zoom] = cfg_tile_sizes
+
+        max_tile_size = max(cfg_tile_sizes)
+        max_tile_zoom = metatile_zoom_from_size(max_tile_size // 256)
+        assert max_tile_zoom <= metatile_zoom
+        for delta in range(0, metatile_zoom - max_tile_zoom):
+            z = nominal_zoom - (delta + 1)
+            tile_size_by_zoom[z] = [max_tile_size]
+
+    else:
+        # the tile_sizes at nominal zoom only.
+        tile_size_by_zoom[nominal_zoom] = cfg_tile_sizes
+
+    return tile_size_by_zoom
+
+
+def calculate_cut_coords_by_zoom(
+        coord, metatile_zoom, cfg_tile_sizes, max_zoom):
+    """
+    Returns a map of nominal zoom to the list of cut coordinates at that
+    nominal zoom.
+    """
+
+    tile_sizes_by_zoom = calculate_sizes_by_zoom(
+        coord, metatile_zoom, cfg_tile_sizes, max_zoom)
+
+    cut_coords_by_zoom = {}
+    for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
+        cut_coords = []
+        for tile_size in tile_sizes:
+            cut_coords.extend(metatile_children_with_size(
+                coord, metatile_zoom, nominal_zoom, tile_size))
+
+        cut_coords_by_zoom[nominal_zoom] = cut_coords
+
+    return cut_coords_by_zoom
+
+
+class Processor(object):
+    def __init__(self, coord, metatile_zoom, fetch_fn, layer_data,
+                 post_process_data, formats, buffer_cfg, output_calc_mapping,
+                 max_zoom, cfg_tile_sizes):
+        self.coord = coord
+        self.metatile_zoom = metatile_zoom
+        self.fetch_fn = fetch_fn
+        self.layer_data = layer_data
+        self.post_process_data = post_process_data
+        self.formats = formats
+        self.buffer_cfg = buffer_cfg
+        self.output_calc_mapping = output_calc_mapping
+        self.max_zoom = max_zoom
+        self.cfg_tile_sizes = cfg_tile_sizes
+
+    def fetch(self):
+        unpadded_bounds = coord_to_mercator_bounds(self.coord)
+
+        cut_coords_by_zoom = calculate_cut_coords_by_zoom(
+            self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
+        feature_layers_by_zoom = {}
+
+        for nominal_zoom, _ in cut_coords_by_zoom.items():
+            source_rows = self.fetch_fn(nominal_zoom, unpadded_bounds)
+            feature_layers = convert_source_data_to_feature_layers(
+                source_rows, self.layer_data, unpadded_bounds, self.coord.zoom)
+            feature_layers_by_zoom[nominal_zoom] = feature_layers
+
+        self.cut_coords_by_zoom = cut_coords_by_zoom
+        self.feature_layers_by_zoom = feature_layers_by_zoom
+
+    def process_tiles(self):
+        unpadded_bounds = coord_to_mercator_bounds(self.coord)
+
+        all_formatted_tiles = []
+        all_extra_data = {}
+
+        for nominal_zoom, cut_coords in self.cut_coords_by_zoom.items():
+            feature_layers = self.feature_layers_by_zoom[nominal_zoom]
+            formatted_tiles, extra_data = process_coord(
+                self.coord, nominal_zoom, feature_layers,
+                self.post_process_data, self.formats, unpadded_bounds,
+                cut_coords, self.buffer_cfg, self.output_calc_mapping
+            )
+            all_formatted_tiles.extend(formatted_tiles)
+            all_extra_data.update(extra_data)
+
+        return all_formatted_tiles, all_extra_data
+
+
+def process(coord, metatile_zoom, fetch_fn, layer_data, post_process_data,
+            formats, buffer_cfg, output_calc_mapping, max_zoom,
+            cfg_tile_sizes):
+    p = Processor(coord, metatile_zoom, fetch_fn, layer_data,
+                  post_process_data, formats, buffer_cfg, output_calc_mapping,
+                  max_zoom, cfg_tile_sizes)
+    p.fetch()
+    return p.process_tiles()
