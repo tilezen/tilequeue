@@ -142,3 +142,38 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         zoom = long(7)
         queue_name = get_queue(zoom)
         self.assertEqual(queue_name, 'q1')
+
+
+class BatchJobCoordTest(unittest.TestCase):
+
+    def test_low_zoom(self):
+        from tilequeue.command import get_batch_job_coords_low_zoom
+        from tilequeue.tile import deserialize_coord
+        coord = deserialize_coord('7/0/0')
+        coords = list(get_batch_job_coords_low_zoom(coord, 7, 10))
+        for c in coords:
+            self.assertTrue(7 <= c.zoom <= 9)
+        self.assertEqual(21, len(coords))
+
+    def test_high_zoom(self):
+        from tilequeue.command import get_batch_job_coords_high_zoom
+        from tilequeue.tile import deserialize_coord
+        coord = deserialize_coord('7/0/0')
+        coords = list(get_batch_job_coords_high_zoom(coord, 7, 10))
+        for c in coords:
+            self.assertTrue(c.zoom == 10)
+        self.assertEqual(64, len(coords))
+
+    def test_get_batch_job_coord_idx(self):
+        from tilequeue.command import get_batch_job_coord
+        from tilequeue.tile import deserialize_coord
+        coords = [deserialize_coord('10/1/1')]
+        self.assertIsNotNone(get_batch_job_coord(coords, 0))
+        self.assertIsNone(get_batch_job_coord(coords, -1))
+        self.assertIsNone(get_batch_job_coord(coords, 1))
+        import os
+        self.assertIsNone(get_batch_job_coord(coords))
+        os.environ['AWS_BATCH_JOB_ARRAY_INDEX'] = '0'
+        self.assertIsNotNone(get_batch_job_coord(coords))
+        os.environ['AWS_BATCH_JOB_ARRAY_INDEX'] = '1'
+        self.assertIsNone(get_batch_job_coord(coords))
