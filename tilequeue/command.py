@@ -1987,6 +1987,8 @@ def tilequeue_batch_enqueue(cfg, args):
     job_name_prefix = batch_yaml.get('job-name-prefix')
     assert job_name_prefix, 'Missing batch job-name-prefix config'
 
+    check_metatile_exists = batch_yaml.get('check-metatile-exists')
+
     retry_attempts = batch_yaml.get('retry-attempts')
     memory = batch_yaml.get('memory')
     vcpus = batch_yaml.get('vcpus')
@@ -2025,6 +2027,10 @@ def tilequeue_batch_enqueue(cfg, args):
         if retry_attempts is not None:
             job_opts['retryStrategy'] = dict(attempts=retry_attempts)
         container_overrides = {}
+        if check_metatile_exists is not None:
+            container_overrides['environment'] = {
+                'check-metatile-exists': bool(check_metatile_exists),
+            },
         if memory:
             container_overrides['memory'] = memory
         if vcpus:
