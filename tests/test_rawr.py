@@ -17,14 +17,14 @@ class RawrS3SinkTest(unittest.TestCase):
         )
         return type('stub-rawr-tile', (), props)
 
-    def test_metadata(self):
+    def test_tags(self):
         s3_client = self._make_stub_s3_client()
         from tilequeue.rawr import RawrS3Sink
         sink = RawrS3Sink(s3_client, 'bucket', 'prefix', 'suffix')
         rawr_tile = self._make_stub_rawr_tile()
         sink(rawr_tile)
-        self.assertIsNone(sink.s3_client.put_props.get('Metadata'))
-        sink.metadata = dict(prefix='foo')
+        self.assertIsNone(sink.s3_client.put_props.get('Tagging'))
+        sink.tags = dict(prefix='foo', runid='bar')
         sink(rawr_tile)
-        self.assertEquals(dict(prefix='foo'),
-                          sink.s3_client.put_props.get('Metadata'))
+        self.assertEquals('prefix=foo&runid=bar',
+                          sink.s3_client.put_props.get('Tagging'))
