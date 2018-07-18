@@ -20,6 +20,7 @@ from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from tilequeue.utils import time_block
 from time import gmtime
+from urllib import urlencode
 import zipfile
 
 
@@ -580,22 +581,26 @@ class RawrS3Sink(object):
 
     """Rawr sink to write to s3"""
 
-    def __init__(self, s3_client, bucket, prefix, suffix):
+    def __init__(self, s3_client, bucket, prefix, suffix, tags=None):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
         self.suffix = suffix
+        self.tags = tags
 
     def __call__(self, rawr_tile):
         payload = make_rawr_zip_payload(rawr_tile)
         location = make_rawr_s3_path(rawr_tile.tile, self.prefix, self.suffix)
-        self.s3_client.put_object(
-                Body=payload,
-                Bucket=self.bucket,
-                ContentType='application/zip',
-                ContentLength=len(payload),
-                Key=location,
+        put_opts = dict(
+            Body=payload,
+            Bucket=self.bucket,
+            ContentType='application/zip',
+            ContentLength=len(payload),
+            Key=location,
         )
+        if self.tags:
+            put_opts['Tagging'] = urlencode(self.tags)
+        self.s3_client.put_object(**put_opts)
 
 
 class RawrNullSink(object):

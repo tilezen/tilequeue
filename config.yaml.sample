@@ -53,8 +53,8 @@ store:
   path: osm
   reduced-redundancy: true
   date-prefix: 19851026
-  # optional metadata that gets saved onto the s3 objects
-  metadata:
+  # optional tags that get saved onto the s3 objects
+  tags:
     prefix: 19851026
     runid: 19851026-1
 aws:
@@ -354,6 +354,10 @@ rawr:
       region: us-east-1
       prefix: s3-bucket-prefix
       suffix: .zip
+      # optional tags that get saved onto the s3 objects
+      tags:
+        prefix: 19851026
+        runid: 19851026-1
   # alternatively, provide a "store" config - same as elsewhere, can be s3 or directory
   #store:
   #  type: directory

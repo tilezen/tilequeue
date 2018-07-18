@@ -13,6 +13,7 @@ import random
 import threading
 import time
 from cStringIO import StringIO
+from urllib import urlencode
 
 
 def calc_hash(s):
@@ -99,7 +100,7 @@ class S3(object):
     def __init__(
             self, s3_client, bucket_name, date_prefix, path,
             reduced_redundancy, delete_retry_interval, logger,
-            object_acl, metadata):
+            object_acl, tags):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
@@ -108,7 +109,7 @@ class S3(object):
         self.delete_retry_interval = delete_retry_interval
         self.logger = logger
         self.object_acl = object_acl
-        self.metadata = metadata
+        self.tags = tags
 
     def write_tile(self, tile_data, coord, format, layer):
         key_name = s3_tile_key(
@@ -128,8 +129,8 @@ class S3(object):
                 ACL=self.object_acl,
                 StorageClass=storage_class,
             )
-            if self.metadata:
-                put_obj_props['Metadata'] = self.metadata
+            if self.tags:
+                put_obj_props['Tagging'] = urlencode(self.tags)
             try:
                 self.s3_client.put_object(**put_obj_props)
             except ClientError as e:
@@ -395,10 +396,10 @@ class Memory(object):
 def make_s3_store(bucket_name,
                   path='osm', reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
-                  object_acl='public-read', metadata=None):
+                  object_acl='public-read', tags=None):
     s3 = boto3.client('s3')
     s3_store = S3(s3, bucket_name, date_prefix, path, reduced_redundancy,
-                  delete_retry_interval, logger, object_acl, metadata)
+                  delete_retry_interval, logger, object_acl, tags)
     return s3_store
 
 
@@ -449,13 +450,13 @@ def make_store(yml, credentials={}, logger=None):
         date_prefix = yml.get('date-prefix')
         delete_retry_interval = yml.get('delete-retry-interval')
         object_acl = yml.get('object-acl', 'public-read')
-        metadata = yml.get('metadata')
+        tags = yml.get('tags')
 
         return make_s3_store(
             bucket, path=path,
             reduced_redundancy=reduced_redundancy, date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,
-            object_acl=object_acl, metadata=metadata)
+            object_acl=object_acl, tags=tags)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))

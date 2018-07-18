@@ -134,21 +134,21 @@ class S3Test(unittest.TestCase):
                 self.put_props = props
         return stub_s3_client()
 
-    def test_metadata(self):
+    def test_tags(self):
         from tilequeue.store import S3
         s3_client = self._make_stub_s3_client()
-        metadata = None
+        tags = None
         store = S3(s3_client, 'bucket', 'prefix', 'path', False, 60, None,
-                   'public-read', metadata)
+                   'public-read', tags)
 
         tile_data = 'data'
         from tilequeue.tile import deserialize_coord
         coord = deserialize_coord('14/1/2')
         from tilequeue.format import mvt_format
         store.write_tile(tile_data, coord, mvt_format, 'all')
-        self.assertIsNone(store.s3_client.put_props.get('Metadata'))
+        self.assertIsNone(store.s3_client.put_props.get('Tagging'))
 
-        store.metadata = dict(prefix='foo')
+        store.tags = dict(prefix='foo', runid='bar')
         store.write_tile(tile_data, coord, mvt_format, 'all')
-        self.assertEquals(dict(prefix='foo'),
-                          store.s3_client.put_props.get('Metadata'))
+        self.assertEquals('prefix=foo&runid=bar',
+                          store.s3_client.put_props.get('Tagging'))

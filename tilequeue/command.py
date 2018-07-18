@@ -1773,8 +1773,8 @@ def _tilequeue_rawr_setup(cfg):
 
     rawr_store = rawr_yaml.get('store')
     if rawr_store:
-        store = make_store(rawr_store,
-                           credentials=cfg.subtree('aws credentials'))
+        store = make_store(
+            rawr_store, credentials=cfg.subtree('aws credentials'))
         rawr_sink = RawrStoreSink(store)
 
     else:
@@ -1793,9 +1793,10 @@ def _tilequeue_rawr_setup(cfg):
             assert prefix, 'Missing rawr sink prefix'
             suffix = s3_cfg.get('suffix')
             assert suffix, 'Missing rawr sink suffix'
+            metadata = s3_cfg.get('metadata')
 
             s3_client = boto3.client('s3', region_name=sink_region)
-            rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix)
+            rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix, metadata)
         elif sink_type == 'none':
             from tilequeue.rawr import RawrNullSink
             rawr_sink = RawrNullSink()
