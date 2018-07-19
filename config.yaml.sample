@@ -439,7 +439,12 @@ batch:
   retry-attempts: 5
   # check store if metatile already exists, and if so skip processing
   check-metatile-exists: true
-  # used when enqueueing batch array jobs, can be "low" or "high"
+  # used when enqueueing batch array jobs, the job-type can be "low" or "high"
+  # this affects the batch array jobs size
+  # low:  z7 coord represents all tiles at z7, z8, z9
+  # high: z7 coord represents all tiles at z10 equivalent
+  # when enqueueing low zoom metatiles, z0-9, set to "low"
+  # when enqueueing high zoom metatiles and rawr tiles, set to "high"
   job-type: <job-type>
   # optional override memory reserved for container when submiting job
   # NOTE: in megabytes
