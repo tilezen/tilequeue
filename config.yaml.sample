@@ -52,6 +52,11 @@ store:
   # The following store properties are s3 specific.
   reduced-redundancy: true
   date-prefix: 19851026
+  # control the s3 tile key for the object
+  # can either be hash-prefix or prefix-hash
+  # hash-prefix -> hash comes before the prefix
+  # prefix-hash -> prefix comes before the hash
+  key-format-type: <hash-prefix|prefix-hash>
   # optional tags that get saved onto the s3 objects
   tags:
     prefix: 19851026
@@ -352,7 +357,12 @@ rawr:
       bucket: s3-bucket-name
       region: us-east-1
       prefix: s3-bucket-prefix
-      suffix: .zip
+      extension: zip
+      # control the s3 tile key for the object
+      # can either be hash-prefix or prefix-hash
+      # hash-prefix -> hash comes before the prefix
+      # prefix-hash -> prefix comes before the hash
+      key-format-type: <hash-prefix|prefix-hash>
       # optional tags that get saved onto the s3 objects
       tags:
         prefix: 19851026

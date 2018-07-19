@@ -59,12 +59,15 @@ class TestTileDirectory(unittest.TestCase):
 class TestStoreKey(unittest.TestCase):
 
     def test_example_coord(self):
-        from tilequeue.store import s3_tile_key
         from tilequeue.tile import deserialize_coord
         from tilequeue.format import json_format
+        from tilequeue.store import KeyFormatType
+        from tilequeue.store import S3TileKeyGenerator
         coord = deserialize_coord('8/72/105')
-        date_str = '20160121'
-        tile_key = s3_tile_key(date_str, coord, json_format.extension)
+        prefix = '20160121'
+        tile_key_gen = S3TileKeyGenerator(
+            key_format_type=KeyFormatType.hash_prefix)
+        tile_key = tile_key_gen(prefix, coord, json_format.extension)
         self.assertEqual(tile_key, 'b57e9/20160121/8/72/105.json')
 
 
@@ -118,11 +121,15 @@ class S3Test(unittest.TestCase):
         return stub_s3_client()
 
     def test_tags(self):
+        from tilequeue.store import KeyFormatType
         from tilequeue.store import S3
+        from tilequeue.store import S3TileKeyGenerator
         s3_client = self._make_stub_s3_client()
         tags = None
+        tile_key_gen = S3TileKeyGenerator(
+            key_format_type=KeyFormatType.hash_prefix)
         store = S3(s3_client, 'bucket', 'prefix', False, 60, None,
-                   'public-read', tags)
+                   'public-read', tags, tile_key_gen)
         tile_data = 'data'
         from tilequeue.tile import deserialize_coord
         coord = deserialize_coord('14/1/2')
@@ -130,6 +137,6 @@ class S3Test(unittest.TestCase):
         store.write_tile(tile_data, coord, mvt_format)
         self.assertIsNone(store.s3_client.put_props.get('Tagging'))
         store.tags = dict(prefix='foo', runid='bar')
-        store.write_tile(tile_data, coord, mvt_format, 'all')
+        store.write_tile(tile_data, coord, mvt_format)
         self.assertEquals('prefix=foo&runid=bar',
                           store.s3_client.put_props.get('Tagging'))

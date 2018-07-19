@@ -11,7 +11,6 @@ from raw_tiles.source.table_reader import TableReader
 from tilequeue.command import explode_and_intersect
 from tilequeue.format import zip_format
 from tilequeue.queue.message import MessageHandle
-from tilequeue.store import calc_hash
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import deserialize_coord
@@ -562,13 +561,6 @@ def unpack_rawr_zip_payload(table_sources, payload):
     return get_table
 
 
-def make_rawr_s3_path(tile, prefix, suffix):
-    path_to_hash = '%d/%d/%d%s' % (tile.z, tile.x, tile.y, suffix)
-    path_hash = calc_hash(path_to_hash)
-    path_with_hash = '%s/%s/%s' % (path_hash, prefix, path_to_hash)
-    return path_with_hash
-
-
 def make_rawr_enqueuer(
         rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
         stats_handler):
@@ -581,22 +573,25 @@ class RawrS3Sink(object):
 
     """Rawr sink to write to s3"""
 
-    def __init__(self, s3_client, bucket, prefix, suffix, tags=None):
+    def __init__(self, s3_client, bucket, prefix, extension, tile_key_gen,
+                 tags=None):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
-        self.suffix = suffix
+        self.extension = extension
+        self.tile_key_gen = tile_key_gen
         self.tags = tags
 
     def __call__(self, rawr_tile):
         payload = make_rawr_zip_payload(rawr_tile)
-        location = make_rawr_s3_path(rawr_tile.tile, self.prefix, self.suffix)
+        coord = unconvert_coord_object(rawr_tile.tile)
+        key = self.tile_key_gen(self.prefix, coord, self.extension)
         put_opts = dict(
             Body=payload,
             Bucket=self.bucket,
             ContentType='application/zip',
             ContentLength=len(payload),
-            Key=location,
+            Key=key,
         )
         if self.tags:
             put_opts['Tagging'] = urlencode(self.tags)
@@ -632,22 +627,23 @@ class RawrS3Source(object):
 
     """Rawr source to read from S3."""
 
-    def __init__(self, s3_client, bucket, prefix, suffix, table_sources,
-                 allow_missing_tiles=False):
+    def __init__(self, s3_client, bucket, prefix, extension, table_sources,
+                 tile_key_gen, allow_missing_tiles=False):
         self.s3_client = s3_client
         self.bucket = bucket
         self.prefix = prefix
-        self.suffix = suffix
+        self.extension = extension
         self.table_sources = table_sources
+        self.tile_key_gen = tile_key_gen
         self.allow_missing_tiles = allow_missing_tiles
 
     def _get_object(self, tile):
-        location = make_rawr_s3_path(tile, self.prefix, self.suffix)
-
+        coord = unconvert_coord_object(tile)
+        key = self.tile_key_gen(self.prefix, coord, self.extension)
         try:
             response = self.s3_client.get_object(
                 Bucket=self.bucket,
-                Key=location,
+                Key=key,
             )
         except Exception, e:
             # if we allow missing tiles, then translate a 404 exception into a

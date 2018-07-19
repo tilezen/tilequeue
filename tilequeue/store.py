@@ -3,6 +3,7 @@
 import boto3
 from botocore.exceptions import ClientError
 from builtins import range
+from enum import Enum
 from future.utils import raise_from
 import md5
 from ModestMaps.Core import Coordinate
@@ -23,20 +24,46 @@ def calc_hash(s):
     return md5_hash[:5]
 
 
-def s3_tile_key(date, coord, extension):
-    path_to_hash = '%(z)d/%(x)d/%(y)d.%(ext)s' % dict(
-        z=coord.zoom,
-        x=coord.column,
-        y=coord.row,
-        ext=extension,
-    )
-    md5_hash = calc_hash(path_to_hash)
-    s3_path = '%(md5)s/%(date)s/%(path_to_hash)s' % dict(
-        date=date,
-        md5=md5_hash,
-        path_to_hash=path_to_hash,
-    )
-    return s3_path
+class KeyFormatType(Enum):
+    """represents a type of s3 key path pattern"""
+
+    # hash comes before prefix
+    hash_prefix = 1
+
+    # prefix comes before hash
+    prefix_hash = 2
+
+
+class S3TileKeyGenerator(object):
+    """
+    generates an s3 path
+
+    The S3 store delegates here to generate the s3 key path for the tile.
+    """
+
+    def __init__(self, key_format_type=None, key_format=None):
+        if key_format is not None and key_format_type is not None:
+            raise ValueError('key_format and key_format_type both set')
+        if key_format_type is not None:
+            if key_format_type == KeyFormatType.hash_prefix:
+                key_format = '%(hash)s/%(prefix)s/%(path)s'
+            elif key_format_type == KeyFormatType.prefix_hash:
+                key_format = '%(prefix)s/%(hash)s/%(path)s'
+            else:
+                raise ValueError('unknown key_format_type: %r' %
+                                 key_format_type)
+        self.key_format = key_format
+
+    def __call__(self, prefix, coord, extension):
+        path_to_hash = '%d/%d/%d.%s' % (
+            coord.zoom, coord.column, coord.row, extension)
+        md5_hash = calc_hash(path_to_hash)
+        s3_key_path = self.key_format % dict(
+            prefix=prefix,
+            hash=md5_hash,
+            path=path_to_hash,
+        )
+        return s3_key_path
 
 
 def parse_coordinate_from_path(path, extension):
@@ -96,7 +123,7 @@ class S3(object):
     def __init__(
             self, s3_client, bucket_name, date_prefix,
             reduced_redundancy, delete_retry_interval, logger,
-            object_acl, tags):
+            object_acl, tags, tile_key_gen):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
@@ -105,9 +132,11 @@ class S3(object):
         self.logger = logger
         self.object_acl = object_acl
         self.tags = tags
+        self.tile_key_gen = tile_key_gen
 
     def write_tile(self, tile_data, coord, format):
-        key_name = s3_tile_key(self.date_prefix, coord, format.extension)
+        key_name = self.tile_key_gen(
+            self.date_prefix, coord, format.extension)
 
         storage_class = 'STANDARD'
         if self.reduced_redundancy:
@@ -137,7 +166,8 @@ class S3(object):
         write_to_s3()
 
     def read_tile(self, coord, format):
-        key_name = s3_tile_key(self.date_prefix, coord, format.extension)
+        key_name = self.tile_key_gen(
+            self.date_prefix, coord, format.extension)
 
         try:
             io = StringIO()
@@ -152,7 +182,8 @@ class S3(object):
 
     def delete_tiles(self, coords, format):
         key_names = [
-            s3_tile_key(self.date_prefix, coord, format.extension).lstrip('/')
+            self.tile_key_gen(
+                self.date_prefix, coord, format.extension).lstrip('/')
             for coord in coords
         ]
 
@@ -383,13 +414,14 @@ class Memory(object):
         return [self.data] if self.data else []
 
 
-def make_s3_store(bucket_name,
+def make_s3_store(bucket_name, tile_key_gen,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
     s3 = boto3.client('s3')
-    s3_store = S3(s3, bucket_name, date_prefix, reduced_redundancy,
-                  delete_retry_interval, logger, object_acl, tags)
+    s3_store = S3(
+        s3, bucket_name, date_prefix, reduced_redundancy,
+        delete_retry_interval, logger, object_acl, tags, tile_key_gen)
     return s3_store
 
 
@@ -425,6 +457,19 @@ def write_tile_if_changed(store, tile_data, coord, format):
         return False
 
 
+def make_s3_tile_key_generator(yml_cfg):
+    key_format_type_str = yml_cfg.get('key-format-type')
+    key_format_type = None
+    if key_format_type_str is None or key_format_type_str == 'hash-prefix':
+        # if unspecified, prefer hash before prefix
+        key_format_type = KeyFormatType.hash_prefix
+    elif key_format_type_str == 'prefix-hash':
+        key_format_type = KeyFormatType.prefix_hash
+    else:
+        raise ValueError('unknown s3 key-format: %r' % key_format_type_str)
+    return S3TileKeyGenerator(key_format_type=key_format_type)
+
+
 def make_store(yml, credentials={}, logger=None):
     store_type = yml.get('type')
 
@@ -440,9 +485,11 @@ def make_store(yml, credentials={}, logger=None):
         delete_retry_interval = yml.get('delete-retry-interval')
         object_acl = yml.get('object-acl', 'public-read')
         tags = yml.get('tags')
+        tile_key_gen = make_s3_tile_key_generator(yml)
 
         return make_s3_store(
-            bucket, reduced_redundancy=reduced_redundancy,
+            bucket, tile_key_gen,
+            reduced_redundancy=reduced_redundancy,
             date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,
             object_acl=object_acl, tags=tags)

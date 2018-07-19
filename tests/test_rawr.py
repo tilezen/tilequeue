@@ -20,7 +20,12 @@ class RawrS3SinkTest(unittest.TestCase):
     def test_tags(self):
         s3_client = self._make_stub_s3_client()
         from tilequeue.rawr import RawrS3Sink
-        sink = RawrS3Sink(s3_client, 'bucket', 'prefix', 'suffix')
+        from tilequeue.store import KeyFormatType
+        from tilequeue.store import S3TileKeyGenerator
+        tile_key_gen = S3TileKeyGenerator(
+            key_format_type=KeyFormatType.hash_prefix)
+        sink = RawrS3Sink(
+            s3_client, 'bucket', 'prefix', 'extension', tile_key_gen)
         rawr_tile = self._make_stub_rawr_tile()
         sink(rawr_tile)
         self.assertIsNone(sink.s3_client.put_props.get('Tagging'))
@@ -32,10 +37,13 @@ class RawrS3SinkTest(unittest.TestCase):
 
 class RawrKeyTest(unittest.TestCase):
     def test_s3_path(self):
-        from raw_tiles.tile import Tile
-        from tilequeue.rawr import make_rawr_s3_path
-        tile = Tile(10, 1, 2)
+        from tilequeue.tile import deserialize_coord
+        from tilequeue.store import KeyFormatType
+        from tilequeue.store import S3TileKeyGenerator
+        coord = deserialize_coord('10/1/2')
         prefix = '19851026'
-        suffix = '.zip'
-        path = make_rawr_s3_path(tile, prefix, suffix)
-        self.assertEqual('c35b6/19851026/10/1/2.zip', path)
+        extension = 'zip'
+        tile_key_gen = S3TileKeyGenerator(
+                key_format_type=KeyFormatType.hash_prefix)
+        key = tile_key_gen(prefix, coord, extension)
+        self.assertEqual('c35b6/19851026/10/1/2.zip', key)
