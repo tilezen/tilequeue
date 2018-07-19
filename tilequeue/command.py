@@ -1793,10 +1793,10 @@ def _tilequeue_rawr_setup(cfg):
             assert prefix, 'Missing rawr sink prefix'
             suffix = s3_cfg.get('suffix')
             assert suffix, 'Missing rawr sink suffix'
-            metadata = s3_cfg.get('metadata')
+            tags = s3_cfg.get('tags')
 
             s3_client = boto3.client('s3', region_name=sink_region)
-            rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix, metadata)
+            rawr_sink = RawrS3Sink(s3_client, bucket, prefix, suffix, tags)
         elif sink_type == 'none':
             from tilequeue.rawr import RawrNullSink
             rawr_sink = RawrNullSink()
