@@ -295,17 +295,16 @@ class JsonRawrTileLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
-    def parent_coord_done(self, parent, timing):
+    def invalid_job_coord(self, parent):
         json_obj = dict(
-            type=log_level_name(LogLevel.INFO),
-            msg_type=log_msg_type_name(MsgType.PYRAMID),
+            type=log_level_name(LogLevel.ERROR),
             category=log_category_name(LogCategory.RAWR_TILE),
+            msg='could not find job coordinate',
             parent=make_coord_dict(parent),
-            timing=timing,
             run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
-        self.logger.info(json_str)
+        self.logger.error(json_str)
 
 
 class MultipleMessagesTrackerLogger(object):
@@ -359,12 +358,6 @@ class JsonMetaTileLogger(object):
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
-    def begin_run(self, parent):
-        self._log('batch process run begin', parent)
-
-    def end_run(self, parent):
-        self._log('batch process run end', parent)
-
     def begin_pyramid(self, parent, pyramid):
         self._log('pyramid begin', parent, pyramid)
 
@@ -408,6 +401,17 @@ class JsonMetaTileLogger(object):
 
     def metatile_already_exists(self, parent, pyramid, coord):
         self._log('metatile already exists', parent, pyramid, coord)
+
+    def invalid_job_coord(self, parent):
+        json_obj = dict(
+            parent=make_coord_dict(parent),
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.META_TILE),
+            msg='could not find job coordinate',
+            run_id=self.run_id,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
 
 
 class JsonMetaTileLowZoomLogger(object):
@@ -466,8 +470,13 @@ class JsonMetaTileLowZoomLogger(object):
     def tile_processed(self, parent, coord):
         self._log('tile processed', parent, coord)
 
-    def begin_run(self, parent):
-        self._log('low zoom tile run begin', parent)
-
-    def end_run(self, parent):
-        self._log('low zoom tile run end', parent)
+    def invalid_job_coord(self, parent):
+        json_obj = dict(
+            type=log_level_name(LogLevel.ERROR),
+            category=log_category_name(LogCategory.META_TILE_LOW_ZOOM),
+            msg='could not find job coordinate',
+            parent=make_coord_dict(parent),
+            run_id=self.run_id,
+        )
+        json_str = json.dumps(json_obj)
+        self.logger.error(json_str)
