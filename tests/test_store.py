@@ -35,14 +35,13 @@ class TestTileDirectory(unittest.TestCase):
             ('tile4', (2, 6, 1), 'topojson'),
         ]
 
-        layer = 'all'
         for tile_data, (z, c, r), fmt in tiles_to_write:
             coords_obj = Coordinate(row=r, column=c, zoom=z)
             format_obj = format.OutputFormat(fmt, fmt, None, None, None, False)
-            tile_dir.write_tile(tile_data, coords_obj, format_obj, layer)
+            tile_dir.write_tile(tile_data, coords_obj, format_obj)
 
-            expected_filename = '{0}/{1}/{2}/{3}.{4}'.format(
-                layer, coords_obj.zoom, coords_obj.column, coords_obj.row, fmt)
+            expected_filename = '{0}/{1}/{2}.{3}'.format(
+                coords_obj.zoom, coords_obj.column, coords_obj.row, fmt)
             expected_path = os.path.join(self.dir_path, expected_filename)
             self.assertTrue(
                 os.path.isfile(expected_path),
@@ -60,28 +59,16 @@ class TestTileDirectory(unittest.TestCase):
 class TestStoreKey(unittest.TestCase):
 
     def test_example_coord(self):
-        from tilequeue.store import s3_tile_key
         from tilequeue.tile import deserialize_coord
         from tilequeue.format import json_format
+        from tilequeue.store import KeyFormatType
+        from tilequeue.store import S3TileKeyGenerator
         coord = deserialize_coord('8/72/105')
-        date_str = '20160121'
-        path = 'osm'
-        layer = 'all'
-        tile_key = s3_tile_key(date_str, path, layer, coord,
-                               json_format.extension)
-        self.assertEqual(tile_key, '20160121/b707d/osm/all/8/72/105.json')
-
-    def test_no_path(self):
-        from tilequeue.store import s3_tile_key
-        from tilequeue.tile import deserialize_coord
-        from tilequeue.format import json_format
-        coord = deserialize_coord('8/72/105')
-        date_str = '20160121'
-        path = ''
-        layer = 'all'
-        tile_key = s3_tile_key(date_str, path, layer, coord,
-                               json_format.extension)
-        self.assertEqual(tile_key, '20160121/cfc61/all/8/72/105.json')
+        prefix = '20160121'
+        tile_key_gen = S3TileKeyGenerator(
+            key_format_type=KeyFormatType.hash_prefix)
+        tile_key = tile_key_gen(prefix, coord, json_format.extension)
+        self.assertEqual(tile_key, 'b57e9/20160121/8/72/105.json')
 
 
 class WriteTileIfChangedTest(unittest.TestCase):
@@ -95,17 +82,16 @@ class WriteTileIfChangedTest(unittest.TestCase):
             dict(read_tile=self._read_tile, write_tile=self._write_tile)
         )
 
-    def _read_tile(self, coord, format, layer):
+    def _read_tile(self, coord, format):
         return self._in
 
-    def _write_tile(self, tile_data, coord, format, layer):
+    def _write_tile(self, tile_data, coord, format):
         self._out = tile_data
 
     def _call_fut(self, tile_data):
         from tilequeue.store import write_tile_if_changed
-        coord = format = layer = None
-        result = write_tile_if_changed(
-            self.store, tile_data, coord, format, layer)
+        coord = format = None
+        result = write_tile_if_changed(self.store, tile_data, coord, format)
         return result
 
     def test_no_data(self):
@@ -135,20 +121,22 @@ class S3Test(unittest.TestCase):
         return stub_s3_client()
 
     def test_tags(self):
+        from tilequeue.store import KeyFormatType
         from tilequeue.store import S3
+        from tilequeue.store import S3TileKeyGenerator
         s3_client = self._make_stub_s3_client()
         tags = None
-        store = S3(s3_client, 'bucket', 'prefix', 'path', False, 60, None,
-                   'public-read', tags)
-
+        tile_key_gen = S3TileKeyGenerator(
+            key_format_type=KeyFormatType.hash_prefix)
+        store = S3(s3_client, 'bucket', 'prefix', False, 60, None,
+                   'public-read', tags, tile_key_gen)
         tile_data = 'data'
         from tilequeue.tile import deserialize_coord
         coord = deserialize_coord('14/1/2')
         from tilequeue.format import mvt_format
-        store.write_tile(tile_data, coord, mvt_format, 'all')
+        store.write_tile(tile_data, coord, mvt_format)
         self.assertIsNone(store.s3_client.put_props.get('Tagging'))
-
         store.tags = dict(prefix='foo', runid='bar')
-        store.write_tile(tile_data, coord, mvt_format, 'all')
+        store.write_tile(tile_data, coord, mvt_format)
         self.assertEquals('prefix=foo&runid=bar',
                           store.s3_client.put_props.get('Tagging'))

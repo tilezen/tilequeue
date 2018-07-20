@@ -4,6 +4,7 @@ from tilequeue.query.postgres import make_db_data_fetcher
 from tilequeue.query.rawr import make_rawr_data_fetcher
 from tilequeue.query.split import make_split_data_fetcher
 from tilequeue.process import Source
+from tilequeue.store import make_s3_tile_key_generator
 
 
 __all__ = [
@@ -99,16 +100,18 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         assert region, 'Missing rawr source s3 region'
         prefix = rawr_source_s3_yaml.get('prefix')
         assert prefix, 'Missing rawr source s3 prefix'
-        suffix = rawr_source_s3_yaml.get('suffix')
-        assert suffix, 'Missing rawr source s3 suffix'
+        extension = rawr_source_s3_yaml.get('extension')
+        assert extension, 'Missing rawr source s3 extension'
         allow_missing_tiles = rawr_source_s3_yaml.get(
             'allow-missing-tiles', False)
 
         import boto3
         from tilequeue.rawr import RawrS3Source
         s3_client = boto3.client('s3', region_name=region)
-        storage = RawrS3Source(s3_client, bucket, prefix, suffix,
-                               table_sources, allow_missing_tiles)
+        tile_key_gen = make_s3_tile_key_generator(rawr_source_s3_yaml)
+        storage = RawrS3Source(
+            s3_client, bucket, prefix, extension, table_sources, tile_key_gen,
+            allow_missing_tiles)
 
     elif source_type == 'generate':
         from raw_tiles.source.conn import ConnectionContextManager
