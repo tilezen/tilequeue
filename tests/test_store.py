@@ -136,7 +136,7 @@ class S3Test(unittest.TestCase):
         from tilequeue.format import mvt_format
         store.write_tile(tile_data, coord, mvt_format)
         self.assertIsNone(store.s3_client.put_props.get('Tagging'))
-        store.tags = dict(prefix='foo', runid='bar')
+        store.tags = dict(prefix='foo', run_id='bar')
         store.write_tile(tile_data, coord, mvt_format)
-        self.assertEquals('prefix=foo&runid=bar',
+        self.assertEquals('prefix=foo&run_id=bar',
                           store.s3_client.put_props.get('Tagging'))

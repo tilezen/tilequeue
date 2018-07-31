@@ -29,9 +29,9 @@ class RawrS3SinkTest(unittest.TestCase):
         rawr_tile = self._make_stub_rawr_tile()
         sink(rawr_tile)
         self.assertIsNone(sink.s3_client.put_props.get('Tagging'))
-        sink.tags = dict(prefix='foo', runid='bar')
+        sink.tags = dict(prefix='foo', run_id='bar')
         sink(rawr_tile)
-        self.assertEquals('prefix=foo&runid=bar',
+        self.assertEquals('prefix=foo&run_id=bar',
                           sink.s3_client.put_props.get('Tagging'))
 
 

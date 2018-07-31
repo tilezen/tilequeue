@@ -60,7 +60,7 @@ store:
   # optional tags that get saved onto the s3 objects
   tags:
     prefix: 19851026
-    runid: 19851026-1
+    run_id: 19851026-1
 aws:
   # credentials are optional, and better to use an iam role assigned
   # to the instance if possible
@@ -366,7 +366,7 @@ rawr:
       # optional tags that get saved onto the s3 objects
       tags:
         prefix: 19851026
-        runid: 19851026-1
+        run_id: 19851026-1
   # alternatively, provide a "store" config - same as elsewhere, can be s3 or directory
   #store:
   #  type: directory
