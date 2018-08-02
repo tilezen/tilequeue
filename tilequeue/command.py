@@ -1801,8 +1801,7 @@ def _tilequeue_rawr_setup(cfg):
 
             s3_client = boto3.client('s3', region_name=sink_region)
             rawr_sink = RawrS3Sink(
-                s3_client, bucket, tile_key_gen, prefix, extension,
-                tile_key_gen, tags)
+                s3_client, bucket, prefix, extension, tile_key_gen, tags)
         elif sink_type == 'none':
             from tilequeue.rawr import RawrNullSink
             rawr_sink = RawrNullSink()
