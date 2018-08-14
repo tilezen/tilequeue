@@ -2031,9 +2031,11 @@ def tilequeue_batch_enqueue(cfg, args):
             job_opts['retryStrategy'] = dict(attempts=retry_attempts)
         container_overrides = {}
         if check_metatile_exists is not None:
-            container_overrides['environment'] = {
-                'check-metatile-exists': bool(check_metatile_exists),
-            },
+            val_str = str(bool(check_metatile_exists))
+            container_overrides['environment'] = dict(
+                name='TILEQUEUE__BATCH__CHECK-METATILE-EXISTS',
+                value=val_str
+            ),
         if memory:
             container_overrides['memory'] = memory
         if vcpus:
