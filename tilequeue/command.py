@@ -3,7 +3,6 @@ from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
-from itertools import islice
 from ModestMaps.Core import Coordinate
 from multiprocessing.pool import ThreadPool
 from random import randrange
@@ -20,7 +19,6 @@ from tilequeue.queue import make_sqs_queue
 from tilequeue.queue import make_visibility_manager
 from tilequeue.store import make_store
 from tilequeue.tile import coord_children_range
-from tilequeue.tile import coord_children_subrange
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
@@ -28,7 +26,6 @@ from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import metatile_zoom_from_str
-from tilequeue.tile import n_tiles_in_zoom
 from tilequeue.tile import seed_tiles
 from tilequeue.tile import serialize_coord
 from tilequeue.tile import tile_generator_for_multiple_bounds
@@ -1879,37 +1876,31 @@ def tilequeue_rawr_tile(cfg, args):
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
-    batch_yaml = cfg.yml.get('batch')
-    assert batch_yaml, 'Missing batch config'
-    queue_zoom = batch_yaml.get('queue-zoom')
-    assert queue_zoom, 'Missing batch queue-zoom config'
-    assert 0 <= parent.zoom <= queue_zoom
-
     logger = make_logger(cfg, 'rawr_tile')
     rawr_tile_logger = JsonRawrTileLogger(logger, run_id)
     rawr_tile_logger.lifecycle(parent, 'Rawr tile generation started')
 
-    coord = get_batch_job_coord(
-        get_batch_job_coords_high_zoom(parent, queue_zoom, group_by_zoom))
-    if coord is None:
-        rawr_tile_logger.invalid_job_coord(parent)
-        return
-    try:
-        coord_timing = {}
-        with time_block(coord_timing, 'total'):
-            rawr_tile_coord = convert_coord_object(coord)
-            with conn_ctx() as conn:
-                # commit transaction
-                with conn as conn:
-                    # cleanup cursor resources
-                    with conn.cursor() as cur:
-                        table_reader = TableReader(cur)
-                        rawr_gen_timing = rawr_gen(
-                            table_reader, rawr_tile_coord)
-                        coord_timing['gen'] = rawr_gen_timing
-        rawr_tile_logger.coord_done(parent, coord, coord_timing)
-    except Exception as e:
-        rawr_tile_logger.error(e, parent, coord)
+    parent_timing = {}
+    with time_block(parent_timing, 'total'):
+        job_coords = find_job_coords_for(parent, group_by_zoom)
+        for coord in job_coords:
+            try:
+                coord_timing = {}
+                with time_block(coord_timing, 'total'):
+                    rawr_tile_coord = convert_coord_object(coord)
+                    with conn_ctx() as conn:
+                        # commit transaction
+                        with conn as conn:
+                            # cleanup cursor resources
+                            with conn.cursor() as cur:
+                                table_reader = TableReader(cur)
+                                rawr_gen_timing = rawr_gen(
+                                    table_reader, rawr_tile_coord)
+                                coord_timing['gen'] = rawr_gen_timing
+                rawr_tile_logger.coord_done(parent, coord, coord_timing)
+            except Exception as e:
+                rawr_tile_logger.error(e, parent, coord)
+    rawr_tile_logger.parent_coord_done(parent, parent_timing)
 
     rawr_tile_logger.lifecycle(parent, 'Rawr tile generation finished')
 
@@ -2001,28 +1992,6 @@ def tilequeue_batch_enqueue(cfg, args):
 
     check_metatile_exists = batch_yaml.get('check-metatile-exists')
 
-    # determine the "job_size", which is the size of the batch array jobs when
-    # we enqueue tiles at the queue zoom. This is different for low zoom tiles
-    # and high zoom tiles.
-    # low zoom:  z7 coord represents all tiles at z7, z8, z9
-    # high zoom: z7 coord represents all tiles at z10 equivalent
-    # (the jobs at z10 themselves represent the whole pyramid for the job)
-    # NOTE: enqueueing rawr tiles uses the high zoom model
-    rawr_yaml = cfg.yml.get('rawr')
-    assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
-    group_by_zoom = rawr_yaml.get('group-zoom')
-    assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-    job_type = batch_yaml.get('job-type')
-    assert job_type, 'Missing batch job-type config'
-    assert job_type in ('low', 'high'), 'Invalid batch job-type config'
-    job_size = None
-    if job_type == 'low':
-        job_size = n_tiles_in_zoom(group_by_zoom - queue_zoom - 1)
-    elif job_type == 'high':
-        job_size = 4 ** (group_by_zoom - queue_zoom)
-    else:
-        assert 0, 'Unknown job_type: %s' % job_type
-
     retry_attempts = batch_yaml.get('retry-attempts')
     memory = batch_yaml.get('memory')
     vcpus = batch_yaml.get('vcpus')
@@ -2038,7 +2007,7 @@ def tilequeue_batch_enqueue(cfg, args):
         assert coord, 'Invalid coord: %s' % args.tile
         coords = [coord]
     elif args.pyramid:
-        coords = tile_generator_for_range(0, 0, 0, 0, 0, queue_zoom)
+        coords = tile_generator_for_range(0, 0, 0, 0, 0, 7)
     else:
         dim = 2 ** queue_zoom
         coords = tile_generator_for_range(
@@ -2060,8 +2029,6 @@ def tilequeue_batch_enqueue(cfg, args):
         )
         if retry_attempts is not None:
             job_opts['retryStrategy'] = dict(attempts=retry_attempts)
-        if coord.zoom == queue_zoom:
-            job_opts['arrayProperties'] = dict(size=job_size)
         container_overrides = {}
         if check_metatile_exists is not None:
             container_overrides['environment'] = {
@@ -2156,44 +2123,20 @@ def tilequeue_meta_tile(cfg, args):
     zip_format = lookup_format_by_extension('zip')
     assert zip_format
 
-    job_coord = get_batch_job_coord(
-        get_batch_job_coords_high_zoom(parent, queue_zoom, group_by_zoom))
-    if job_coord is None:
-        meta_tile_logger.invalid_job_coord(parent)
-        return
+    job_coords = find_job_coords_for(parent, group_by_zoom)
+    for job_coord in job_coords:
 
-    meta_tile_logger.begin_pyramid(parent, job_coord)
+        meta_tile_logger.begin_pyramid(parent, job_coord)
 
-    pyramid_coords = [job_coord]
-    pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
-    coord_data = [dict(coord=x) for x in pyramid_coords]
-
-    try:
-        fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
-    except Exception as e:
-        meta_tile_logger.pyramid_fetch_failed(e, parent, job_coord)
-        return
-
-    for fetch, coord_datum in fetched_coord_data:
-        coord = coord_datum['coord']
-        if check_metatile_exists:
-            existing_data = store.read_tile(coord, zip_format)
-            if existing_data is not None:
-                meta_tile_logger.metatile_already_exists(
-                    parent, job_coord, coord)
-                continue
-
-        processor = Processor(
-            coord, cfg.metatile_zoom, fetch, layer_data,
-            post_process_data, formats, cfg.buffer_cfg,
-            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+        # each coord here is the unit of work now
+        pyramid_coords = [job_coord]
+        pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
+        coord_data = [dict(coord=x) for x in pyramid_coords]
 
         try:
-            processor.fetch()
-
+            fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
         except Exception as e:
-            meta_tile_logger.tile_fetch_failed(
-                e, parent, job_coord, coord)
+            meta_tile_logger.pyramid_fetch_failed(e, parent, job_coord)
             continue
 
         for fetch, coord_datum in fetched_coord_data:
@@ -2204,51 +2147,42 @@ def tilequeue_meta_tile(cfg, args):
                     meta_tile_logger.metatile_already_exists(
                         parent, job_coord, coord)
                     continue
-        try:
-            formatted_tiles, _ = processor.process_tiles()
 
-        except Exception as e:
-            meta_tile_logger.tile_process_failed(
-                e, parent, job_coord, coord)
+            processor = Processor(
+                coord, cfg.metatile_zoom, fetch, layer_data,
+                post_process_data, formats, cfg.buffer_cfg,
+                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
 
-        try:
-            tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
-            for tile in tiles:
-                store.write_tile(
-                    tile['tile'], tile['coord'], tile['format'],
-                    tile['layer'])
-        except Exception as e:
-            meta_tile_logger.metatile_storage_failed(
-                e, parent, job_coord, coord)
-            continue
+            try:
+                processor.fetch()
 
-        meta_tile_logger.tile_processed(parent, job_coord, coord)
+            except Exception as e:
+                meta_tile_logger.tile_fetch_failed(
+                    e, parent, job_coord, coord)
+                continue
 
-    meta_tile_logger.end_pyramid(parent, job_coord)
+            try:
+                formatted_tiles, _ = processor.process_tiles()
 
+            except Exception as e:
+                meta_tile_logger.tile_process_failed(
+                    e, parent, job_coord, coord)
 
-def get_batch_job_coord(coords, job_idx=None):
-    if job_idx is None:
-        job_idx_str = os.getenv('AWS_BATCH_JOB_ARRAY_INDEX')
-        if job_idx_str is None:
-            return None
-        try:
-            job_idx = int(job_idx_str)
-        except ValueError:
-            return None
-    if job_idx < 0:
-        return None
-    return next(islice(coords, job_idx, None), None)
+            try:
+                tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+                for tile in tiles:
+                    store.write_tile(
+                        tile['tile'], tile['coord'], tile['format'])
+            except Exception as e:
+                meta_tile_logger.metatile_storage_failed(
+                    e, parent, job_coord, coord)
+                continue
 
+            meta_tile_logger.tile_processed(parent, job_coord, coord)
 
-def get_batch_job_coords_low_zoom(coord, queue_zoom, group_by_zoom):
-    # all tiles at z7, z8, z9
-    return coord_children_subrange(coord, queue_zoom, group_by_zoom-1)
+        meta_tile_logger.end_pyramid(parent, job_coord)
 
-
-def get_batch_job_coords_high_zoom(coord, queue_zoom, group_by_zoom):
-    # all tiles at z10 for z7 area
-    return coord_children_subrange(coord, group_by_zoom, group_by_zoom)
+    meta_tile_logger.end_run(parent)
 
 
 def tilequeue_meta_tile_low_zoom(cfg, args):
@@ -2306,63 +2240,67 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
     zip_format = lookup_format_by_extension('zip')
     assert zip_format
 
-    coord = parent
+    meta_low_zoom_logger.begin_run(parent)
+
+    coords = [parent]
     if parent.zoom == queue_zoom:
-        # at the queue zoom, an environment variable will tell us
-        # which coordinate this job represents
-        coord = get_batch_job_coord(
-            get_batch_job_coords_low_zoom(coord, queue_zoom, group_by_zoom))
-        meta_low_zoom_logger.invalid_job_coord(coord)
-        return
+        # we will be multiple meta tile coordinates in this run
+        coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
-    if check_metatile_exists:
-        existing_data = store.read_tile(coord, zip_format)
-        if existing_data is not None:
-            meta_low_zoom_logger.metatile_already_exists(parent, coord)
-            return
+    for coord in coords:
+        if check_metatile_exists:
+            existing_data = store.read_tile(coord, zip_format)
+            if existing_data is not None:
+                meta_low_zoom_logger.metatile_already_exists(parent, coord)
+                continue
 
-    coord_data = [dict(coord=coord)]
-    try:
-        fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
-    except Exception as e:
-        # the postgres db fetch doesn't perform the fetch at
-        # this step, which would make failures here very
-        # surprising
-        meta_low_zoom_logger.fetch_failed(e, parent, coord)
-        return
+        coord_data = [dict(coord=coord)]
+        try:
+            fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
+        except Exception as e:
+            # the postgres db fetch doesn't perform the fetch at
+            # this step, which would make failures here very
+            # surprising
+            meta_low_zoom_logger.fetch_failed(e, parent, coord)
+            continue
 
-    assert len(fetched_coord_data) == 1
-    fetch, coord_datum = fetched_coord_data[0]
-    coord = coord_datum['coord']
+        assert len(fetched_coord_data) == 1
+        fetch, coord_datum = fetched_coord_data[0]
+        coord = coord_datum['coord']
 
-    processor = Processor(
-        coord, cfg.metatile_zoom, fetch, layer_data,
-        post_process_data, formats, cfg.buffer_cfg,
-        output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+        processor = Processor(
+            coord, cfg.metatile_zoom, fetch, layer_data,
+            post_process_data, formats, cfg.buffer_cfg,
+            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
 
-    try:
-        processor.fetch()
+        try:
+            processor.fetch()
 
-    except Exception as e:
-        meta_low_zoom_logger.fetch_failed(e, parent, coord)
-        return
+        except Exception as e:
+            meta_low_zoom_logger.fetch_failed(
+                e, parent, coord)
+            continue
 
-    try:
-        formatted_tiles, _ = processor.process_tiles()
-    except Exception as e:
-        meta_low_zoom_logger.tile_process_failed(e, parent, coord)
-        return
+        try:
+            formatted_tiles, _ = processor.process_tiles()
 
-    try:
-        tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
-        for tile in tiles:
-            store.write_tile(tile['tile'], tile['coord'], tile['format'])
-    except Exception as e:
-        meta_low_zoom_logger.metatile_storage_failed(
-            e, parent, coord)
-        return
+        except Exception as e:
+            meta_low_zoom_logger.tile_process_failed(
+                e, parent, coord)
+            continue
 
-    meta_low_zoom_logger.tile_processed(parent, coord)
+        try:
+            tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            for tile in tiles:
+                store.write_tile(tile['tile'], tile['coord'], tile['format'])
+        except Exception as e:
+            meta_low_zoom_logger.metatile_storage_failed(
+                e, parent, coord)
+            continue
+
+        meta_low_zoom_logger.tile_processed(parent, coord)
+
+    meta_low_zoom_logger.end_run(parent)
 
 
 def tilequeue_main(argv_args=None):
