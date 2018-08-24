@@ -3,6 +3,11 @@ from tilequeue.format.geojson import encode_single_layer as json_encode_single_l
 from tilequeue.format.mvt import encode as mvt_encode
 from tilequeue.format.topojson import encode as topojson_encode
 from tilequeue.format.vtm import merge as vtm_encode
+try:
+    from coanacatl import encode as coanacatl_encode
+except ImportError:
+    def coanacatl_encode(feature_layers, bounds_merc, extents):
+        raise RuntimeError("Could not find coanacatl library.")
 
 
 class OutputFormat(object):
@@ -62,7 +67,7 @@ def format_topojson(fp, feature_layers, zoom, bounds_merc, bounds_lnglat,
     topojson_encode(fp, features_by_layer, bounds_lnglat, extents)
 
 
-def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat, extents):
+def _make_mvt_layers(feature_layers):
     mvt_layers = []
     for feature_layer in feature_layers:
         mvt_features = []
@@ -78,11 +83,23 @@ def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat, extents):
             features=mvt_features,
         )
         mvt_layers.append(mvt_layer)
+    return mvt_layers
+
+
+def format_mvt(fp, feature_layers, zoom, bounds_merc, bounds_lnglat, extents):
+    mvt_layers = _make_mvt_layers(feature_layers)
     mvt_encode(fp, mvt_layers, bounds_merc, extents)
 
 
 def format_vtm(fp, feature_layers, zoom, bounds_merc, bounds_lnglat):
     vtm_encode(fp, feature_layers)
+
+
+def format_coanacatl(fp, feature_layers, zoom, bounds_merc, bounds_lnglat,
+                     extents):
+    mvt_layers = _make_mvt_layers(feature_layers)
+    tile = coanacatl_encode(mvt_layers, bounds_merc, extents)
+    fp.write(tile)
 
 
 supports_shapely_geom = True
@@ -102,6 +119,10 @@ mvtb_format = OutputFormat('MVT Buffered', 'mvtb', 'application/x-protobuf',
 # package of tiles as a metatile zip
 zip_format = OutputFormat('ZIP Metatile', 'zip', 'application/zip',
                           None, None, None)
+# MVT, but written out by coanacatl/wagyu
+coanacatl_format = OutputFormat('MVT/Coanacatl', 'mvt',
+                                'application/x-protobuf', format_coanacatl,
+                                5, supports_shapely_geom)
 
 extension_to_format = dict(
     json=json_format,
@@ -109,7 +130,11 @@ extension_to_format = dict(
     vtm=vtm_format,
     mvt=mvt_format,
     mvtb=mvtb_format,
-    zip=zip_format
+    zip=zip_format,
+    # NOTE: this isn't actually the extension of the format; coanacatl writes
+    # files ending '.mvt'. this is just to give us something to call this
+    # format in config files.
+    coanacatl=coanacatl_format,
 )
 
 name_to_format = {
@@ -118,7 +143,8 @@ name_to_format = {
     'TopoJSON': topojson_format,
     'MVT': mvt_format,
     'MVT Buffered': mvtb_format,
-    'ZIP Metatile': zip_format
+    'ZIP Metatile': zip_format,
+    'MVT/Coanacatl': coanacatl_format,
 }
 
 

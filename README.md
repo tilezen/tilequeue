@@ -26,6 +26,10 @@ Then:
 
     python setup.py develop
 
+### Coanacatl
+
+Note that if you want to configure the `coanacatl` format (really an alternative MVT driver), you will need to install the [coanacatl](https://github.com/tilezen/coanacatl) library. This is totally optional and tilequeue will work fine with the regular `mvt` format, but can provide some robustness and speed improvements.
+
 ## Configuration
 
 See [`config.yaml.sample`](https://github.com/tilezen/tilequeue/blob/master/config.yaml.sample)
