@@ -2169,6 +2169,7 @@ def tilequeue_meta_tile(cfg, args):
             except Exception as e:
                 meta_tile_logger.tile_process_failed(
                     e, parent, job_coord, coord)
+                continue
 
             try:
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
