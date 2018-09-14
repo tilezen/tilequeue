@@ -9,7 +9,7 @@ v2.1.0
 * Add new source for `tilezen.org`. [PR #330](https://github.com/tilezen/tilequeue/pull/330) and [vector-datasource/1482](https://github.com/tilezen/vector-datasource/issues/1482).
 * Add admin areas. [PR #338](https://github.com/tilezen/tilequeue/pull/338) and [vector-datasource/1499](https://github.com/tilezen/vector-datasource/pull/1499).
 * Update S3 paths [PR #344](https://github.com/tilezen/tilequeue/pull/344).
-* Add metadata to RAWR tile S3 PUTs. [Issue #345](https://github.com/tilezen/tilequeue/issue/345).
+* Add metadata to RAWR tile S3 PUTs. [PR #345](https://github.com/tilezen/tilequeue/pull/345).
 * Add optional metadata to S3 puts [PR #343](https://github.com/tilezen/tilequeue/pull/343).
 * Rework so that multiple different nominal zooms can be processed at once.
 * Add pyramid option to enqueue all low zoom tiles
