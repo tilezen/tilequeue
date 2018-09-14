@@ -4,7 +4,7 @@ CHANGELOG
 v2.1.0
 ------
 
-* Add new coanacatl driver; like the existing MVT driver, but using coanacatl (which wraps wagyu and vtzero) instead of mapbox_vector_tile. [PR #350](https://github.com/tilezen/tilequeue/pull/350).
+* Add new coanacatl driver; like the existing MVT driver, but using coanacatl (which wraps wagyu and vtzero) instead of `mapbox_vector_tile`. [PR #350](https://github.com/tilezen/tilequeue/pull/350).
 * Switch `whosonfirst.mapzen.com` to `whosonfirst.org`. [PR #333](https://github.com/tilezen/tilequeue/pull/333) and [vector-datasource/1489](https://github.com/tilezen/vector-datasource/pull/1489).
 * Add new source for `tilezen.org` related to buffered land and marine boundaries. [PR #330](https://github.com/tilezen/tilequeue/pull/330) and [vector-datasource/1482](https://github.com/tilezen/vector-datasource/issues/1482).
 * Add admin areas. [PR #338](https://github.com/tilezen/tilequeue/pull/338) and [vector-datasource/1499](https://github.com/tilezen/vector-datasource/pull/1499).
@@ -17,9 +17,8 @@ v2.1.0
 * Support multiple RAWR tile coordinates to render.
 * Add a command to render a single RAWR tile.
 * Allow batch enqueue to read coords from file
-* Don't start tile key name with a slash. 
 * Log bucket and path on S3 errors.
-* Pass through configurable object ACL.
+* Add configuration option to set S3 object ACL on tiles.
 * Add `run_id` to batch tile runs
 * Allow values from the environment to override the config file, including region.
 * Allow DB hosts to be a list for PostgreSQL connections. Chooses a random host for simple load balance. [PR #335](https://github.com/tilezen/tilequeue/pull/335).
