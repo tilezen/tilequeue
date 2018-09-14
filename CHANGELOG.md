@@ -5,7 +5,7 @@ v2.1.0
 ------
 
 * Add new coanacatl driver; like the existing MVT driver, but using coanacatl instead of mapbox_vector_tile. [PR #350](https://github.com/tilezen/tilequeue/pull/350).
-* Switch `whosonfirst.mapzen.com` to `whosonfirst.org`. [PR #333](https://github.com/tilezen/tilequeue/pull/333).
+* Switch `whosonfirst.mapzen.com` to `whosonfirst.org`. [PR #333](https://github.com/tilezen/tilequeue/pull/333) and [vector-datasource/1489](https://github.com/tilezen/vector-datasource/pull/1489).
 * Add new source for `tilezen.org`. [PR #330](https://github.com/tilezen/tilequeue/pull/330).
 * Add admin areas. [PR #338](https://github.com/tilezen/tilequeue/pull/338).
 * Update S3 paths [Issue #344](https://github.com/tilezen/tilequeue/issue/344).
