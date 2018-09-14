@@ -1,6 +1,33 @@
 CHANGELOG
 =========
 
+v2.1.0
+------
+
+* Add new coanacatl driver; like the existing MVT driver, but using coanacatl (which wraps wagyu and vtzero) instead of `mapbox_vector_tile`. [PR #350](https://github.com/tilezen/tilequeue/pull/350).
+* Switch `whosonfirst.mapzen.com` to `whosonfirst.org`. [PR #333](https://github.com/tilezen/tilequeue/pull/333) and [vector-datasource/1489](https://github.com/tilezen/vector-datasource/pull/1489).
+* Add new source for `tilezen.org` related to buffered land and marine boundaries. [PR #330](https://github.com/tilezen/tilequeue/pull/330) and [vector-datasource/1482](https://github.com/tilezen/vector-datasource/issues/1482).
+* Add admin areas. [PR #338](https://github.com/tilezen/tilequeue/pull/338) and [vector-datasource/1499](https://github.com/tilezen/vector-datasource/pull/1499).
+* Update S3 paths [PR #344](https://github.com/tilezen/tilequeue/pull/344).
+* Add metadata to RAWR tile S3 PUTs. [PR #345](https://github.com/tilezen/tilequeue/pull/345).
+* Add optional metadata to S3 puts [PR #343](https://github.com/tilezen/tilequeue/pull/343).
+* Rework so that multiple different nominal zooms can be processed at once.
+* Add **pyramid** option to enqueue all low zoom tiles
+* Add **meta-tile-low-zoom** command
+* Support multiple RAWR tile coordinates to render.
+* Add a command to render a single RAWR tile.
+* Allow batch enqueue to read coords from file
+* Log bucket and path on S3 errors.
+* Add configuration option to set S3 object ACL on tiles.
+* Add `run_id` to batch tile runs
+* Allow values from the environment to override the config file, including region.
+* Allow DB hosts to be a list for PostgreSQL connections. Chooses a random host for simple load balance. [PR #335](https://github.com/tilezen/tilequeue/pull/335).
+* Rewrite store to use boto3 rather than boto2. This seems to solve some issues around accessing S3 buckets in different regions. [PR #334](https://github.com/tilezen/tilequeue/pull/334).
+* Fix crash on using the single queue type. [PR #327](https://github.com/tilezen/tilequeue/pull/327), thanks [@akasch](https://github.com/akasch)!
+* Add missing 'continue' statement after logging exception. [PR #349](https://github.com/tilezen/tilequeue/pull/349).
+* Fix incorrect method call on StringIO in store. [PR #337](https://github.com/tilezen/tilequeue/pull/337).
+* Pass `check-metatile-exists` value on batch enqueue. [PR #346](https://github.com/tilezen/tilequeue/pull/346).
+
 v2.0.7
 ------
 
