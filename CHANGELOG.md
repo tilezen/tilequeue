@@ -1,6 +1,34 @@
 CHANGELOG
 =========
 
+v2.1.0
+------
+
+* Add new coanacatl driver; like the existing MVT driver, but using coanacatl instead of mapbox_vector_tile. [PR #350](https://github.com/tilezen/tilequeue/pull/350).
+* Add missing 'continue' statement after logging exception. [PR #349](https://github.com/tilezen/tilequeue/pull/349).
+* Update s3 paths [Issue #344](https://github.com/tilezen/tilequeue/issue/344).
+* Add metadata to RAWR tile S3 PUTs. [Issue #345](https://github.com/tilezen/tilequeue/issue/345).
+* Pass check-metatile-exists value on batch enqueue. [Issue #346](https://github.com/tilezen/tilequeue/issue/346).
+* Add optional metadata to s3 puts [Issue #343](https://github.com/tilezen/tilequeue/issue/343).
+* Rework so that multiple different nominal zooms can be processed at once.
+* Add admin areas. [PR #338](https://github.com/tilezen/tilequeue/pull/338).
+* Fix incorrect method call on StringIO in store. [PR #337](https://github.com/tilezen/tilequeue/pull/337).
+* Allow DB hosts to be a list for PostgreSQL connections. Chooses a random host for simple load balance. [PR #335](https://github.com/tilezen/tilequeue/pull/335).
+* Don't start tile key name with a slash. Pass through configurable object ACL. Log bucket and path on S3 errors.
+* Use region from environment, if available.
+* Rewrite store to use boto3 rather than boto2. This seems to solve some issues around accessing S3 buckets in different regions. [PR #334](https://github.com/tilezen/tilequeue/pull/334).
+* Switch `whosonfirst.mapzen.com` to `whosonfirst.org`. [PR #333](https://github.com/tilezen/tilequeue/pull/333).
+* Add pyramid option to enqueue all low zoom tiles
+* Add meta-tile-low-zoom command
+* Add `run_id` to batch tile runs
+* Allow batch enqueue to read coords from file
+* Allow values from the environment to override the config file.
+* Support multiple RAWR tile coordinates to render.
+* Add a command to render a single RAWR tile.
+* Add new source for `tilezen.org`. [PR #330](https://github.com/tilezen/tilequeue/pull/330).
+* Fix crash on using the single queue type. [PR #327](https://github.com/tilezen/tilequeue/pull/327).
+
+
 v2.0.7
 ------
 
