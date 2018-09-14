@@ -12,8 +12,8 @@ v2.1.0
 * Add metadata to RAWR tile S3 PUTs. [PR #345](https://github.com/tilezen/tilequeue/pull/345).
 * Add optional metadata to S3 puts [PR #343](https://github.com/tilezen/tilequeue/pull/343).
 * Rework so that multiple different nominal zooms can be processed at once.
-* Add pyramid option to enqueue all low zoom tiles
-* Add meta-tile-low-zoom command
+* Add **pyramid** option to enqueue all low zoom tiles
+* Add **meta-tile-low-zoom** command
 * Support multiple RAWR tile coordinates to render.
 * Add a command to render a single RAWR tile.
 * Allow batch enqueue to read coords from file
