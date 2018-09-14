@@ -24,7 +24,7 @@ v2.1.0
 * Allow values from the environment to override the config file, including region.
 * Allow DB hosts to be a list for PostgreSQL connections. Chooses a random host for simple load balance. [PR #335](https://github.com/tilezen/tilequeue/pull/335).
 * Rewrite store to use boto3 rather than boto2. This seems to solve some issues around accessing S3 buckets in different regions. [PR #334](https://github.com/tilezen/tilequeue/pull/334).
-* Fix crash on using the single queue type. [PR #327](https://github.com/tilezen/tilequeue/pull/327).
+* Fix crash on using the single queue type. [PR #327](https://github.com/tilezen/tilequeue/pull/327), thanks @akasch!
 * Add missing 'continue' statement after logging exception. [PR #349](https://github.com/tilezen/tilequeue/pull/349).
 * Fix incorrect method call on StringIO in store. [PR #337](https://github.com/tilezen/tilequeue/pull/337).
 * Pass `check-metatile-exists` value on batch enqueue. [Issue #346](https://github.com/tilezen/tilequeue/issue/346).
