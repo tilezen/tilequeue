@@ -27,7 +27,7 @@ v2.1.0
 * Fix crash on using the single queue type. [PR #327](https://github.com/tilezen/tilequeue/pull/327), thanks [@akasch](https://github.com/akasch)!
 * Add missing 'continue' statement after logging exception. [PR #349](https://github.com/tilezen/tilequeue/pull/349).
 * Fix incorrect method call on StringIO in store. [PR #337](https://github.com/tilezen/tilequeue/pull/337).
-* Pass `check-metatile-exists` value on batch enqueue. [Issue #346](https://github.com/tilezen/tilequeue/issue/346).
+* Pass `check-metatile-exists` value on batch enqueue. [PR #346](https://github.com/tilezen/tilequeue/pull/346).
 
 v2.0.7
 ------
