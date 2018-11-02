@@ -115,12 +115,32 @@ def jinja_filter_bbox(bounds, srid=3857):
 
 
 def jinja_filter_bbox_overlaps(bounds, geometry_col_name, srid=3857):
+    """
+    Check whether the boundary of the geometry intersects with the bounding box.
+
+    Note that the usual meaning of "overlaps" in GIS terminology is that the
+    boundaries of the box and polygon intersect, but not the interiors. This
+    means that if the box or polygon is completely within the other, then
+    st_overlaps will be false.
+
+    However, that's not what we want. This is used for boundary testing, and
+    while we don't want to pull out a whole country boundary if the bounding box
+    is fully within it, we _do_ want to if the country boundary is within the
+    bounding box.
+
+    Therefore, this test has an extra "or st_contains" test to also pull in any
+    boundaries which are completely within the bounding box.
+    """
+
     min_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[0], bounds[1])
     max_point = 'ST_MakePoint(%.12f, %.12f)' % (bounds[2], bounds[3])
     bbox_no_srid = 'ST_MakeBox2D(%s, %s)' % (min_point, max_point)
     bbox = 'ST_SetSrid(%s, %d)' % (bbox_no_srid, srid)
     bbox_filter = \
-        '((%(col)s && %(bbox)s) AND st_overlaps(%(col)s, %(bbox)s))' \
+        '((%(col)s && %(bbox)s) AND (' \
+        '  st_overlaps(%(col)s, %(bbox)s) OR' \
+        '  st_contains(%(bbox)s, %(col)s)' \
+        '))' \
         % dict(col=geometry_col_name, bbox=bbox)
     return bbox_filter
 
