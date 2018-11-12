@@ -140,3 +140,130 @@ class S3Test(unittest.TestCase):
         store.write_tile(tile_data, coord, mvt_format)
         self.assertEquals('prefix=foo&run_id=bar',
                           store.s3_client.put_props.get('Tagging'))
+
+
+class _LogicalLog(object):
+    """
+    A logical time description of when things happened. Used for recording that
+    one write to S3 happened before or after another.
+    """
+
+    def __init__(self):
+        self.time = 0
+        self.items = []
+
+    def __call__(self, *args):
+        self.items.append((self.time,) + args)
+        self.time += 1
+
+
+class _LoggingStore(object):
+    """
+    A mock store which doesn't store tiles, only logs calls to a logical log.
+    """
+
+    def __init__(self, name, log):
+        self.name = name
+        self.log = log
+
+    def write_tile(self, tile_data, coord, format):
+        self.log(self.name, 'write_tile', tile_data, coord, format)
+
+    def read_tile(self, coord, format):
+        self.log(self.name, 'read_tile', coord, format)
+        return ""
+
+    def delete_tiles(self, coords, format):
+        self.log(self.name, 'delete_tiles', coords, format)
+        return 0
+
+    def list_tiles(self, format):
+        self.log(self.name, 'list_tiles', format)
+        return iter(())
+
+
+class MultiStoreTest(unittest.TestCase):
+
+    def test_multi_write(self):
+        from tilequeue.format import json_format
+        from tilequeue.store import MultiStore
+        from ModestMaps.Core import Coordinate
+
+        coord = Coordinate(zoom=0, column=0, row=0)
+
+        log = _LogicalLog()
+        s0 = _LoggingStore("s0", log)
+        s1 = _LoggingStore("s1", log)
+        m = MultiStore([s0, s1])
+
+        m.write_tile("foo", coord, json_format)
+
+        # multi store should write to both stores.
+        self.assertEqual(
+            log.items,
+            [
+                (0, "s0", "write_tile", "foo", coord, json_format),
+                (1, "s1", "write_tile", "foo", coord, json_format),
+            ])
+
+    def test_multi_read(self):
+        from tilequeue.format import json_format
+        from tilequeue.store import MultiStore
+        from ModestMaps.Core import Coordinate
+
+        coord = Coordinate(zoom=0, column=0, row=0)
+
+        log = _LogicalLog()
+        s0 = _LoggingStore("s0", log)
+        s1 = _LoggingStore("s1", log)
+        m = MultiStore([s0, s1])
+
+        m.read_tile(coord, json_format)
+
+        # multi store should only read from final store.
+        self.assertEqual(
+            log.items,
+            [
+                (0, "s1", "read_tile", coord, json_format),
+            ])
+
+    def test_multi_cfg_list(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a list results in multiple calls to construct a store.
+        _make_s3_store(['foo', 'bar', 'baz'], _construct)
+
+        self.assertEqual(calls, ['foo', 'bar', 'baz'])
+
+    def test_multi_cfg_singleton(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a single-item list results in a single call to construct
+        # a store.
+        _make_s3_store(['foo'], _construct)
+
+        self.assertEqual(calls, ['foo'])
+
+    def test_multi_cfg_string(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a single string results in a single call to construct,
+        # and isn't iterated over as single characters.
+        _make_s3_store('foo', _construct)
+
+        self.assertEqual(calls, ['foo'])
