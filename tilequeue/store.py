@@ -414,14 +414,72 @@ class Memory(object):
         return [self.data] if self.data else []
 
 
+class MultiStore(object):
+    """
+    MultiStore writes to multiple stores for redundancy.
+
+    The stores are written in order from first to last, and checked in reverse
+    order. Assuming that previously-written files don't disappear (which might
+    not be true, but hopefully is at least very rare) then this should have the
+    desired behaviour under crash conditions, either:
+
+     1. The crash happened before the last tile was written, in which case some
+        of the preceding stores may not have the tile and it should be
+        re-rendered and stored again. Or,
+     2. The crash happened after the last tile was written, in which case all
+        preceding tiles should be present too.
+
+    There's an optimisation we could make later, by checking the first tile if
+    the last doesn't exist and copying it to the other stores if it does.
+    """
+
+    def __init__(self, stores):
+        assert len(stores) > 0
+        self.stores = stores
+
+    def write_tile(self, tile_data, coord, format):
+        for store in self.stores:
+            store.write_tile(tile_data, coord, format)
+
+    def read_tile(self, coord, format):
+        return self.stores[-1].read_tile(coord, format)
+
+    def delete_tiles(self, coords, format):
+        num = 0
+        for store in self.stores:
+            num = store.delete_tiles(coords, format)
+
+        # only returns the last-seen value, but this should normally be the
+        # same as all the other values.
+        return num
+
+    def list_tiles(self, format):
+        return self.stores[-1].list_tiles(self, format)
+
+
 def make_s3_store(bucket_name, tile_key_gen,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
     s3 = boto3.client('s3')
-    s3_store = S3(
-        s3, bucket_name, date_prefix, reduced_redundancy,
-        delete_retry_interval, logger, object_acl, tags, tile_key_gen)
+
+    # if buckets are given as a list, then write to each of them and read from
+    # the last one. this behaviour is captures in MultiStore.
+    if isinstance(bucket_name, list):
+        s3_stores = []
+        for bucket in bucket_name:
+            s3_store = S3(
+                s3, bucket, date_prefix, reduced_redundancy,
+                delete_retry_interval, logger, object_acl, tags, tile_key_gen)
+            s3_stores.append(s3_store)
+
+        s3_store = MultiStore(s3_stores)
+
+    else:
+        s3_store = S3(
+            s3, bucket_name, date_prefix, reduced_redundancy,
+            delete_retry_interval, logger, object_acl, tags, tile_key_gen)
+
     return s3_store
 
 
