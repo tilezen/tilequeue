@@ -226,3 +226,44 @@ class MultiStoreTest(unittest.TestCase):
             [
                 (0, "s1", "read_tile", coord, json_format),
             ])
+
+    def test_multi_cfg_list(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a list results in multiple calls to construct a store.
+        _make_s3_store(['foo', 'bar', 'baz'], _construct)
+
+        self.assertEqual(calls, ['foo', 'bar', 'baz'])
+
+    def test_multi_cfg_singleton(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a single-item list results in a single call to construct
+        # a store.
+        _make_s3_store(['foo'], _construct)
+
+        self.assertEqual(calls, ['foo'])
+
+    def test_multi_cfg_string(self):
+        from tilequeue.store import _make_s3_store
+
+        calls = []
+
+        def _construct(name):
+            calls.append(name)
+
+        # check that a single string results in a single call to construct,
+        # and isn't iterated over as single characters.
+        _make_s3_store('foo', _construct)
+
+        self.assertEqual(calls, ['foo'])

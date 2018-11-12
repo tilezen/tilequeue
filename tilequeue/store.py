@@ -457,30 +457,37 @@ class MultiStore(object):
         return self.stores[-1].list_tiles(self, format)
 
 
-def make_s3_store(bucket_name, tile_key_gen,
-                  reduced_redundancy=False, date_prefix='',
-                  delete_retry_interval=60, logger=None,
-                  object_acl='public-read', tags=None):
-    s3 = boto3.client('s3')
-
+def _make_s3_store(cfg_name, constructor):
     # if buckets are given as a list, then write to each of them and read from
     # the last one. this behaviour is captures in MultiStore.
-    if isinstance(bucket_name, list):
+    if isinstance(cfg_name, list):
         s3_stores = []
-        for bucket in bucket_name:
-            s3_store = S3(
-                s3, bucket, date_prefix, reduced_redundancy,
-                delete_retry_interval, logger, object_acl, tags, tile_key_gen)
+        for bucket in cfg_name:
+            s3_store = constructor(bucket)
             s3_stores.append(s3_store)
 
         s3_store = MultiStore(s3_stores)
 
     else:
-        s3_store = S3(
+        s3_store = constructor(cfg_name)
+
+    return s3_store
+
+
+def make_s3_store(cfg_name, tile_key_gen,
+                  reduced_redundancy=False, date_prefix='',
+                  delete_retry_interval=60, logger=None,
+                  object_acl='public-read', tags=None):
+    s3 = boto3.client('s3')
+
+    # extract out the construction of the bucket, so that it can be abstracted
+    # from the the logic of interpreting the configuration file.
+    def _construct(bucket_name):
+        return S3(
             s3, bucket_name, date_prefix, reduced_redundancy,
             delete_retry_interval, logger, object_acl, tags, tile_key_gen)
 
-    return s3_store
+    return _make_s3_store(cfg_name, _construct)
 
 
 def tiles_are_equal(tile_data_1, tile_data_2, fmt):
