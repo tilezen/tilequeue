@@ -459,7 +459,7 @@ class MultiStore(object):
 
 def _make_s3_store(cfg_name, constructor):
     # if buckets are given as a list, then write to each of them and read from
-    # the last one. this behaviour is captures in MultiStore.
+    # the last one. this behaviour is captured in MultiStore.
     if isinstance(cfg_name, list):
         s3_stores = []
         for bucket in cfg_name:
