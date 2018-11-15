@@ -646,6 +646,9 @@ def calculate_sizes_by_zoom(coord, metatile_zoom, cfg_tile_sizes, max_zoom):
 
     For example, with 1x1 metatiles, the tile size is always 256px, and the
     function will return {coord.zoom: [256]}
+
+    Note that max_zoom should be the maximum *coordinate* zoom, not nominal
+    zoom.
     """
 
     from tilequeue.tile import metatile_zoom_from_size
@@ -659,7 +662,7 @@ def calculate_sizes_by_zoom(coord, metatile_zoom, cfg_tile_sizes, max_zoom):
         assert tile_size <= 256 * (1 << metatile_zoom)
         assert _is_power_of_2(tile_size)
 
-    if nominal_zoom >= max_zoom:
+    if coord.zoom >= max_zoom:
         # all the tile_sizes down to 256 at the nominal zoom.
         tile_sizes = []
         tile_sizes.extend(cfg_tile_sizes)
@@ -695,6 +698,9 @@ def calculate_cut_coords_by_zoom(
     """
     Returns a map of nominal zoom to the list of cut coordinates at that
     nominal zoom.
+
+    Note that max_zoom should be the maximum coordinate zoom, not nominal
+    zoom.
     """
 
     tile_sizes_by_zoom = calculate_sizes_by_zoom(
