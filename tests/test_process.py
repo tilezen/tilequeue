@@ -437,7 +437,8 @@ class TestCalculateCutCoords(unittest.TestCase):
         max_zoom = 16
         metatile_zoom = 2
         cut_coords = calculate_cut_coords_by_zoom(
-            _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512], max_zoom)
+            _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512],
+            max_zoom - metatile_zoom)
         self.assertEqual([max_zoom], cut_coords.keys())
         self.assertEqual(set([
             # some 512 tiles
@@ -475,7 +476,7 @@ class TestCalculateCutCoords(unittest.TestCase):
         # & 1.
         metatile_zoom = 3
         cut_coords = calculate_cut_coords_by_zoom(
-            _c(0, 0, 0), metatile_zoom, [512], 16)
+            _c(0, 0, 0), metatile_zoom, [512], 16 - metatile_zoom)
         self.assertEqual([1, 2, 3], cut_coords.keys())
 
         # we get 1x1 nominal zoom 1 tile
