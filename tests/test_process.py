@@ -217,7 +217,7 @@ class TestCalculateCutZooms(unittest.TestCase):
             coord = Coordinate(zoom=max_zoom - metatile_zoom, row=0, column=0)
 
             return calculate_sizes_by_zoom(
-                coord, metatile_zoom, tile_sizes, max_zoom)
+                coord, metatile_zoom, tile_sizes, max_zoom - metatile_zoom)
 
         # sweep max zoom to check the output is the same nominal max zoom.
         self.assertEqual({16: [256]}, _calc(8, [256], 16))
@@ -232,14 +232,34 @@ class TestCalculateCutZooms(unittest.TestCase):
         # have 1024 tiles at mid zooms.
         self.assertEqual({16: [1024, 512, 256]}, _calc(8, [1024], 16))
 
+    def test_only_overzoom_at_max_zoom(self):
+        from tilequeue.process import calculate_sizes_by_zoom
+
+        # constants
+        metatile_zoom = 3
+        cfg_tile_sizes = [512]
+        max_zoom = 13
+
+        # zoom 13 (nominal 16) tile should contain everything
+        sizes = calculate_sizes_by_zoom(
+            Coordinate(zoom=13, column=0, row=0),
+            metatile_zoom, cfg_tile_sizes, max_zoom)
+        self.assertEquals(sizes, {16: [512, 256]})
+
+        # zoom 12 (nominal 15) should be 512 only
+        sizes = calculate_sizes_by_zoom(
+            Coordinate(zoom=12, column=0, row=0),
+            metatile_zoom, cfg_tile_sizes, max_zoom)
+        self.assertEquals(sizes, {15: [512]})
+
     def test_mid_zoom(self):
         from tilequeue.process import calculate_sizes_by_zoom
         from tilequeue.tile import metatile_zoom_from_size
 
-        max_zoom = 16
         tile_sizes = [512]
         metatile_size = 8
         metatile_zoom = metatile_zoom_from_size(metatile_size)
+        max_zoom = 16 - metatile_zoom
 
         for zoom in range(1, max_zoom - metatile_zoom):
             coord = Coordinate(zoom=zoom, row=0, column=0)
@@ -254,8 +274,8 @@ class TestCalculateCutZooms(unittest.TestCase):
 
         def _calc(metatile_size, tile_sizes):
             coord = Coordinate(zoom=0, row=0, column=0)
-            max_zoom = 16
             metatile_zoom = metatile_zoom_from_size(metatile_size)
+            max_zoom = 16 - metatile_zoom
 
             return calculate_sizes_by_zoom(
                 coord, metatile_zoom, tile_sizes, max_zoom)
@@ -417,7 +437,8 @@ class TestCalculateCutCoords(unittest.TestCase):
         max_zoom = 16
         metatile_zoom = 2
         cut_coords = calculate_cut_coords_by_zoom(
-            _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512], max_zoom)
+            _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512],
+            max_zoom - metatile_zoom)
         self.assertEqual([max_zoom], cut_coords.keys())
         self.assertEqual(set([
             # some 512 tiles
@@ -455,7 +476,7 @@ class TestCalculateCutCoords(unittest.TestCase):
         # & 1.
         metatile_zoom = 3
         cut_coords = calculate_cut_coords_by_zoom(
-            _c(0, 0, 0), metatile_zoom, [512], 16)
+            _c(0, 0, 0), metatile_zoom, [512], 16 - metatile_zoom)
         self.assertEqual([1, 2, 3], cut_coords.keys())
 
         # we get 1x1 nominal zoom 1 tile
