@@ -166,6 +166,10 @@ class DataFetcher(object):
             # whether to clip to a padded box
             has_water_layer = False
 
+            # tracking which layers claim this feature, as this is important to
+            # figure out which layer will be assigned the name.
+            claims_feature_at_some_zoom = set()
+
             for layer_name, info in self.layers.items():
                 if not info.allows_shape_type(shape):
                     continue
@@ -185,6 +189,10 @@ class DataFetcher(object):
                 # reject features which don't match in this layer
                 if min_zoom is None:
                     continue
+
+                # make a note that this feature is claimed at some zoom by this
+                # layer, which is important for name processing.
+                claims_feature_at_some_zoom.add(layer_name)
 
                 # reject anything which isn't in the current zoom range
                 # note that this is (zoom+1) because things with a min_zoom of
@@ -242,9 +250,15 @@ class DataFetcher(object):
                     names[k] = props[k]
                 if names:
                     for layer_name in ('pois', 'landuse', 'buildings'):
-                        props_name = '__%s_properties__' % layer_name
-                        if props_name in read_row:
-                            read_row[props_name].update(names)
+                        if layer_name in claims_feature_at_some_zoom:
+                            props_name = '__%s_properties__' % layer_name
+                            if props_name in read_row:
+                                read_row[props_name].update(names)
+                            # break regardless of whether or not we managed to
+                            # update the row - sometimes a feature is claimed
+                            # in one layer at a min_zoom higher than another
+                            # layer's min_zoom. so the feature is visible
+                            # before it gets labelled.
                             break
 
                 read_row['__id__'] = fid
