@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.2.1
+------
+
+* Always be bumping the VERSION file, too
+
 v2.2.0
 ------
 
