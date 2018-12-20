@@ -1,6 +1,17 @@
 CHANGELOG
 =========
 
+v2.2.0
+------
+
+* Fix definition of overlaps for boundaries. [PR #354](https://github.com/tilezen/tilequeue/pull/354), related to [vector-datasource/1116](https://github.com/tilezen/vector-datasource/pull/1116)
+* Use raw strings for patterns with regular expression rather than Python escape sequences. [PR #354](https://github.com/tilezen/tilequeue/pull/354).
+* Bump requests version to 2.20.1 because CVE-2018-18074. [PR #355](https://github.com/tilezen/tilequeue/pull/355).
+* Add support to write to multiple S3 buckets. [Issue #353](https://github.com/tilezen/tilequeue/issues/353).
+* Only generate "overzoomed" tiles at max zoom (related to metatile size). [PR #357](https://github.com/tilezen/tilequeue/pull/357)
+* Pass the simplification tolerance from config through to layer datum. [PR #359](https://github.com/tilezen/tilequeue/pull/359), related to [vector-datasource/1718](https://github.com/tilezen/vector-datasource/pull/1718).
+* Fix fixture name allocation logic to match the PostgreSQL query logic. [PR #360](https://github.com/tilezen/tilequeue/pull/360), related to [vector-datasource/1727](https://github.com/tilezen/vector-datasource/pull/1727).
+
 v2.1.0
 ------
 
