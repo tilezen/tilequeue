@@ -736,8 +736,7 @@ class TestTileFootprint(unittest.TestCase):
 
 class TestBoundaries(RawrTestCase):
 
-    def test_linestrings_dropped(self):
-        from shapely.geometry import LineString
+    def _fetch_data(self, shape_fn, source_table):
         from tilequeue.query.common import LayerInfo
         from tilequeue.query.rawr import make_rawr_data_fetcher
         from tilequeue.tile import coord_to_mercator_bounds
@@ -757,10 +756,7 @@ class TestBoundaries(RawrTestCase):
         top_tile = tile.zoomTo(top_zoom).container()
 
         bounds = coord_to_mercator_bounds(tile)
-        shape = LineString([
-            [bounds[0], bounds[1]],
-            [bounds[2], bounds[3]],
-        ])
+        shape = shape_fn(bounds)
 
         props = {
             'name': 'Foo',
@@ -770,7 +766,7 @@ class TestBoundaries(RawrTestCase):
 
         source = 'test'
         tables = TestGetTable({
-            'planet_osm_line': [
+            source_table: [
                 (1, shape.wkb, props),
             ],
         }, source)
@@ -785,61 +781,38 @@ class TestBoundaries(RawrTestCase):
         for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
 
+        return read_rows
+
+    def test_linestrings_dropped(self):
+        # test that linestrings in the RAWR tile don't make it into the tile.
+        from shapely.geometry import LineString
+
+        def _tile_diagonal(bounds):
+            return LineString([
+                [bounds[0], bounds[1]],
+                [bounds[2], bounds[3]],
+            ])
+
+        read_rows = self._fetch_data(_tile_diagonal, 'planet_osm_line')
         self.assertEqual(read_rows, [])
 
     def test_boundaries_from_polygons(self):
+        # check that a polygon in the RAWR tile contributes its oriented
+        # (anti-clockwise) boundary to the tile data.
         from shapely.geometry import Polygon
-        from tilequeue.query.common import LayerInfo
-        from tilequeue.query.rawr import make_rawr_data_fetcher
-        from tilequeue.tile import coord_to_mercator_bounds
-        from ModestMaps.Core import Coordinate
 
-        top_zoom = 10
-        max_zoom = top_zoom + 6
+        def _tile_triangle(bounds):
+            # note: this triangle polygon is the wrong way around (clockwise,
+            # rather than anti-clockwise). this is deliberate, and the code
+            # should deal with it.
+            return Polygon([
+                [bounds[0], bounds[1]],
+                [bounds[2], bounds[1]],
+                [bounds[0], bounds[3]],
+                [bounds[0], bounds[1]],
+            ])
 
-        def min_zoom_fn(shape, props, fid, meta):
-            return top_zoom
-
-        def props_fn(shape, props, fid, meta):
-            return {'kind': 'country'}
-
-        z, x, y = (max_zoom, 0, 0)
-        tile = Coordinate(zoom=z, column=x, row=y)
-        top_tile = tile.zoomTo(top_zoom).container()
-
-        bounds = coord_to_mercator_bounds(tile)
-        # note: this triangle polygon is the wrong way around (clockwise,
-        # rather than anti-clockwise). this is deliberate, and the code should
-        # deal with it.
-        shape = Polygon([
-            [bounds[0], bounds[1]],
-            [bounds[2], bounds[1]],
-            [bounds[0], bounds[3]],
-            [bounds[0], bounds[1]],
-        ])
-
-        props = {
-            'name': 'Foo',
-            'admin_level': '2',
-            'boundary': 'administrative',
-        }
-
-        source = 'test'
-        tables = TestGetTable({
-            'planet_osm_polygon': [
-                (1, shape.wkb, props),
-            ],
-        }, source)
-
-        layers = {
-            'boundaries': LayerInfo(min_zoom_fn, props_fn),
-        }
-        storage = ConstantStorage(tables)
-        fetch = make_rawr_data_fetcher(
-            top_zoom, max_zoom, storage, layers, [dict(type="osm")])
-
-        for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
-            read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
+        read_rows = self._fetch_data(_tile_triangle, 'planet_osm_polygon')
 
         self.assertEqual(len(read_rows), 1)
         props = read_rows[0]['__boundaries_properties__']
