@@ -1,5 +1,6 @@
 from collections import namedtuple, defaultdict
 from shapely.geometry import box
+from shapely.geometry.polygon import orient
 from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
 from tilequeue.query.common import is_station_or_stop
@@ -575,6 +576,42 @@ def simple_index(layers, tables, tile_pyramid, index_cfg):
     return index
 
 
+def _explode_lines(shape):
+    """
+    Return a list of LineStrings which make up the shape.
+    """
+
+    if shape.geom_type == 'LineString':
+        return [shape]
+
+    elif shape.geom_type == 'MultiLineString':
+        return shape.geoms
+
+    elif shape.geom_type == 'GeometryCollection':
+        lines = []
+        for geom in shape.geoms:
+            lines.extend(_explode_lines(geom))
+        return lines
+
+    return []
+
+
+def _lines_only(shape):
+    """
+    Extract the lines (LineString, MultiLineString) from any geometry. We
+    expect the input to be mostly lines, such as the result of an intersection
+    between a line and a polygon. The main idea is to remove points, and any
+    other geometry which might throw a wrench in the works.
+    """
+    from shapely.geometry import MultiLineString
+
+    lines = _explode_lines(shape)
+    if len(lines) == 1:
+        return lines[0]
+    else:
+        return MultiLineString(lines)
+
+
 class RawrTile(object):
 
     def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
@@ -702,6 +739,30 @@ class RawrTile(object):
                 shape_type_lookup(shape), {})
             if layer_name in label_layers:
                 generate_label_placement = True
+
+        # nasty hack: in the SQL, we don't query the lines table for
+        # boundary features - instead we take the boundaries of the
+        # polygon features in the polygons table. this replicates that
+        # process.
+        if read_row and '__boundaries_properties__' in read_row:
+            if shape.geom_type in ('LineString', 'MultiLineString'):
+                read_row.pop('__boundaries_properties__')
+
+            elif shape.geom_type in ('Polygon', 'MultiPolygon'):
+                # make sure boundary is oriented in the correct anti-clockwise
+                # direction, which means the interior should be on the left.
+                boundaries_shape = orient(shape).boundary
+
+                # make sure it's only lines, post-intersection. a polygon-line
+                # intersection can return points as well as lines. however,
+                # these would not only be useless for labelling boundaries, but
+                # also trip up any later processing which was expecting only
+                # lines.
+                clip_shape = _lines_only(boundaries_shape.intersection(bbox))
+                read_row['__boundaries_geometry__'] = bytes(clip_shape.wkb)
+
+                # we don't want area on boundaries
+                read_row['__boundaries_properties__'].pop('area', None)
 
         if read_row:
             read_row['__id__'] = fid
