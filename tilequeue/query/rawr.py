@@ -741,16 +741,18 @@ class RawrTile(object):
                 generate_label_placement = True
 
         # nasty hack: in the SQL, we don't query the lines table for
-        # boundary features - instead we take the boundaries of the
-        # polygon features in the polygons table. this replicates that
-        # process.
+        # boundaries layer features - instead we take the rings (both outer
+        # and inner) of the polygon features in the polygons table - which are
+        # also called the "boundary" of the polygon. the back below replicates
+        # the process we have in the SQL query.
         if read_row and '__boundaries_properties__' in read_row:
             if shape.geom_type in ('LineString', 'MultiLineString'):
                 read_row.pop('__boundaries_properties__')
 
             elif shape.geom_type in ('Polygon', 'MultiPolygon'):
-                # make sure boundary is oriented in the correct anti-clockwise
-                # direction, which means the interior should be on the left.
+                # make sure boundary rings are oriented in the correct
+                # direction; anti-clockwise for outers and clockwise for
+                # inners, which means the interior should be on the left.
                 boundaries_shape = orient(shape).boundary
 
                 # make sure it's only lines, post-intersection. a polygon-line
