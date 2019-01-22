@@ -1,5 +1,6 @@
 from collections import namedtuple, defaultdict
 from shapely.geometry import box
+from shapely.geometry import MultiLineString
 from shapely.geometry.polygon import orient
 from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
@@ -603,7 +604,6 @@ def _lines_only(shape):
     between a line and a polygon. The main idea is to remove points, and any
     other geometry which might throw a wrench in the works.
     """
-    from shapely.geometry import MultiLineString
 
     lines = _explode_lines(shape)
     if len(lines) == 1:
