@@ -743,7 +743,7 @@ class RawrTile(object):
         # nasty hack: in the SQL, we don't query the lines table for
         # boundaries layer features - instead we take the rings (both outer
         # and inner) of the polygon features in the polygons table - which are
-        # also called the "boundary" of the polygon. the back below replicates
+        # also called the "boundary" of the polygon. the hack below replicates
         # the process we have in the SQL query.
         if read_row and '__boundaries_properties__' in read_row:
             if shape.geom_type in ('LineString', 'MultiLineString'):
