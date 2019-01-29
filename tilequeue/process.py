@@ -8,6 +8,7 @@ from shapely import geometry
 from shapely.wkb import loads
 from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
+from tilequeue.log import make_coord_dict
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
@@ -59,6 +60,10 @@ Context = namedtuple('Context', [
     'unpadded_bounds',   # the latlon bounds of the tile
     'params',            # user configuration parameters
     'resources',         # resources declared in config
+
+    # callable to log out a JSON object. the single parameter should be plain
+    # data structures (list, dict, etc...)
+    'log',
 ])
 
 
@@ -68,10 +73,18 @@ Context = namedtuple('Context', [
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
 def _postprocess_data(
-        feature_layers, post_process_data, nominal_zoom, unpadded_bounds):
+        feature_layers, post_process_data, nominal_zoom, unpadded_bounds,
+        log_fn=None):
 
     for step in post_process_data:
         fn = resolve(step['fn_name'])
+
+        # if no logger is configured, just drop the output. but we don't want
+        # to pass the complexity on to the inner functions - more readable and
+        # less prone to bugs if we just have a single check here.
+        def _log_fn(data):
+            if log_fn:
+                log_fn(dict(fn_name=step['fn_name'], msg=data))
 
         ctx = Context(
             feature_layers=feature_layers,
@@ -79,6 +92,7 @@ def _postprocess_data(
             unpadded_bounds=unpadded_bounds,
             params=step['params'],
             resources=step['resources'],
+            log=_log_fn,
         )
 
         layer = fn(ctx)
@@ -262,7 +276,7 @@ def meta_for_properties(query_props):
 
 def process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
-        output_calc_mapping):
+        output_calc_mapping, log_fn=None):
 
     extra_data = dict(size={})
     processed_feature_layers = []
@@ -395,7 +409,7 @@ def process_coord_no_format(
     # post-process data here, before it gets formatted
     processed_feature_layers = _postprocess_data(
         processed_feature_layers, post_process_data, nominal_zoom,
-        unpadded_bounds)
+        unpadded_bounds, log_fn)
 
     return processed_feature_layers, extra_data
 
@@ -492,10 +506,10 @@ def format_coord(
 # the output.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  output_calc_spec, scale=4096):
+                  output_calc_spec, scale=4096, log_fn=None):
     processed_feature_layers, extra_data = process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
-        output_calc_spec)
+        output_calc_spec, log_fn=log_fn)
 
     all_formatted_tiles, extra_data = format_coord(
         coord, nominal_zoom, processed_feature_layers, formats,
@@ -721,7 +735,7 @@ def calculate_cut_coords_by_zoom(
 class Processor(object):
     def __init__(self, coord, metatile_zoom, fetch_fn, layer_data,
                  post_process_data, formats, buffer_cfg, output_calc_mapping,
-                 max_zoom, cfg_tile_sizes):
+                 max_zoom, cfg_tile_sizes, log_fn=None):
         self.coord = coord
         self.metatile_zoom = metatile_zoom
         self.fetch_fn = fetch_fn
@@ -732,6 +746,7 @@ class Processor(object):
         self.output_calc_mapping = output_calc_mapping
         self.max_zoom = max_zoom
         self.cfg_tile_sizes = cfg_tile_sizes
+        self.log_fn = None
 
     def fetch(self):
         unpadded_bounds = coord_to_mercator_bounds(self.coord)
@@ -756,11 +771,20 @@ class Processor(object):
         all_extra_data = {}
 
         for nominal_zoom, cut_coords in self.cut_coords_by_zoom.items():
+            def log_fn(data):
+                if self.log_fn:
+                    self.log_fn(dict(
+                        coord=make_coord_dict(self.coord),
+                        nominal_zoom=nominal_zoom,
+                        msg=data,
+                    ))
+
             feature_layers = self.feature_layers_by_zoom[nominal_zoom]
             formatted_tiles, extra_data = process_coord(
                 self.coord, nominal_zoom, feature_layers,
                 self.post_process_data, self.formats, unpadded_bounds,
-                cut_coords, self.buffer_cfg, self.output_calc_mapping
+                cut_coords, self.buffer_cfg, self.output_calc_mapping,
+                log_fn=log_fn,
             )
             all_formatted_tiles.extend(formatted_tiles)
             all_extra_data.update(extra_data)

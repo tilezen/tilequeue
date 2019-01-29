@@ -2151,10 +2151,15 @@ def tilequeue_meta_tile(cfg, args):
                         parent, job_coord, coord)
                     continue
 
+            def log_fn(data):
+                meta_tile_logger._log(
+                    data, parent, pyramid=job_coord, coord=coord)
+
             processor = Processor(
                 coord, cfg.metatile_zoom, fetch, layer_data,
                 post_process_data, formats, cfg.buffer_cfg,
-                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes,
+                log_fn=log_fn)
 
             try:
                 processor.fetch()
@@ -2272,10 +2277,14 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         fetch, coord_datum = fetched_coord_data[0]
         coord = coord_datum['coord']
 
+        def log_fn(data):
+            meta_low_zoom_logger._log(data, parent, coord)
+
         processor = Processor(
             coord, cfg.metatile_zoom, fetch, layer_data,
             post_process_data, formats, cfg.buffer_cfg,
-            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes)
+            output_calc_mapping, cfg.max_zoom, cfg.tile_sizes,
+            log_fn=log_fn)
 
         try:
             processor.fetch()
