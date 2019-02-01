@@ -745,7 +745,11 @@ class RawrTile(object):
         # and inner) of the polygon features in the polygons table - which are
         # also called the "boundary" of the polygon. the hack below replicates
         # the process we have in the SQL query.
-        if read_row and '__boundaries_properties__' in read_row:
+        #
+        # note: we shoe-horn buffered land into boundaries, so we have to
+        # disable this special processing for those features.
+        if read_row and '__boundaries_properties__' in read_row and \
+           read_row['__boundaries_properties__'].get('kind') != 'maritime':
             if shape.geom_type in ('LineString', 'MultiLineString'):
                 read_row.pop('__boundaries_properties__')
 
