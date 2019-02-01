@@ -23,17 +23,17 @@ padding = 5
 
 
 def encode(file, features, layer_name=''):
-        layer_name = layer_name or ''
-        tile = VectorTile(extents)
+    layer_name = layer_name or ''
+    tile = VectorTile(extents)
 
-        for feature in features:
-            tile.addFeature(feature, layer_name)
+    for feature in features:
+        tile.addFeature(feature, layer_name)
 
-        tile.complete()
+    tile.complete()
 
-        data = tile.out.SerializeToString()
-        file.write(struct.pack(">I", len(data)))
-        file.write(data)
+    data = tile.out.SerializeToString()
+    file.write(struct.pack(">I", len(data)))
+    file.write(data)
 
 
 def merge(file, feature_layers):
@@ -217,7 +217,7 @@ class VectorTile:
         # logging.debug(tag)
 
         if tag in self.tagdict:
-                return self.tagdict[tag]
+            return self.tagdict[tag]
 
         key = self.getKeyId(tag[0].decode('utf-8'))
         val = self.getAttribId(tag[1].decode('utf-8'))
