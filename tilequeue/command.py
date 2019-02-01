@@ -472,6 +472,84 @@ def coord_ints_from_paths(paths):
     return result
 
 
+def _path_to_segments(path):
+    """
+    Convert a path into a list of segments. Basically, path.split("/"), but
+    trying to be a little bit portable.
+
+    You would have thought that this would be an existing library function,
+    but I couldn't find it.
+
+    >>> _path_to_segments(os.path.join("foo", "bar", "baz"))
+    ["foo", "bar", "baz"]
+
+    """
+
+    segments = []
+    while True:
+        head, tail = os.path.split(path)
+        if tail:
+            segments.append(tail)
+        if head and head != os.sep:
+            path = head
+        else:
+            break
+
+    return list(reversed(segments))
+
+
+def _update_tree(tree, stem, branch):
+    """
+    Update a nested set of dicts so that the branch appears at nested key stem.
+
+    For example:
+    >>> tree = {}
+    >>> _update_tree(tree, ["foo", "bar"], "baz")
+    {"foo": {"bar": "baz"}}
+    """
+
+    depth = len(stem)
+    assert depth > 0
+
+    if depth > 1:
+        bud = tree.get(stem[0], {})
+        _update_tree(bud, stem[1:], branch)
+        branch = bud
+
+    tree[stem[0]] = branch
+
+
+def _load_yaml_branch(tree, stem, file_path):
+    """
+    Load a YAML file and put its contents at the nested key stem in the tree.
+    """
+
+    with open(file_path, 'r') as fh:
+        branch = yaml.load(fh)
+        stem = _path_to_segments(stem)
+        _update_tree(tree, stem, branch)
+
+
+def _load_yaml_tree(path):
+    """
+    Load a directory tree of YAML files into a single dict. The subdirectories
+    and files are the keys into a set of nested dictionaries (stripping the
+    .yaml extension).
+    """
+
+    tree = {}
+    for full_path, _, filenames in os.walk(path):
+        for filename in filenames:
+            if filename.endswith('.yaml'):
+                file_path = os.path.join(full_path, filename)
+                assert file_path.startswith(path)
+                assert file_path.endswith('.yaml')
+                stem = file_path[len(path):-len('.yaml')]
+                _load_yaml_branch(tree, stem, file_path)
+
+    return tree
+
+
 def _parse_postprocess_resources(post_process_item, cfg_path):
     resources_cfg = post_process_item.get('resources', {})
     resources = {}
@@ -501,6 +579,14 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
 
             with open(os.path.join(cfg_path, path), 'r') as fh:
                 resources[resource_name] = fn(fh)
+
+        elif resource_type == 'yaml_tree':
+            path = resource_cfg.get('path')
+            assert path, 'Resource %r of type yaml_tree is missing the ' \
+                'path parameter' % resource_name
+
+            tree = _load_yaml_tree(path)
+            resources[resource_name] = fn(tree)
 
         else:
             raise Exception('Resource type %r is not supported'
