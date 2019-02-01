@@ -819,3 +819,80 @@ class TestBoundaries(RawrTestCase):
         self.assertEqual(props.get('boundary'), 'administrative')
         # check no area
         self.assertIsNone(props.get('area'))
+
+
+class TestBufferedLand(RawrTestCase):
+
+    def test_buffered_land(self):
+        # the buffered land is a polygon in the boundaries table (sort of),
+        # but we shouldn't turn it into linestrings of the exterior ring. it
+        # should stay as a polygon otherwise the border features won't be
+        # correctly assigned maritime boundary properties, and they'll all
+        # appear to be maritime boundaries. :-(
+        from tilequeue.query.common import LayerInfo
+        from tilequeue.query.rawr import make_rawr_data_fetcher
+        from tilequeue.tile import coord_to_mercator_bounds
+        from ModestMaps.Core import Coordinate
+        from shapely.geometry import Polygon
+        import shapely.wkb
+
+        top_zoom = 10
+        max_zoom = top_zoom + 6
+
+        def min_zoom_fn(shape, props, fid, meta):
+            return 8
+
+        def props_fn(shape, props, fid, meta):
+            props['kind'] = 'maritime'
+            return props
+
+        z, x, y = (max_zoom, 0, 0)
+        tile = Coordinate(zoom=z, column=x, row=y)
+        top_tile = tile.zoomTo(top_zoom).container()
+
+        bounds = coord_to_mercator_bounds(tile)
+        shape = Polygon([
+            [bounds[0], bounds[1]],
+            [bounds[0], bounds[3]],
+            [bounds[2], bounds[1]],
+            [bounds[0], bounds[1]],
+        ])
+
+        props = {
+            'kind': 'maritime',
+            'maritime_boundary': True,
+            'source': 'tilezen.org',
+            'min_zoom': 0,
+        }
+
+        source = 'tilezen.org'
+        tables = TestGetTable({
+            'buffered_land': [
+                (1, shape.wkb, props),
+            ],
+        }, source)
+
+        layers = {
+            'boundaries': LayerInfo(min_zoom_fn, props_fn),
+        }
+        storage = ConstantStorage(tables)
+        index_cfg = [{
+            'type': 'simple',
+            'table': 'buffered_land',
+            'layer': 'boundaries',
+        }]
+        fetch = make_rawr_data_fetcher(
+            top_zoom, max_zoom, storage, layers, index_cfg)
+
+        for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
+            read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
+
+        self.assertEqual(len(read_rows), 1)
+        props = read_rows[0]['__boundaries_properties__']
+
+        self.assertEqual(props.get('kind'), 'maritime')
+        # check no special boundaries geometry - should just be the polygon
+        self.assertIsNone(read_rows[0].get('__boundaries_geometry__'))
+
+        shape = shapely.wkb.loads(read_rows[0]['__geometry__'])
+        self.assertEqual(shape.geom_type, 'Polygon')
