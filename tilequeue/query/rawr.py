@@ -1,6 +1,7 @@
 from collections import namedtuple, defaultdict
 from shapely.geometry import box
 from shapely.geometry import MultiLineString
+from shapely.geometry import MultiPolygon
 from shapely.geometry.polygon import orient
 from shapely.wkb import loads as wkb_loads
 from tilequeue.query.common import layer_properties
@@ -612,6 +613,25 @@ def _lines_only(shape):
         return MultiLineString(lines)
 
 
+def _orient(shape):
+    """
+    The Shapely version of the orient function appears to only work on
+    Polygons, and fails on MultiPolygons. This is a quick wrapper to allow
+    orienting of either.
+    """
+
+    assert shape.geom_type in ('Polygon', 'MultiPolygon')
+
+    if shape.geom_type == 'Polygon':
+        return orient(shape)
+
+    else:
+        polys = []
+        for geom in shape.geoms:
+            polys.append(orient(geom))
+        return MultiPolygon(polys)
+
+
 class RawrTile(object):
 
     def __init__(self, layers, tables, tile_pyramid, label_placement_layers,
@@ -757,7 +777,7 @@ class RawrTile(object):
                 # make sure boundary rings are oriented in the correct
                 # direction; anti-clockwise for outers and clockwise for
                 # inners, which means the interior should be on the left.
-                boundaries_shape = orient(shape).boundary
+                boundaries_shape = _orient(shape).boundary
 
                 # make sure it's only lines, post-intersection. a polygon-line
                 # intersection can return points as well as lines. however,
