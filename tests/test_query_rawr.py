@@ -820,6 +820,48 @@ class TestBoundaries(RawrTestCase):
         # check no area
         self.assertIsNone(props.get('area'))
 
+    def test_boundaries_from_multipolygons(self):
+        # check that the boundary extraction code also works for multipolygons
+        from shapely.geometry import Polygon, MultiPolygon
+
+        def _tile_squares(bounds):
+            # maxy      +----+
+            #           | b  |
+            # midy +----+----+
+            #      | a  |
+            # miny +----+
+            #      minx midx maxx
+
+            minx, miny, maxx, maxy = bounds
+            midx = 0.5 * (minx + maxx)
+            midy = 0.5 * (miny + maxy)
+
+            a = Polygon([
+                [minx, miny],
+                [minx, midy],
+                [midx, midy],
+                [midx, miny],
+                [minx, miny],
+            ])
+
+            b = Polygon([
+                [midx, midy],
+                [midx, maxy],
+                [maxx, maxy],
+                [maxx, midy],
+                [midy, midy],
+            ])
+
+            return MultiPolygon([a, b])
+
+        read_rows = self._fetch_data(_tile_squares, 'planet_osm_polygon')
+
+        self.assertEqual(len(read_rows), 1)
+        props = read_rows[0]['__boundaries_properties__']
+        self.assertEqual(props.get('boundary'), 'administrative')
+        # check no area
+        self.assertIsNone(props.get('area'))
+
 
 class TestBufferedLand(RawrTestCase):
 
