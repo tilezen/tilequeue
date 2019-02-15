@@ -1,6 +1,16 @@
 CHANGELOG
 =========
 
+v2.3.0
+------
+
+* Add utility function to orient MultiPolygons. [PR #368](https://github.com/tilezen/tilequeue/pull/368).
+* Exclude buffered land polygons from changes made in [#362](https://github.com/tilezen/tilequeue/pull/362). [PR #367](https://github.com/tilezen/tilequeue/pull/367).
+* Fix indentation for new, stricter flake8. [PR #366](https://github.com/tilezen/tilequeue/pull/366).
+* Add log function to post-process Context. [PR #364](https://github.com/tilezen/tilequeue/pull/364).
+* Bump PyYAML version for CVE-2017-18342. [PR #363](https://github.com/tilezen/tilequeue/pull/363).
+* Process boundaries from RAWR tiles the same way we do from SQL. [PR #362](https://github.com/tilezen/tilequeue/pull/362).
+
 v2.2.1
 ------
 
