@@ -2096,8 +2096,6 @@ def tilequeue_meta_tile(cfg, args):
     parent = deserialize_coord(coord_str)
     assert parent, 'Invalid coordinate: %s' % coord_str
 
-    assert parent.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
-
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
 
@@ -2115,6 +2113,10 @@ def tilequeue_meta_tile(cfg, args):
 
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    assert queue_zoom <= parent.zoom <= group_by_zoom, \
+        'Unexpected zoom: %s, zoom should be between %d and %d' % \
+        (coord_str, queue_zoom, group_by_zoom)
 
     # NOTE: max_zoom looks to be inclusive
     zoom_stop = cfg.max_zoom
