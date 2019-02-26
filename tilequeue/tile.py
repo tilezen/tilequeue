@@ -283,7 +283,8 @@ def coord_children(coord):
 
 
 def coord_children_range(coord, zoom_until):
-    assert zoom_until > coord.zoom
+    assert zoom_until > coord.zoom, 'zoom_until (%r) must be > coord.zoom ' \
+        '(%r)' % (zoom_until, coord)
     for child in coord_children_subrange(coord, coord.zoom + 1, zoom_until):
         yield child
 
