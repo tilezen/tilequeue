@@ -2096,8 +2096,6 @@ def tilequeue_meta_tile(cfg, args):
     parent = deserialize_coord(coord_str)
     assert parent, 'Invalid coordinate: %s' % coord_str
 
-    assert parent.zoom == queue_zoom, 'Unexpected zoom: %s' % coord_str
-
     with open(cfg.query_cfg) as query_cfg_fp:
         query_cfg = yaml.load(query_cfg_fp)
 
@@ -2115,6 +2113,10 @@ def tilequeue_meta_tile(cfg, args):
 
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
+
+    assert queue_zoom <= parent.zoom <= group_by_zoom, \
+        'Unexpected zoom: %s, zoom should be between %d and %d' % \
+        (coord_str, queue_zoom, group_by_zoom)
 
     # NOTE: max_zoom looks to be inclusive
     zoom_stop = cfg.max_zoom
@@ -2252,7 +2254,9 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
     meta_low_zoom_logger.begin_run(parent)
 
     coords = [parent]
-    if parent.zoom == queue_zoom:
+    # we don't include tiles at group_by_zoom, so unless parent.zoom is
+    # _more_ than one zoom level less, we don't need to include the pyramid.
+    if parent.zoom == queue_zoom and parent.zoom < group_by_zoom - 1:
         # we will be multiple meta tile coordinates in this run
         coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
