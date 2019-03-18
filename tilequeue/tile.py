@@ -8,6 +8,16 @@ merc_proj = pyproj.Proj(init='epsg:3857')
 latlng_proj = pyproj.Proj(proj='latlong')
 
 
+# since 2.1.0, the preferred method of calling transform() is via a Transformer
+# object, which caches and re-uses intermediate structures for speed. this
+# makes about a 20x difference in the speed of running our test suite!
+#
+# see https://github.com/pyproj4/pyproj/issues/187
+#
+LL_TO_MERC = pyproj.Transformer.from_proj(latlng_proj, merc_proj)
+MERC_TO_LL = pyproj.Transformer.from_proj(merc_proj, latlng_proj)
+
+
 def serialize_coord(coord):
     return '%d/%d/%d' % (coord.zoom, coord.column, coord.row)
 
@@ -90,11 +100,11 @@ def coord_to_bounds(coord):
 
 
 def reproject_lnglat_to_mercator(x, y, *unused_coords):
-    return pyproj.transform(latlng_proj, merc_proj, x, y)
+    return LL_TO_MERC.transform(x, y)
 
 
 def reproject_mercator_to_lnglat(x, y, *unused_coords):
-    return pyproj.transform(merc_proj, latlng_proj, x, y)
+    return MERC_TO_LL.transform(x, y)
 
 
 # mercator <-> point conversions ported from tilestache
