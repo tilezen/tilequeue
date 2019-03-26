@@ -254,8 +254,8 @@ def lookup_source(source):
         result = Source('osm', source)
     elif source == 'naturalearthdata.com':
         result = Source('ne', source)
-    elif source == 'openstreetmapdata.com':
-        result = Source('shp', source)
+    elif source in ('openstreetmapdata.com', 'osmdata.openstreetmap.de'):
+        result = Source('shp', 'osmdata.openstreetmap.de')
     elif source == 'whosonfirst.org':
         result = Source('wof', source)
     elif source == 'tilezen.org':
