@@ -428,7 +428,7 @@ class _SimpleLayersIndex(object):
     Index features by the tile(s) that they appear in.
 
     This is the non-relations version, for stand-alone features such as those
-    from openstreetmapdata.com shapefiles or WOF.
+    from osmdata.openstreetmap.de shapefiles or WOF.
     """
 
     def __init__(self, layers, tile_pyramid, source, start_zoom, end_zoom):
