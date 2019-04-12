@@ -183,17 +183,22 @@ class NeighbourhoodFailure(object):
         self.superseded = superseded
 
 
-# given a string, parse it as EDTF while allowing a single 'u' or None to mean
-# completely unknown, and return the EDTF object.
+# keep this as a constant - it actually take a significant amount of time to
+# re-parse this every time, when we know it's a constant.
+MOST_UNKNOWN_EDTF = parse_edtf('uuuu')
+
+
+# given a string, parse it as EDTF while allowing a single 'u', four u's
+# 'uuuu', or None to mean completely unknown, and return the EDTF object.
 def _normalize_edtf(s):
-    if s and s != 'u':
+    if s and s != 'u' and s != 'uuuu':
         try:
             return parse_edtf(s)
         except Exception:
             pass
 
     # when all else fails, return the "most unknown" EDTF.
-    return parse_edtf('uuuu')
+    return MOST_UNKNOWN_EDTF
 
 
 def create_neighbourhood_from_json(json_data, neighbourhood_meta):
@@ -582,13 +587,18 @@ class WofFilesystemNeighbourhoodFetcher(object):
 
 
 def create_neighbourhood_file_object(neighbourhoods, curdate=None):
+    buf = StringIO()
+    write_neighbourhood_data_to_file(buf, neighbourhoods, curdate)
+    buf.seek(0)
+    return buf
+
+
+def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
     if curdate is None:
         curdate = datetime.now().date()
 
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
-
-    buf = StringIO()
 
     def escape_string(s):
         return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
@@ -650,10 +660,6 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
             buf.write('\\N')
 
         buf.write('\n')
-
-    buf.seek(0)
-
-    return buf
 
 
 class WofModel(object):
