@@ -4,7 +4,7 @@ boto==2.48.0
 enum34==1.1.6
 future==0.16.0
 hiredis==0.2.0
-Jinja2==2.9.6
+Jinja2==2.10.1
 MarkupSafe==1.0
 ModestMaps==1.4.7
 protobuf==3.4.0
