@@ -52,7 +52,8 @@ NeighbourhoodMeta = namedtuple(
 Neighbourhood = namedtuple(
     'Neighbourhood',
     'wof_id placetype name hash label_position geometry n_photos area '
-    'min_zoom max_zoom is_landuse_aoi inception cessation l10n_names')
+    'min_zoom max_zoom is_landuse_aoi inception cessation l10n_names '
+    'wikidata')
 
 
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
@@ -369,10 +370,16 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     if not l10n_names:
         l10n_names = None
 
+    wikidata = None
+    # get wikidata ID concordance, if there is one
+    concordances = props.get('wof:concordances')
+    if concordances:
+        wikidata = concordances.get('wd:id')
+
     neighbourhood = Neighbourhood(
         wof_id, placetype, name, neighbourhood_meta.hash, label_position,
         shape_mercator, n_photos, area, min_zoom, max_zoom, is_landuse_aoi,
-        inception, cessation, l10n_names)
+        inception, cessation, l10n_names, wikidata)
     return neighbourhood
 
 
@@ -659,6 +666,12 @@ def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
         else:
             buf.write('\\N')
 
+        buf.write('\t')
+        if n.wikidata:
+            buf.write(escape_string(n.wikidata))
+        else:
+            buf.write('\\N')
+
         buf.write('\n')
 
 
@@ -720,6 +733,7 @@ class WofModel(object):
                 geometry=n.geometry.wkb_hex,
                 wof_id=n.wof_id,
                 l10n_name=n.l10n_names,
+                wikidata=n.wikidata,
             )
 
         if ids_to_remove:
@@ -756,6 +770,7 @@ class WofModel(object):
                             'cessation=%(cessation)s, '
                             'label_position=%(label_position)s, '
                             'l10n_name=%(l10n_name)s, '
+                            'wikidata=%(wikidata)s, '
                             'geometry=%(geometry)s '
                             'WHERE wof_id=%(wof_id)s',
                             update_data)
@@ -766,12 +781,13 @@ class WofModel(object):
                             '(wof_id, placetype, name, hash, n_photos, area, '
                             'min_zoom, max_zoom, is_landuse_aoi, '
                             'inception, cessation, '
-                            'label_position, geometry, l10n_name) '
+                            'label_position, geometry, l10n_name, wikidata) '
                             'VALUES (%(wof_id)s, %(placetype)s, %(name)s, '
                             '%(hash)s, %(n_photos)s, %(area)s, %(min_zoom)s, '
                             '%(max_zoom)s, %(is_landuse_aoi)s, '
                             '%(inception)s, %(cessation)s, '
-                            '%(label_position)s, %(geometry)s, %(l10n_name)s)',
+                            '%(label_position)s, %(geometry)s, %(l10n_name)s, '
+                            '%(wikidata)s)',
                             insert_data)
 
     def insert_neighbourhoods(self, neighbourhoods):
