@@ -464,13 +464,19 @@ class _LayersIndex(object):
     pyramid.
     """
 
-    def __init__(self, layers, tile_pyramid):
+    def __init__(self, layers, tile_pyramid, wikidata):
         self.layers = layers
         self.tile_pyramid = tile_pyramid
         self.tile_index = defaultdict(list)
         self.delayed_features = []
+        self.wikidata = wikidata
 
     def add_row(self, fid, shape_wkb, props):
+        # extend props with wikidata, if there's a wikidata ID
+        wd_id = props.get('wikidata')
+        if wd_id:
+            props.update(self.wikidata(wd_id))
+
         shape = _LazyShape(shape_wkb)
         # single object (hence single id()) will be shared amongst all layers.
         # this allows us to easily and quickly de-duplicate at later layers in
@@ -513,12 +519,34 @@ class _LayersIndex(object):
         return self.tile_index.get(tile, [])
 
 
+class WikidataIndex(object):
+    """
+    Indexes a RAWR tile's wikidata data for lookup by ID.
+    """
+
+    def __init__(self, rows):
+        data = {}
+        for wd_id, props in rows:
+            data[wd_id] = props
+
+        self.data = data
+
+    def __call__(self, wd_id):
+        return self.data.get(wd_id, {})
+
+
 def osm_index(layers, tables, tile_pyramid):
     from raw_tiles.index.index import index_table
 
     table_indexes = defaultdict(list)
 
-    index = _LayersIndex(layers, tile_pyramid)
+    # try to get wikidata, but use empty wikidata if it couldn't be found.
+    try:
+        wikidata = WikidataIndex(tables('wikidata').rows)
+    except Exception:
+        wikidata = WikidataIndex([])
+
+    index = _LayersIndex(layers, tile_pyramid, wikidata)
     for shape_type in ('point', 'line', 'polygon'):
         table_name = 'planet_osm_' + shape_type
         table_indexes[table_name].append(index)
