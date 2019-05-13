@@ -818,6 +818,10 @@ class RawrTile(object):
                 # we don't want area on boundaries
                 read_row['__boundaries_properties__'].pop('area', None)
 
+                # set a flag to indicate that we transformed this from a
+                # polygon to a boundary.
+                read_row['mz_boundary_from_polygon'] = True
+
         if read_row:
             read_row['__id__'] = fid
 
