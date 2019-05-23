@@ -783,19 +783,6 @@ class TestBoundaries(RawrTestCase):
 
         return read_rows
 
-    def test_linestrings_dropped(self):
-        # test that linestrings in the RAWR tile don't make it into the tile.
-        from shapely.geometry import LineString
-
-        def _tile_diagonal(bounds):
-            return LineString([
-                [bounds[0], bounds[1]],
-                [bounds[2], bounds[3]],
-            ])
-
-        read_rows = self._fetch_data(_tile_diagonal, 'planet_osm_line')
-        self.assertEqual(read_rows, [])
-
     def test_boundaries_from_polygons(self):
         # check that a polygon in the RAWR tile contributes its oriented
         # (anti-clockwise) boundary to the tile data.
@@ -819,6 +806,8 @@ class TestBoundaries(RawrTestCase):
         self.assertEqual(props.get('boundary'), 'administrative')
         # check no area
         self.assertIsNone(props.get('area'))
+        # check we set the flag
+        self.assertTrue(props.get('mz_boundary_from_polygon'))
 
     def test_boundaries_from_multipolygons(self):
         # check that the boundary extraction code also works for multipolygons
@@ -861,6 +850,8 @@ class TestBoundaries(RawrTestCase):
         self.assertEqual(props.get('boundary'), 'administrative')
         # check no area
         self.assertIsNone(props.get('area'))
+        # check we set the flag
+        self.assertTrue(props.get('mz_boundary_from_polygon'))
 
 
 class TestBufferedLand(RawrTestCase):
