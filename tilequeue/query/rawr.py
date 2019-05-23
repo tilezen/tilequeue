@@ -798,10 +798,7 @@ class RawrTile(object):
         # disable this special processing for those features.
         if read_row and '__boundaries_properties__' in read_row and \
            read_row['__boundaries_properties__'].get('kind') != 'maritime':
-            if shape.geom_type in ('LineString', 'MultiLineString'):
-                read_row.pop('__boundaries_properties__')
-
-            elif shape.geom_type in ('Polygon', 'MultiPolygon'):
+            if shape.geom_type in ('Polygon', 'MultiPolygon'):
                 # make sure boundary rings are oriented in the correct
                 # direction; anti-clockwise for outers and clockwise for
                 # inners, which means the interior should be on the left.
@@ -815,12 +812,14 @@ class RawrTile(object):
                 clip_shape = _lines_only(boundaries_shape.intersection(bbox))
                 read_row['__boundaries_geometry__'] = bytes(clip_shape.wkb)
 
+                boundary_props = read_row['__boundaries_properties__']
                 # we don't want area on boundaries
-                read_row['__boundaries_properties__'].pop('area', None)
+                boundary_props.pop('area', None)
+                boundary_props.pop('way_area', None)
 
                 # set a flag to indicate that we transformed this from a
                 # polygon to a boundary.
-                read_row['mz_boundary_from_polygon'] = True
+                boundary_props['mz_boundary_from_polygon'] = True
 
         if read_row:
             read_row['__id__'] = fid
