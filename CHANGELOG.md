@@ -1,6 +1,19 @@
 CHANGELOG
 =========
 
+v2.4.0
+------
+
+* Reduce high zoom "long tail" of jobs by allowing job coordinates to be anywhere between the `queue_zoom` and `group_by_zoom` (i.e: RAWR tile zoom) inclusive. This allows more fine-grained jobs in areas where jobs take longer without creating too many extra jobs in areas where the jobs are quicker. [PR #370](https://github.com/tilezen/tilequeue/pull/370)
+* Bump PyPROJ version to 2.1.0, use new Transformer interface, which allows us to avoid a performance regression with the latest version of PyPROJ. [PR #371](https://github.com/tilezen/tilequeue/pull/371)
+* Change `source` for OSM land/water polygons. Data which used to be hosted at OpenStreetMapData.com is now hosted by FOSSGIS at osmdata.openstreetmap.de. [PR #372](https://github.com/tilezen/tilequeue/pull/372) and [PR #379](https://github.com/tilezen/tilequeue/pull/379)
+* Special case parse for EDTF 'uuuu', massive increase in speed. [PR #374](https://github.com/tilezen/tilequeue/pull/374)
+* Add Wikidata ID to WOF records. [PR #375](https://github.com/tilezen/tilequeue/pull/375)
+* Bump Jinja2 version to 2.10.1 for CVE-2019-10906. [PR #376](https://github.com/tilezen/tilequeue/pull/376)
+* Inject wikidata from RAWR tile into OSM features. This is used to set `passenger_count` on `kind: aerodrome`, which is then used to set `kind_detail: international` on very large airports. [PR #377](https://github.com/tilezen/tilequeue/pull/377)
+* Alternate viewpoints changes for RAWR tiles. The query in `vector-datasource` sets a special flag when transforming a polygon into a boundary line, so we have to do the same thing when reading from the RAWR tiles. [PR #378](https://github.com/tilezen/tilequeue/pull/378)
+* Fix build problems discovered during the v1.8d build (dropping all linestrings, setting the `mz_boundary_from_polygon` flag on the wrong set of properties). [PR #380](https://github.com/tilezen/tilequeue/pull/380)
+
 v2.3.0
 ------
 
