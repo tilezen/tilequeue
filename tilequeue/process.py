@@ -551,6 +551,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
             transit=row.pop('__transit_properties__', None),
             water=row.pop('__water_properties__', None),
             admin_areas=row.pop('__admin_areas_properties__', None),
+            contours=row.pop('__contours_properties__', None),
         )
 
         # TODO at first pass, simulate the structure that we're
