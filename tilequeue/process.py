@@ -260,6 +260,8 @@ def lookup_source(source):
         result = Source('wof', source)
     elif source == 'tilezen.org':
         result = Source('shp', source)
+    elif source == 'viewfinderpanoramas.org':
+        result = Source('vfp', source)
 
     return result
 
