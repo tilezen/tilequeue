@@ -21,7 +21,7 @@ six==1.11.0
 StreetNames==0.1.5
 statsd==3.2.1
 ujson==1.35
-Werkzeug==0.12.2
+Werkzeug==0.15.3
 wsgiref==0.1.2
 zope.dottedname==4.2
 edtf==2.6.0
