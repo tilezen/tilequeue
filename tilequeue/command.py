@@ -1106,16 +1106,16 @@ def tilequeue_enqueue_random_pyramids(cfg, peripherals, args):
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
         cfg, logger, stats_handler, peripherals.msg_marshaller)
 
-    for grid_y in xrange(gridsize):
+    for grid_y in range(gridsize):
         tile_y_min = int(grid_y * scale_factor)
         tile_y_max = int((grid_y+1) * scale_factor)
-        for grid_x in xrange(gridsize):
+        for grid_x in range(gridsize):
             tile_x_min = int(grid_x * scale_factor)
             tile_x_max = int((grid_x+1) * scale_factor)
 
             cell_samples = set()
 
-            for i in xrange(samples_per_cell):
+            for i in range(samples_per_cell):
 
                 while True:
                     rand_x = randrange(tile_x_min, tile_x_max)
@@ -1944,8 +1944,8 @@ def tilequeue_rawr_seed_all(cfg, peripherals):
     # if we handle the TOI okay then we should be okay with z10. if the group
     # by zoom is much larger, then it might start running into problems.
     coords = []
-    for x in xrange(0, max_coord):
-        for y in xrange(0, max_coord):
+    for x in range(0, max_coord):
+        for y in range(0, max_coord):
             coords.append(Coordinate(zoom=group_by_zoom, column=x, row=y))
 
     _tilequeue_rawr_seed(cfg, peripherals, coords)
@@ -2061,13 +2061,13 @@ def find_job_coords_for(coord, target_zoom):
     xmax = coord.column
     ymin = coord.row
     ymax = coord.row
-    for i in xrange(target_zoom - coord.zoom):
+    for i in range(target_zoom - coord.zoom):
         xmin *= 2
         ymin *= 2
         xmax = xmax * 2 + 1
         ymax = ymax * 2 + 1
-    for y in xrange(ymin, ymax+1):
-        for x in xrange(xmin, xmax+1):
+    for y in range(ymin, ymax+1):
+        for x in range(xmin, xmax+1):
             yield Coordinate(zoom=10, column=x, row=y)
 
 

@@ -68,7 +68,7 @@ class SqsQueue(object):
         backoff_interval = 1
         backoff_factor = 2
 
-        for try_counter in xrange(0, num_tries):
+        for try_counter in range(0, num_tries):
             failed_messages = self.send_without_retry(payloads)
 
             # success!

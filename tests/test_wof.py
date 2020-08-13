@@ -38,7 +38,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         self.assertEqual(x, n)
 
     def test_neighbourhoods_equal(self):
-        ns = [self._n(i, 'foo', 'hash-%d' % i) for i in xrange(32)]
+        ns = [self._n(i, 'foo', 'hash-%d' % i) for i in range(32)]
         diffs = self._call_fut(ns, ns)
         self.failIf(diffs)
 

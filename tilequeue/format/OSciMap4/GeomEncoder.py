@@ -190,7 +190,7 @@ class GeomEncoder:
         try:
             num_geoms = reader.unpack_uint32()
 
-            for _ in xrange(0,num_geoms):
+            for _ in range(0,num_geoms):
                 self._dispatchNextType(reader)
 
         except:
@@ -210,7 +210,7 @@ class GeomEncoder:
 
             self.num_points = 0;
             
-            for _ in xrange(0,num_points):
+            for _ in range(0,num_points):
                 self.parsePoint(reader,dimensions)
                 
             self.index.append(self.num_points)
@@ -233,7 +233,7 @@ class GeomEncoder:
         try:
             num_linestrings = reader.unpack_uint32()
 
-            for _ in xrange(0,num_linestrings):
+            for _ in range(0,num_linestrings):
                 self._dispatchNextType(reader)
 
         except:
@@ -250,7 +250,7 @@ class GeomEncoder:
         try:
             num_points = reader.unpack_uint32()
 
-            for _ in xrange(0,num_points):
+            for _ in range(0,num_points):
                 self._dispatchNextType(reader)
         except:
             _, value, tb = sys.exc_info()[:3]
@@ -265,7 +265,7 @@ class GeomEncoder:
     def parseMultiPolygon(self, reader, dimensions):
         try:
             num_polygons = reader.unpack_uint32()
-            for n in xrange(0,num_polygons):
+            for n in range(0,num_polygons):
                 if n > 0:
                     self.index.append(0);
                   
@@ -308,7 +308,7 @@ class GeomEncoder:
         try:
             num_rings = reader.unpack_uint32()
 
-            for _ in xrange(0,num_rings):
+            for _ in range(0,num_rings):
                 self.parseLinearRing(reader,dimensions)
             
             self.isPoly = True
@@ -330,7 +330,7 @@ class GeomEncoder:
             self.num_points = 0;
             
             # skip the last point
-            for _ in xrange(0,num_points-1):
+            for _ in range(0,num_points-1):
                 self.parsePoint(reader,dimensions)
 
             # skip the last point                

@@ -496,7 +496,7 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
             neighbourhood_output_queue.put(neighbourhood)
 
     fetch_threads = []
-    for i in xrange(n_threads):
+    for i in range(n_threads):
         fetch_thread = threading.Thread(target=_fetch_raw_neighbourhood)
         fetch_thread.start()
         fetch_threads.append(fetch_thread)
@@ -509,7 +509,7 @@ def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
 
     neighbourhoods = []
     failures = []
-    for i in xrange(len(neighbourhood_metas)):
+    for i in range(len(neighbourhood_metas)):
         neighbourhood = neighbourhood_output_queue.get()
         if isinstance(neighbourhood, NeighbourhoodFailure):
             failures.append(neighbourhood)

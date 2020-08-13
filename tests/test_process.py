@@ -322,7 +322,7 @@ class TestCalculateCutZooms(unittest.TestCase):
 
         # with a 1x1 metatile (i.e: not really a metatile) then we just get
         # the configured size.
-        for z in xrange(0, 3):
+        for z in range(0, 3):
             meta_sz = 1 << z
             tile_sz = 256 * meta_sz
             self.assertEqual({z: [tile_sz]}, _calc(meta_sz, [tile_sz]))

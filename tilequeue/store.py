@@ -98,7 +98,7 @@ def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
             interval = retry_interval
             factor = retry_factor
 
-            for _ in xrange(1, num_tries):
+            for _ in range(1, num_tries):
                 try:
                     return f(*args, **kwargs)
 
@@ -189,7 +189,7 @@ class S3(object):
 
         num_deleted = 0
         chunk_size = 1000
-        for idx in xrange(0, len(key_names), chunk_size):
+        for idx in range(0, len(key_names), chunk_size):
             chunk = key_names[idx:idx+chunk_size]
 
             while chunk:

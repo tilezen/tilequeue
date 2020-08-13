@@ -8,9 +8,9 @@ class TestMetroExtractParse(unittest.TestCase):
         return parse_metro_extract(fp)
 
     def test_invalid_json(self):
-        from io import StringIO
+        from io import BytesIO
         from tilequeue.metro_extract import MetroExtractParseError
-        fp = StringIO('{"foo": "bar"}')
+        fp = BytesIO('{"foo": "bar"}')
         try:
             self._call_fut(fp)
         except MetroExtractParseError:
