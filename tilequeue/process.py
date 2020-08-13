@@ -2,7 +2,7 @@ from __future__ import division
 
 from collections import defaultdict
 from collections import namedtuple
-from io import StringIO
+from io import BytesIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
@@ -202,7 +202,7 @@ def _create_formatted_tile(
         meters_per_pixel_dim, buffer_cfg)
 
     # use the formatter to generate the tile
-    tile_data_file = StringIO()
+    tile_data_file = BytesIO()
     format.format_tile(
         tile_data_file, transformed_feature_layers, nominal_zoom,
         unpadded_bounds, unpadded_bounds_lnglat, scale)
