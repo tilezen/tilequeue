@@ -147,7 +147,7 @@ _DATA = descriptor.Descriptor(
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), '\020\001')),
+      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), b'\020\001')),
     descriptor.FieldDescriptor(
       name='lines', full_name='org.oscim.database.oscimap4.Data.lines', index=9,
       number=21, type=11, cpp_type=10, label=3,

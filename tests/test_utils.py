@@ -46,7 +46,7 @@ class TestCoordsByParent(unittest.TestCase):
             _c(10, 1, 1): [_c(11, 2, 2), _c(11, 3, 3), _c(12, 4, 4)],
         }
 
-        for coords in groups.itervalues():
+        for coords in groups.values():
             for coord in coords:
                 cbp.add(coord)
 

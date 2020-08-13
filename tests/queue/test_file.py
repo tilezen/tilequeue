@@ -2,9 +2,9 @@
 Unit tests for `tilequeue.queue.file`.
 '''
 
+from io import BytesIO
 from ModestMaps.Core import Coordinate
 import unittest
-import StringIO
 
 
 class TestQueue(unittest.TestCase):
@@ -25,7 +25,7 @@ class TestQueue(unittest.TestCase):
             for (z, c, r) in self.test_tile_coords]
         self.tile_coords_str = '\n'.join(
             map(tile.serialize_coord, self.test_tile_objs)) + '\n'
-        self.tiles_fp = StringIO.StringIO()
+        self.tiles_fp = BytesIO()
         self.queue = OutputFileQueue(self.tiles_fp)
 
     def test_read(self):

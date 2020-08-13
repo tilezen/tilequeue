@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
-import md5
+from hashlib import md5
 from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal

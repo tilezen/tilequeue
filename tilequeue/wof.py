@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from collections import namedtuple
 from contextlib import closing
-from io import StringIO
+from io import BytesIO
 from datetime import datetime
 from edtf import parse_edtf
 from operator import attrgetter
@@ -594,7 +594,7 @@ class WofFilesystemNeighbourhoodFetcher(object):
 
 
 def create_neighbourhood_file_object(neighbourhoods, curdate=None):
-    buf = StringIO()
+    buf = BytesIO()
     write_neighbourhood_data_to_file(buf, neighbourhoods, curdate)
     buf.seek(0)
     return buf

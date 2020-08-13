@@ -1,8 +1,8 @@
 from tilequeue.metatile import make_metatiles, extract_metatile
 from tilequeue.format import json_format, zip_format, topojson_format
+from io import BytesIO
 from ModestMaps.Core import Coordinate
 import zipfile
-import cStringIO as StringIO
 import unittest
 
 
@@ -17,7 +17,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(Coordinate(0, 0, 0), metatiles[0]['coord'])
         self.assertEqual('all', metatiles[0]['layer'])
         self.assertEqual(zip_format, metatiles[0]['format'])
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('0/0/0.json').read())
 
@@ -35,7 +35,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(Coordinate(0, 0, 0), metatiles[0]['coord'])
         self.assertEqual('all', metatiles[0]['layer'])
         self.assertEqual(zip_format, metatiles[0]['format'])
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('0/0/0.json').read())
             self.assertEqual(json, z.open('0/0/0.topojson').read())
@@ -65,7 +65,7 @@ class TestMetatile(unittest.TestCase):
 
         self.assertEqual('all', meta['layer'])
         self.assertEqual(zip_format, meta['format'])
-        buf = StringIO.StringIO(meta['tile'])
+        buf = BytesIO(meta['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('1/0/1.json').read())
             self.assertEqual(json, z.open('1/1/1.json').read())
@@ -82,7 +82,7 @@ class TestMetatile(unittest.TestCase):
                     format=json_format, layer='all')
         metatiles = make_metatiles(1, [tile])
         self.assertEqual(1, len(metatiles))
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         extracted = extract_metatile(buf, json_format)
         self.assertEqual(json, extracted)
 
