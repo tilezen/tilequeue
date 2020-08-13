@@ -97,7 +97,7 @@ class GetSqsQueueNameForZoom(object):
         self.zoom_queue_table = zoom_queue_table
 
     def __call__(self, zoom):
-        assert isinstance(zoom, (int, long))
+        assert isinstance(zoom, int)
         assert 0 <= zoom <= 20
         result = self.zoom_queue_table.get(zoom)
         assert result is not None, 'No queue name found for zoom: %d' % zoom
