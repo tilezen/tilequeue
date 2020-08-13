@@ -1,10 +1,10 @@
 # extracted from mapzen tilestache fork
 
-from OSciMap4 import TileData_v4_pb2
-from OSciMap4.GeomEncoder import GeomEncoder
-from OSciMap4.StaticVals import getValues
-from OSciMap4.StaticKeys import getKeys
-from OSciMap4.TagRewrite import fixTag
+from .OSciMap4 import TileData_v4_pb2
+from .OSciMap4.GeomEncoder import GeomEncoder
+from .OSciMap4.StaticVals import getValues
+from .OSciMap4.StaticKeys import getKeys
+from .OSciMap4.TagRewrite import fixTag
 import logging
 import struct
 
