@@ -2,7 +2,7 @@ from __future__ import division
 
 from collections import defaultdict
 from collections import namedtuple
-from cStringIO import StringIO
+from io import StringIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
@@ -721,7 +721,7 @@ def calculate_cut_coords_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
 
     cut_coords_by_zoom = {}
-    for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
+    for nominal_zoom, tile_sizes in tile_sizes_by_zoom.items():
         cut_coords = []
         for tile_size in tile_sizes:
             cut_coords.extend(metatile_children_with_size(

@@ -175,7 +175,7 @@ def metatiles_are_equal(tile_data_1, tile_data_2):
             with zipfile.ZipFile(buf_2, mode='r') as zip_2:
                 return _metatile_contents_equal(zip_1, zip_2)
 
-    except (StandardError, zipfile.BadZipFile, zipfile.LargeZipFile):
+    except (Exception, zipfile.BadZipFile, zipfile.LargeZipFile):
         # errors, such as files not being proper zip files, or missing
         # some attributes or contents that we expect, are treated as not
         # equal.

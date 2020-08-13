@@ -722,7 +722,7 @@ class RawrTile(object):
                 for feature in index(tile):
                     _add_feature(index.source, feature)
 
-        return source_features.iteritems()
+        return source_features.items()
 
     def __call__(self, zoom, unpadded_bounds):
         read_rows = []

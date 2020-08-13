@@ -96,7 +96,7 @@ class VectorTile:
         layer = None
         # add layer tag
         tags.append(self.getTagId(('layer_name', this_layer)))
-        for k, v in row[1].iteritems():
+        for k, v in row[1].items():
             if v is None:
                 continue
 

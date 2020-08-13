@@ -28,9 +28,9 @@ def parse_metro_extract(metro_extract_fp):
     metros = []
     try:
         regions = json_data[u'regions']
-        for region_name, region_data in regions.iteritems():
+        for region_name, region_data in regions.items():
             cities = region_data[u'cities']
-            for city_name, city_data in cities.iteritems():
+            for city_name, city_data in cities.items():
                 city_json_bounds = city_data[u'bbox']
                 minx = float(city_json_bounds[u'left'])
                 miny = float(city_json_bounds[u'bottom'])
@@ -39,7 +39,7 @@ def parse_metro_extract(metro_extract_fp):
                 city_bounds = (minx, miny, maxx, maxy)
                 metro = MetroExtractCity(region_name, city_name, city_bounds)
                 metros.append(metro)
-    except (KeyError, ValueError), e:
+    except (KeyError, ValueError) as e:
         raise MetroExtractParseError(e)
     return metros
 

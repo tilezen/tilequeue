@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from collections import namedtuple
 from contextlib import closing
-from cStringIO import StringIO
+from io import StringIO
 from datetime import datetime
 from edtf import parse_edtf
 from operator import attrgetter
@@ -358,7 +358,7 @@ def create_neighbourhood_from_json(json_data, neighbourhood_meta):
     # grab any names in other languages
     lang_suffix_size = len('_preferred')
     l10n_names = {}
-    for k, v in props.iteritems():
+    for k, v in props.items():
         if not v:
             continue
         if not k.startswith('name:') or not k.endswith('_preferred'):

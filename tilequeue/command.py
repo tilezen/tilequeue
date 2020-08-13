@@ -476,7 +476,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     resources_cfg = post_process_item.get('resources', {})
     resources = {}
 
-    for resource_name, resource_cfg in resources_cfg.iteritems():
+    for resource_name, resource_cfg in resources_cfg.items():
         resource_type = resource_cfg.get('type')
         init_fn_name = resource_cfg.get('init_fn')
 
@@ -1297,7 +1297,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     new_toi = set()
     for coord_int, count in sorted(
-            redshift_results.iteritems(),
+            redshift_results.items(),
             key=operator.itemgetter(1),
             reverse=True)[:cutoff_tiles]:
         if count >= cutoff_requests:

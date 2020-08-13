@@ -118,7 +118,7 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
                         # should it be an assert instead?
                         yield CoordGroup([coord], zri.queue_id)
 
-                for group_key, coords in by_parent_coords.iteritems():
+                for group_key, coords in by_parent_coords.items():
                     yield CoordGroup(coords, zri.queue_id)
 
     def get_queue(self, queue_id):

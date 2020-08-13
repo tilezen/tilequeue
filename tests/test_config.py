@@ -44,7 +44,7 @@ class TestCliConfiguration(unittest.TestCase):
     def _call_fut(self, config_dict):
         from tilequeue.config import make_config_from_argparse
         from yaml import dump
-        from cStringIO import StringIO
+        from io import StringIO
         raw_yaml = dump(config_dict)
         raw_yaml_file_obj = StringIO(raw_yaml)
         return make_config_from_argparse(raw_yaml_file_obj)
@@ -80,7 +80,7 @@ class TestMetatileConfiguration(unittest.TestCase):
     def _call_fut(self, config_dict):
         from tilequeue.config import make_config_from_argparse
         from yaml import dump
-        from cStringIO import StringIO
+        from io import StringIO
         raw_yaml = dump(config_dict)
         raw_yaml_file_obj = StringIO(raw_yaml)
         return make_config_from_argparse(raw_yaml_file_obj)

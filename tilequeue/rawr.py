@@ -2,7 +2,7 @@ from botocore.exceptions import ClientError
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
-from cStringIO import StringIO
+from io import StringIO
 from itertools import imap
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
@@ -167,7 +167,7 @@ class RawrEnqueuer(object):
 
         n_coords = 0
         payloads = []
-        for _, coords in grouped_by_zoom.iteritems():
+        for _, coords in grouped_by_zoom.items():
             payload = self.msg_marshaller.marshall(coords)
             payloads.append(payload)
             n_coords += len(coords)

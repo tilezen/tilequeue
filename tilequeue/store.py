@@ -13,7 +13,7 @@ from tilequeue.format import zip_format
 import random
 import threading
 import time
-from cStringIO import StringIO
+from io import StringIO
 from urllib import urlencode
 
 

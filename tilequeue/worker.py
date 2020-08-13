@@ -1,5 +1,4 @@
 from collections import namedtuple
-from itertools import izip
 from operator import attrgetter
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
@@ -230,7 +229,7 @@ class TileQueueReader(object):
                     queue_handle, coords, parent_tile)
 
                 all_coords_data = []
-                for coord, coord_handle in izip(coords, coord_handles):
+                for coord, coord_handle in zip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
                         self._reject_coord(coord, coord_handle, timing_state)
                         continue

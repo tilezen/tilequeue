@@ -1,6 +1,5 @@
 from collections import namedtuple
 from collections import defaultdict
-from itertools import izip
 from tilequeue.process import Source
 from enum import Enum
 
@@ -76,7 +75,7 @@ def deassoc(x):
     """
 
     pairs = [iter(x)] * 2
-    return dict(izip(*pairs))
+    return dict(zip(*pairs))
 
 
 # fixtures extend metadata to include ways and relations for the feature.

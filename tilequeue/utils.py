@@ -114,7 +114,7 @@ class CoordsByParent(object):
             self.groups[parent_coord].append(data)
 
     def __iter__(self):
-        return self.groups.iteritems()
+        return self.groups.items()
 
 
 def convert_seconds_to_millis(time_in_seconds):
