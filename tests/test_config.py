@@ -44,9 +44,9 @@ class TestCliConfiguration(unittest.TestCase):
     def _call_fut(self, config_dict):
         from tilequeue.config import make_config_from_argparse
         from yaml import dump
-        from io import StringIO
+        from io import BytesIO
         raw_yaml = dump(config_dict)
-        raw_yaml_file_obj = StringIO(raw_yaml)
+        raw_yaml_file_obj = BytesIO(raw_yaml)
         return make_config_from_argparse(raw_yaml_file_obj)
 
     def _assert_cfg(self, cfg, to_check):
@@ -80,9 +80,9 @@ class TestMetatileConfiguration(unittest.TestCase):
     def _call_fut(self, config_dict):
         from tilequeue.config import make_config_from_argparse
         from yaml import dump
-        from io import StringIO
+        from io import BytesIO
         raw_yaml = dump(config_dict)
-        raw_yaml_file_obj = StringIO(raw_yaml)
+        raw_yaml_file_obj = BytesIO(raw_yaml)
         return make_config_from_argparse(raw_yaml_file_obj)
 
     def test_metatile_size_default(self):
