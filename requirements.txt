@@ -26,4 +26,4 @@ wsgiref==0.1.2
 zope.dottedname==4.2
 edtf==2.6.0
 mapbox-vector-tile==1.2.0
-git+https://github.com/tilezen/raw_tiles@master#egg=raw_tiles
+git+https://github.com/tilezen/raw_tiles@dees/py3#egg=raw_tiles
