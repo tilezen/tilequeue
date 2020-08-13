@@ -57,12 +57,12 @@ def parse_log_file(log_file):
 def encode_utf8(x):
     if x is None:
         return None
-    elif isinstance(x, unicode):
+    elif isinstance(x, str):
         return x.encode('utf-8')
     elif isinstance(x, dict):
         result = {}
         for k, v in x.items():
-            if isinstance(k, unicode):
+            if isinstance(k, str):
                 k = k.encode('utf-8')
             result[k] = encode_utf8(v)
         return result
@@ -114,7 +114,7 @@ class CoordsByParent(object):
             self.groups[parent_coord].append(data)
 
     def __iter__(self):
-        return self.groups.items()
+        return iter(self.groups.items())
 
 
 def convert_seconds_to_millis(time_in_seconds):
