@@ -110,17 +110,13 @@ class OsmRawrLookup(object):
         # passes row data from the table. we have to figure out here what
         # kind of row it was, and send the data on to the right function.
 
-        # IDs can be either ints or longs, and generally we don't care which,
-        # so we accept either as the type for that position in the function.
-        num = (int, long)
-
-        if _match_type(args, (num, (str, bytes), dict)):
+        if _match_type(args, (int, (str, bytes), dict)):
             self.add_feature(*args)
 
-        elif _match_type(args, (num, list, list)):
+        elif _match_type(args, (int, list, list)):
             self.add_way(*args)
 
-        elif _match_type(args, (num, num, num, list, list, list)):
+        elif _match_type(args, (int, int, int, list, list, list)):
             self.add_relation(*args)
 
         else:

@@ -139,6 +139,6 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         queue_names = ['q1']
         get_queue = make_get_queue_name_for_zoom(
             zoom_queue_map_cfg, queue_names)
-        zoom = long(7)
+        zoom = 7
         queue_name = get_queue(zoom)
         self.assertEqual(queue_name, 'q1')

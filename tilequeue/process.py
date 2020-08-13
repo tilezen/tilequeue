@@ -44,7 +44,7 @@ def _sizeof(val):
     elif isinstance(val, list):
         for v in val:
             size += _sizeof(v)
-    elif isinstance(val, (str, bytes, unicode)):
+    elif isinstance(val, (str, bytes)):
         size += len(val)
     else:
         size += getsizeof(val)

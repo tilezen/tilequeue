@@ -1,4 +1,5 @@
 from collections import namedtuple
+from functools import reduce
 from operator import attrgetter
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
@@ -510,7 +511,7 @@ class S3Storage(object):
                         n_stored += 1
                     else:
                         n_not_stored += 1
-                except Exception as e:
+                except Exception:
                     # it's important to wait for all async jobs to
                     # complete but we just keep a reference to the last
                     # exception it's unlikely that we would receive multiple

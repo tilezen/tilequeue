@@ -645,7 +645,7 @@ class RawrS3Source(object):
                 Bucket=self.bucket,
                 Key=key,
             )
-        except Exception, e:
+        except Exception as e:
             # if we allow missing tiles, then translate a 404 exception into a
             # value response. this is useful for local or dev environments
             # where we might not have a global build, but don't want the lack

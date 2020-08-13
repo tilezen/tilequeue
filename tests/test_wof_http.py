@@ -95,15 +95,15 @@ class _SimpleLogger(object):
 
     def info(self, msg):
         if self.verbose:
-            print "INFO: %s" % msg
+            print("INFO: %s" % msg)
 
     def warn(self, msg):
         if self.verbose:
-            print "WARN: %s" % msg
+            print("WARN: %s" % msg)
 
     def error(self, msg):
         if self.verbose:
-            print "ERROR: %s" % msg
+            print("ERROR: %s" % msg)
 
 
 class TestWofHttp(unittest.TestCase):

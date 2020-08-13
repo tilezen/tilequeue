@@ -387,7 +387,7 @@ def fetch_url_raw_neighbourhood(url, neighbourhood_meta, max_retries):
     try:
         s = _make_requests_session_with_retries(max_retries)
         r = s.get(url)
-    except Exception, e:
+    except Exception as e:
         # if there is an IO error when fetching the url itself, we'll
         # want to halt too
         return NeighbourhoodFailure(
@@ -403,13 +403,13 @@ def fetch_url_raw_neighbourhood(url, neighbourhood_meta, max_retries):
 
     try:
         doc = r.json()
-    except Exception, e:
+    except Exception as e:
         return NeighbourhoodFailure(
             neighbourhood_meta.wof_id, 'Response is not json for %s' % url,
             r.text)
     try:
         neighbourhood = create_neighbourhood_from_json(doc, neighbourhood_meta)
-    except Exception, e:
+    except Exception as e:
         return NeighbourhoodFailure(
             neighbourhood_meta.wof_id,
             'Unexpected exception parsing json',

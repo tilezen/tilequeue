@@ -1555,7 +1555,7 @@ def tilequeue_stuck_tiles(cfg, peripherals):
     for coord in store.list_tiles(format, layer):
         coord_int = coord_marshall_int(coord)
         if coord_int not in toi:
-            print serialize_coord(coord)
+            print(serialize_coord(coord))
 
 
 def tilequeue_delete_stuck_tiles(cfg, peripherals):
@@ -1688,13 +1688,13 @@ class FakeStatsTimer(object):
 
 def tilequeue_process_tile(cfg, peripherals, args):
     if not args.coord:
-        print >> sys.stderr, 'Missing coord argument'
+        print('Missing coord argument', file=sys.stderr)
         sys.exit(1)
 
     coord_str = args.coord
     coord = deserialize_coord(coord_str)
     if not coord:
-        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        print('Invalid coordinate: %s' % coord_str, file=sys.stderr)
         sys.exit(2)
 
     with open(cfg.query_cfg) as query_cfg_fp:
@@ -1723,7 +1723,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     assert json_tile
     json_tile = json_tile[0]
     tile_data = json_tile['tile']
-    print tile_data
+    print(tile_data)
 
 
 def tilequeue_rawr_enqueue(cfg, args):

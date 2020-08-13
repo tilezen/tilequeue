@@ -209,9 +209,9 @@ def tile_generator_for_range(
     zoom_until += 1
     for zoom in range(zoom_start, zoom_until):
         for col in range(start_col * zoom_multiplier,
-                          end_col * zoom_multiplier):
+                         end_col * zoom_multiplier):
             for row in range(start_row * zoom_multiplier,
-                              end_row * zoom_multiplier):
+                             end_row * zoom_multiplier):
                 yield Coordinate(row=row, column=col, zoom=zoom)
         zoom_multiplier *= 2
 
@@ -256,7 +256,7 @@ def coord_marshall_int(coord):
 
 
 def coord_unmarshall_int(coord_int):
-    if isinstance(coord_int, (str, unicode)):
+    if isinstance(coord_int, str):
         coord_int = int(coord_int)
     zoom = zoom_mask & coord_int
     row = row_mask & (coord_int >> row_offset)
