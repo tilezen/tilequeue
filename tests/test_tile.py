@@ -12,8 +12,8 @@ class TestSeedTiles(unittest.TestCase):
         return list(seed_tiles(zoom_until=zoom_until))
 
     def _assert_tilelist(self, expected_tiles, actual_tiles):
-        expected_tiles.sort()
-        actual_tiles.sort()
+        expected_tiles.sort(key=lambda t: (t.zoom, t.row, t.column))
+        actual_tiles.sort(key=lambda t: (t.zoom, t.row, t.column))
         self.assertEqual(expected_tiles, actual_tiles)
 
     def test_zoom_0(self):
@@ -82,8 +82,8 @@ class TestTileGeneration(unittest.TestCase):
         tile_generator = tile_generator_for_single_bounds(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
-        self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
-        self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
+        self.assertEqual(1, len(list(filter(self._is_zoom(1), tiles))))
+        self.assertEqual(4, len(list(filter(self._is_zoom(2), tiles))))
 
     def test_tiles_for_bounds_lasttile_two_zooms(self):
         from tilequeue.tile import tile_generator_for_single_bounds
@@ -91,8 +91,8 @@ class TestTileGeneration(unittest.TestCase):
         tile_generator = tile_generator_for_single_bounds(bounds, 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(5, len(tiles))
-        self.assertEqual(1, len(filter(self._is_zoom(1), tiles)))
-        self.assertEqual(4, len(filter(self._is_zoom(2), tiles)))
+        self.assertEqual(1, len(list(filter(self._is_zoom(1), tiles))))
+        self.assertEqual(4, len(list(filter(self._is_zoom(2), tiles))))
 
     def test_tiles_for_two_bounds_two_zooms(self):
         from tilequeue.tile import tile_generator_for_multiple_bounds
@@ -102,8 +102,8 @@ class TestTileGeneration(unittest.TestCase):
             (bounds1, bounds2), 1, 2)
         tiles = list(tile_generator)
         self.assertEqual(10, len(tiles))
-        self.assertEqual(2, len(filter(self._is_zoom(1), tiles)))
-        self.assertEqual(8, len(filter(self._is_zoom(2), tiles)))
+        self.assertEqual(2, len(list(filter(self._is_zoom(1), tiles))))
+        self.assertEqual(8, len(list(filter(self._is_zoom(2), tiles))))
 
     def test_tiles_children(self):
         from tilequeue.tile import coord_children
@@ -207,7 +207,7 @@ class CoordIntZoomTest(unittest.TestCase):
             parent_coord = coord.zoomTo(coord.zoom - 1).container()
             exp_int = coord_marshall_int(parent_coord)
             act_int = coord_int_zoom_up(coord_int)
-            self.assertEquals(exp_int, act_int)
+            self.assertEqual(exp_int, act_int)
 
     def test_verify_examples(self):
         from ModestMaps.Core import Coordinate
@@ -225,7 +225,7 @@ class CoordIntZoomTest(unittest.TestCase):
             parent_coord = coord.zoomTo(coord.zoom - 1).container()
             exp_int = coord_marshall_int(parent_coord)
             act_int = coord_int_zoom_up(coord_int)
-            self.assertEquals(exp_int, act_int)
+            self.assertEqual(exp_int, act_int)
 
 
 class TestMetatileZoom(unittest.TestCase):

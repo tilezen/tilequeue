@@ -97,13 +97,13 @@ class WriteTileIfChangedTest(unittest.TestCase):
     def test_no_data(self):
         did_write = self._call_fut('data')
         self.assertTrue(did_write)
-        self.assertEquals('data', self._out)
+        self.assertEqual('data', self._out)
 
     def test_diff_data(self):
         self._in = 'different data'
         did_write = self._call_fut('data')
         self.assertTrue(did_write)
-        self.assertEquals('data', self._out)
+        self.assertEqual('data', self._out)
 
     def test_same_data(self):
         self._in = 'data'
@@ -138,7 +138,7 @@ class S3Test(unittest.TestCase):
         self.assertIsNone(store.s3_client.put_props.get('Tagging'))
         store.tags = dict(prefix='foo', run_id='bar')
         store.write_tile(tile_data, coord, mvt_format)
-        self.assertEquals('prefix=foo&run_id=bar',
+        self.assertEqual('prefix=foo&run_id=bar',
                           store.s3_client.put_props.get('Tagging'))
 
 

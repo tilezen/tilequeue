@@ -9,7 +9,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
 
     def test_no_neighbourhoods(self):
         diffs = self._call_fut([], [])
-        self.failIf(diffs)
+        self.assertFalse(diffs)
 
     def _n(self, wof_id, name, hash):
         from tilequeue.wof import NeighbourhoodMeta
@@ -22,7 +22,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
     def test_neighbourhood_added(self):
         n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([], [n])
-        self.failUnless(diffs)
+        self.assertTrue(diffs)
         self.assertEqual(len(diffs), 1)
         x, y = diffs[0]
         self.assertIsNone(x)
@@ -31,7 +31,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
     def test_neighbourhood_removed(self):
         n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([n], [])
-        self.failUnless(diffs)
+        self.assertTrue(diffs)
         self.assertEqual(len(diffs), 1)
         x, y = diffs[0]
         self.assertIsNone(y)
@@ -40,7 +40,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
     def test_neighbourhoods_equal(self):
         ns = [self._n(i, 'foo', 'hash-%d' % i) for i in range(32)]
         diffs = self._call_fut(ns, ns)
-        self.failIf(diffs)
+        self.assertFalse(diffs)
 
     def test_neighbourhoods_id_mismatch_cases(self):
         def _make(wof_id):
@@ -50,7 +50,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         diffs = self._call_fut(xs, ys)
 
         def assert_id(n, wof_id):
-            self.failUnless(n)
+            self.assertTrue(n)
             self.assertEqual(wof_id, n.wof_id)
 
         self.assertEqual(len(diffs), 4)

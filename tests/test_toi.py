@@ -20,10 +20,10 @@ class TestToiSet(unittest.TestCase):
         with tempfile.TemporaryFile() as fp:
             save_set_to_fp(toi_set, fp)
 
-            self.assertEquals(fp.tell(), 18)
+            self.assertEqual(fp.tell(), 18)
 
             fp.seek(0)
-            self.assertEquals(fp.read(), '0/0/0\n1/0/0\n1/1/0\n')
+            self.assertEqual(fp.read(), b'0/0/0\n1/0/0\n1/1/0\n')
 
     def test_load_set_from_fp(self):
         from tilequeue.toi import load_set_from_fp
@@ -53,7 +53,7 @@ class TestToiSet(unittest.TestCase):
             expected_toi_set.add(self._coord_str_to_int('1/0/0'))
             expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
-            self.assertEquals(expected_toi_set, actual_toi_set)
+            self.assertEqual(expected_toi_set, actual_toi_set)
 
     def test_save_set_to_gzipped_fp(self):
         import gzip
@@ -67,11 +67,11 @@ class TestToiSet(unittest.TestCase):
         with tempfile.TemporaryFile() as fp:
             save_set_to_gzipped_fp(toi_set, fp)
 
-            self.assertEquals(fp.tell(), 31)
+            self.assertEqual(fp.tell(), 31)
 
             fp.seek(0)
             with gzip.GzipFile(fileobj=fp, mode='r') as gz:
-                self.assertEquals(gz.read(), '0/0/0\n1/0/0\n1/1/0\n')
+                self.assertEqual(gz.read(), b'0/0/0\n1/0/0\n1/1/0\n')
 
     def test_load_set_from_gzipped_fp(self):
         import gzip
@@ -88,4 +88,4 @@ class TestToiSet(unittest.TestCase):
             expected_toi_set.add(self._coord_str_to_int('1/0/0'))
             expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
-            self.assertEquals(expected_toi_set, actual_toi_set)
+            self.assertEqual(expected_toi_set, actual_toi_set)

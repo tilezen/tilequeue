@@ -96,25 +96,25 @@ class TestQueryRawr(RawrTestCase):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEquals(0, read_row.get('__id__'))
+        self.assertEqual(0, read_row.get('__id__'))
         # query processing code expects WKB bytes in the __geometry__ column
-        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
-        self.assertEquals({'min_zoom': 11},
+        self.assertEqual(shape.wkb, read_row.get('__geometry__'))
+        self.assertEqual({'min_zoom': 11},
                           read_row.get('__testlayer_properties__'))
 
         # now, check that if the min zoom or geometry filters would exclude
         # the feature then it isn't returned.
         for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(zoom, coord_to_mercator_bounds(coord))
-        self.assertEquals(0, len(read_rows))
+        self.assertEqual(0, len(read_rows))
 
         for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(
                     feature_coord.left()))
-        self.assertEquals(0, len(read_rows))
+        self.assertEqual(0, len(read_rows))
 
     def test_query_min_zoom_fraction(self):
         # test that fractional min zooms are included in their "floor" zoom
@@ -146,12 +146,12 @@ class TestQueryRawr(RawrTestCase):
         feature_coord = mercator_point_to_coord(11, shape.x, shape.y)
         for fetch, _ in fetcher.fetch_tiles(_wrap(coord)):
             read_rows = fetch(11, coord_to_mercator_bounds(feature_coord))
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
 
         feature_coord = feature_coord.zoomBy(-1).container()
         for fetch, _ in fetcher.fetch_tiles(_wrap(coord)):
             read_rows = fetch(10, coord_to_mercator_bounds(feature_coord))
-        self.assertEquals(0, len(read_rows))
+        self.assertEqual(0, len(read_rows))
 
     def test_query_past_max_zoom(self):
         # check that features with a min_zoom beyond the maximum zoom are still
@@ -184,13 +184,13 @@ class TestQueryRawr(RawrTestCase):
         feature_coord = mercator_point_to_coord(16, shape.x, shape.y)
         for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(16, coord_to_mercator_bounds(feature_coord))
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
 
         # but it should not exist at zoom 15
         feature_coord = feature_coord.zoomBy(-1).container()
         for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
             read_rows = fetcher(10, coord_to_mercator_bounds(feature_coord))
-        self.assertEquals(0, len(read_rows))
+        self.assertEqual(0, len(read_rows))
 
     def test_root_relation_id(self):
         # check the logic for finding a root relation ID for station complexes.
@@ -226,10 +226,10 @@ class TestQueryRawr(RawrTestCase):
             for fetcher, _ in fetch.fetch_tiles(_wrap(coord)):
                 read_rows = fetcher(16, coord_to_mercator_bounds(
                     feature_coord))
-            self.assertEquals(1, len(read_rows))
+            self.assertEqual(1, len(read_rows))
 
             props = read_rows[0]['__pois_properties__']
-            self.assertEquals(expected_root_id,
+            self.assertEqual(expected_root_id,
                               props.get('mz_transit_root_relation_id'))
 
         # the fixture code expects "raw" relations as if they come straight
@@ -295,14 +295,14 @@ class TestQueryRawr(RawrTestCase):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEquals(0, read_row.get('__id__'))
+        self.assertEqual(0, read_row.get('__id__'))
         # query processing code expects WKB bytes in the __geometry__ column
-        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
-        self.assertEquals({'min_zoom': 11},
+        self.assertEqual(shape.wkb, read_row.get('__geometry__'))
+        self.assertEqual({'min_zoom': 11},
                           read_row.get('__testlayer_properties__'))
-        self.assertEquals({'source': 'testingquerysource'},
+        self.assertEqual({'source': 'testingquerysource'},
                           read_row.get('__properties__'))
 
 
@@ -353,7 +353,7 @@ class TestLabelPlacement(RawrTestCase):
         layer_name = 'testlayer'
         read_rows = self._test(layer_name, {'name': 'Foo'})
 
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
 
         label_prop = '__label__'
         self.assertTrue(label_prop in read_rows[0])
@@ -494,8 +494,8 @@ class TestNameHandling(RawrTestCase):
         # all the __%s_properties__ from all the rows for further testing.
         all_props = {}
         for row in read_rows:
-            self.assertEquals(1, row['__id__'])
-            self.assertEquals(shape.wkb, row['__geometry__'])
+            self.assertEqual(1, row['__id__'])
+            self.assertEqual(shape.wkb, row['__geometry__'])
             for key, val in row.items():
                 if key.endswith('_properties__'):
                     self.assertFalse(key in all_props)
@@ -509,13 +509,13 @@ class TestNameHandling(RawrTestCase):
                 actual_name = all_props[properties_name].get(key)
                 if layer_name in expected_layer_names:
                     expected_name = props.get(key)
-                    self.assertEquals(
+                    self.assertEqual(
                         expected_name, actual_name,
                         msg=('expected=%r, actual=%r for key=%r'
                              % (expected_name, actual_name, key)))
                 else:
                     # check the name doesn't appear anywhere else
-                    self.assertEquals(
+                    self.assertEqual(
                         None, actual_name,
                         msg=('got actual=%r for key=%r, expected no value'
                              % (actual_name, key)))
@@ -555,20 +555,20 @@ class TestMeta(RawrTestCase):
 
             # expect meta to have a source, which is a string name for the
             # source of the data.
-            self.assertEquals('test', meta.source)
+            self.assertEqual('test', meta.source)
 
             # expect meta to have a list of relations, which is empty for this
             # test.
-            self.assertEquals(0, len(meta.relations))
+            self.assertEqual(0, len(meta.relations))
 
             # only do this for the node
             if fid == 0:
                 # expect meta to have a list of ways, each of which is a (fid,
                 # shape, props) tuple, of which only props is used.
-                self.assertEquals(1, len(meta.ways))
+                self.assertEqual(1, len(meta.ways))
                 way_fid, way_shape, way_props = meta.ways[0]
-                self.assertEquals(1, way_fid)
-                self.assertEquals({'highway': 'secondary'}, way_props)
+                self.assertEqual(1, way_fid)
+                self.assertEqual({'highway': 'secondary'}, way_props)
 
             # only set a min zoom for the node - this just simplifies the
             # checking later, as there'll only be one feature.
@@ -598,12 +598,12 @@ class TestMeta(RawrTestCase):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEquals(0, read_row.get('__id__'))
+        self.assertEqual(0, read_row.get('__id__'))
         # query processing code expects WKB bytes in the __geometry__ column
-        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
-        self.assertEquals({'min_zoom': 11, 'barrier': 'gate'},
+        self.assertEqual(shape.wkb, read_row.get('__geometry__'))
+        self.assertEqual({'min_zoom': 11, 'barrier': 'gate'},
                           read_row.get('__testlayer_properties__'))
 
     def test_meta_route(self):
@@ -629,19 +629,19 @@ class TestMeta(RawrTestCase):
 
             # expect meta to have a source, which is a string name for the
             # source of the data.
-            self.assertEquals('test', meta.source)
+            self.assertEqual('test', meta.source)
 
             # expect meta to have a list of ways, but empty for this test.
-            self.assertEquals(0, len(meta.ways))
+            self.assertEqual(0, len(meta.ways))
 
             # expect meta to have a list of relations, each of which is a dict
             # containing at least the key 'tags' mapped to a list of
             # alternating k, v suitable for passing into deassoc().
-            self.assertEquals(1, len(meta.relations))
+            self.assertEqual(1, len(meta.relations))
             rel = meta.relations[0]
             self.assertIsInstance(rel, dict)
             self.assertIn('tags', rel)
-            self.assertEquals(deassoc(rel_tags), deassoc(rel['tags']))
+            self.assertEqual(deassoc(rel_tags), deassoc(rel['tags']))
 
             return feature_min_zoom
 
@@ -667,10 +667,10 @@ class TestMeta(RawrTestCase):
             read_rows = fetcher(
                 feature_min_zoom, coord_to_mercator_bounds(feature_coord))
 
-        self.assertEquals(1, len(read_rows))
+        self.assertEqual(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEquals(1, read_row.get('__id__'))
-        self.assertEquals({'min_zoom': 11, 'highway': 'secondary'},
+        self.assertEqual(1, read_row.get('__id__'))
+        self.assertEqual({'min_zoom': 11, 'highway': 'secondary'},
                           read_row.get('__testlayer_properties__'))
 
 
@@ -687,7 +687,7 @@ class TestTileFootprint(unittest.TestCase):
         unpadded_bounds = bbox_for_tile(tile.z, tile.x, tile.y)
         tiles = _tiles(zoom, unpadded_bounds)
 
-        self.assertEquals([tile], list(tiles))
+        self.assertEqual([tile], list(tiles))
 
     def test_multiple_tiles(self):
         from tilequeue.query.rawr import _tiles
@@ -701,9 +701,9 @@ class TestTileFootprint(unittest.TestCase):
         unpadded_bounds = bbox_for_tile(tile.z, tile.x, tile.y)
         tiles = list(_tiles(zoom, unpadded_bounds))
 
-        self.assertEquals(4, len(tiles))
+        self.assertEqual(4, len(tiles))
         for child in tiles:
-            self.assertEquals(tile, child.parent())
+            self.assertEqual(tile, child.parent())
 
     def test_corner_overlap(self):
         # a box around the corner of a tile should return the four
@@ -731,7 +731,7 @@ class TestTileFootprint(unittest.TestCase):
             for dy in (0, -1):
                 expected.add(Tile(tile.z, tile.x + dx, tile.y + dy))
 
-        self.assertEquals(expected, tiles)
+        self.assertEqual(expected, tiles)
 
 
 class TestBoundaries(RawrTestCase):

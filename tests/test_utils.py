@@ -12,7 +12,7 @@ class TestCoordsByParent(unittest.TestCase):
         for key, coords in cbp:
             count += 1
 
-        self.assertEquals(0, count)
+        self.assertEqual(0, count)
 
     def test_lower_zooms_not_grouped(self):
         from tilequeue.utils import CoordsByParent
@@ -27,10 +27,10 @@ class TestCoordsByParent(unittest.TestCase):
 
         count = 0
         for key, coords in cbp:
-            self.assertEquals(1, len(coords))
+            self.assertEqual(1, len(coords))
             count += 1
 
-        self.assertEquals(len(low_zoom_coords), count)
+        self.assertEqual(len(low_zoom_coords), count)
 
     def test_higher_zooms_grouped(self):
         from tilequeue.utils import CoordsByParent
@@ -53,10 +53,10 @@ class TestCoordsByParent(unittest.TestCase):
         count = 0
         for key, coords in cbp:
             self.assertIn(key, groups)
-            self.assertEquals(set(groups[key]), set(coords))
+            self.assertEqual(set(groups[key]), set(coords))
             count += 1
 
-        self.assertEquals(len(groups), count)
+        self.assertEqual(len(groups), count)
 
     def test_with_extra_data(self):
         from tilequeue.utils import CoordsByParent
@@ -69,8 +69,8 @@ class TestCoordsByParent(unittest.TestCase):
 
         count = 0
         for key, coords in cbp:
-            self.assertEquals(1, len(coords))
-            self.assertEquals((coord, 'foo', 'bar'), coords[0])
+            self.assertEqual(1, len(coords))
+            self.assertEqual((coord, 'foo', 'bar'), coords[0])
             count += 1
 
-        self.assertEquals(1, count)
+        self.assertEqual(1, count)
