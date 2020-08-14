@@ -7,7 +7,7 @@ StreetNames==0.1.5
 Werkzeug==0.16.1
 appdirs==1.4.4
 boto==2.49.0
-edtf==4.0.1
+edtf==3.0.0
 enum34==1.1.6
 future==0.16.0
 hiredis==0.2.0
@@ -22,6 +22,6 @@ redis==3.5.3
 requests==2.24.0
 six==1.11.0
 statsd==3.2.1
-ujson==1.35
+ujson==3.1.0
 zope.dottedname==4.2
 git+https://github.com/tilezen/raw_tiles@dees/py3#egg=raw_tiles
