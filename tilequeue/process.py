@@ -335,13 +335,7 @@ def process_coord_no_format(
                 props['mz_label_placement'] = label
             feature_size += len('__label__') + _sizeof(label)
 
-            # first ensure that all strings are utf-8 encoded
-            # it would be better for it all to be unicode instead, but
-            # some downstream transforms / formatters might be
-            # expecting utf-8
-            row = utils.encode_utf8(row)
-
-            query_props = row.pop('__properties__')
+            query_props = row.pop('__properties__', None)
             feature_size += len('__properties__') + _sizeof(query_props)
 
             # TODO:

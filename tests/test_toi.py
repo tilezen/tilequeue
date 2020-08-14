@@ -29,7 +29,7 @@ class TestToiSet(unittest.TestCase):
         from tilequeue.toi import load_set_from_fp
 
         with tempfile.TemporaryFile() as fp:
-            fp.write('0/0/0\n1/0/0\n1/1/0\n')
+            fp.write(b'0/0/0\n1/0/0\n1/1/0\n')
             fp.seek(0)
 
             actual_toi_set = load_set_from_fp(fp)
@@ -38,13 +38,13 @@ class TestToiSet(unittest.TestCase):
             expected_toi_set.add(self._coord_str_to_int('1/0/0'))
             expected_toi_set.add(self._coord_str_to_int('1/1/0'))
 
-            self.assertEquals(expected_toi_set, actual_toi_set)
+            self.assertEqual(expected_toi_set, actual_toi_set)
 
     def test_load_set_from_fp_accidental_dupe(self):
         from tilequeue.toi import load_set_from_fp
 
         with tempfile.TemporaryFile() as fp:
-            fp.write('0/0/0\n1/0/0\n1/1/0\n1/0/0\n')
+            fp.write(b'0/0/0\n1/0/0\n1/1/0\n1/0/0\n')
             fp.seek(0)
 
             actual_toi_set = load_set_from_fp(fp)
@@ -79,7 +79,7 @@ class TestToiSet(unittest.TestCase):
 
         with tempfile.TemporaryFile() as fp:
             with gzip.GzipFile(fileobj=fp, mode='w') as gz:
-                gz.write('0/0/0\n1/0/0\n1/1/0\n')
+                gz.write(b'0/0/0\n1/0/0\n1/1/0\n')
             fp.seek(0)
 
             actual_toi_set = load_set_from_gzipped_fp(fp)

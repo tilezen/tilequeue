@@ -79,8 +79,8 @@ class TestProcess(unittest.TestCase):
             features = [dict(
                 __id__=1,
                 # this is a point at (90, 40) in mercator
-                __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
-                'cA\x1f\x85\xeb\x91\xe5\x8fRA',
+                __geometry__=b'\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
+                             b'cA\x1f\x85\xeb\x91\xe5\x8fRA',
                 __properties__=dict(foo='bar'),
             )]
             post_process_data = [
@@ -130,8 +130,8 @@ class TestProcess(unittest.TestCase):
         features = [dict(
             __id__=1,
             # this is a point at (90, 40) in mercator
-            __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
-            'cA\x1f\x85\xeb\x91\xe5\x8fRA',
+            __geometry__=b'\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
+                         b'cA\x1f\x85\xeb\x91\xe5\x8fRA',
             __properties__=dict(foo='bar'),
         )]
         post_process_data = [

@@ -2,8 +2,7 @@ from botocore.exceptions import ClientError
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
-from io import StringIO
-from itertools import imap
+from io import BytesIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
@@ -19,7 +18,7 @@ from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from tilequeue.utils import time_block
 from time import gmtime
-from urllib import urlencode
+from urllib.parse import urlencode
 import zipfile
 
 
@@ -292,7 +291,7 @@ class RawrToiIntersector(object):
                     body.close()
                 except Exception:
                     pass
-            gzip_file_obj = StringIO(gzip_payload)
+            gzip_file_obj = BytesIO(gzip_payload)
             toi = load_set_from_gzipped_fp(gzip_file_obj)
             self.prev_toi = toi
             self.etag = resp['ETag']
@@ -388,7 +387,7 @@ class RawrAllWithParentsIntersector(object):
                         break
                     all_coord_ints.add(coord_int)
                     coord = coord.zoomBy(-1).container()
-        coords = imap(coord_unmarshall_int, all_coord_ints)
+        coords = list(map(coord_unmarshall_int, all_coord_ints))
         metrics = dict(
             total=len(all_coord_ints),
             hits=len(all_coord_ints),
@@ -531,7 +530,7 @@ def make_rawr_zip_payload(rawr_tile, date_time=None):
     if date_time is None:
         date_time = gmtime()[0:6]
 
-    buf = StringIO()
+    buf = BytesIO()
     with zipfile.ZipFile(buf, mode='w') as z:
         for fmt_data in rawr_tile.all_formatted_data:
             zip_info = zipfile.ZipInfo(fmt_data.name, date_time)

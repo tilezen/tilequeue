@@ -1,5 +1,6 @@
 from math import ceil
 from math import log
+import codecs
 import ujson as json
 import shapely.geometry
 import shapely.ops
@@ -42,7 +43,7 @@ class JsonFeatureCreator(object):
 
 def create_layer_feature_collection(features, precision):
     create_json_feature = JsonFeatureCreator(precision)
-    fs = map(create_json_feature, features)
+    fs = list(map(create_json_feature, features))
     feature_collection = dict(type='FeatureCollection', features=fs)
     return feature_collection
 
@@ -64,7 +65,7 @@ def encode_single_layer(out, features, zoom):
     """
     precision = precision_for_zoom(zoom)
     fs = create_layer_feature_collection(features, precision)
-    json.dump(fs, out)
+    json.dump(fs, codecs.getwriter('utf8')(out))
 
 
 def encode_multiple_layers(out, features_by_layer, zoom):
@@ -76,4 +77,4 @@ def encode_multiple_layers(out, features_by_layer, zoom):
     for layer_name, features in features_by_layer.items():
         fs = create_layer_feature_collection(features, precision)
         geojson[layer_name] = fs
-    json.dump(geojson, out)
+    json.dump(geojson, codecs.getwriter('utf8')(out))

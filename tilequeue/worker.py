@@ -1,6 +1,7 @@
 from collections import namedtuple
 from functools import reduce
 from operator import attrgetter
+from queue import Queue
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
 from tilequeue.log import MsgType
@@ -16,7 +17,6 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import convert_seconds_to_millis
 from tilequeue.utils import format_stacktrace_one_line
-import Queue
 import signal
 import sys
 import time

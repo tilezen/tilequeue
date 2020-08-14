@@ -89,7 +89,10 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
             for i, zri in enumerate(self.zoom_range_items):
                 toi_match = zri.in_toi is None or \
                             (coord in self.toi_set) == zri.in_toi
-                if zri.start <= coord.zoom < zri.end and toi_match:
+                if zri.start is not None and \
+                        zri.end is not None and \
+                        zri.start <= coord.zoom < zri.end and \
+                        toi_match:
                     groups[i].append(coord)
                     break
 
@@ -126,4 +129,4 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
         return self.queue_mapping[queue_id]
 
     def queues_in_priority_order(self):
-        return enumerate(self.queue_mapping)
+        return tuple(enumerate(self.queue_mapping))

@@ -90,7 +90,7 @@ class ExceptionWKBParser(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
-        return `self.value`
+        return repr(self.value)
     
 class GeomEncoder:
 
@@ -224,7 +224,7 @@ class GeomEncoder:
             for bits in traceback.format_exception(type,value,tb):
                 error = error + bits + '\n'
             del tb
-            print error
+            print(error)
             raise ExceptionWKBParser("Caught unhandled exception parsing Linestring: %s \n"\
                                      "Traceback: %s\n" % (str(self._current_string),error))
 

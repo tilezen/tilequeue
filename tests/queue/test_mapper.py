@@ -58,7 +58,7 @@ class MultipleQueueMapperTest(unittest.TestCase):
             '14/65536/65536',
             '15/0/0',
         )
-        coords = map(deserialize_coord, coord_strs)
+        coords = list(map(deserialize_coord, coord_strs))
         coord_groups = list(qm.group(coords))
         assert len(coord_groups) == 4
 
@@ -99,7 +99,7 @@ class MultipleQueueMapperTest(unittest.TestCase):
         coord_groups = list(qm.group(coords))
         self.assertEqual(0, len(coord_groups))
 
-        coords = map(deserialize_coord, ['20/0/0', '1/1/1', '16/0/0'])
+        coords = list(map(deserialize_coord, ['20/0/0', '1/1/1', '16/0/0']))
         coord_groups = list(qm.group(coords))
         self.assertEqual(1, len(coord_groups))
         self.assertEqual([deserialize_coord('1/1/1')], coord_groups[0].coords)

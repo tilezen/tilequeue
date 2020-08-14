@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
-from hashlib import md5
+import hashlib
 from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal
@@ -14,12 +14,11 @@ import random
 import threading
 import time
 from io import StringIO
-from urllib import urlencode
+from urllib.parse import urlencode
 
 
 def calc_hash(s):
-    m = md5.new()
-    m.update(s)
+    m = hashlib.md5(s.encode('utf-8'))
     md5_hash = m.hexdigest()
     return md5_hash[:5]
 

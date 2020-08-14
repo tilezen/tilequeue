@@ -9,7 +9,7 @@ import unittest
 class TestMetatile(unittest.TestCase):
 
     def test_make_metatiles_single(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [dict(tile=json, coord=Coordinate(0, 0, 0),
                       format=json_format, layer='all')]
         metatiles = make_metatiles(1, tiles)
@@ -22,7 +22,7 @@ class TestMetatile(unittest.TestCase):
             self.assertEqual(json, z.open('0/0/0.json').read())
 
     def test_make_metatiles_multiple(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [
             dict(tile=json, coord=Coordinate(0, 0, 0),
                  format=json_format, layer='all'),
@@ -45,7 +45,7 @@ class TestMetatile(unittest.TestCase):
         # coordinates. this is used for "512px" tiles as well as cutting out
         # z17+ tiles and storing them in the z16 (z15 if "512px") metatile.
 
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [
             # NOTE: coordinates are (y, x, z), possibly the most confusing
             # possible permutation.
@@ -77,7 +77,7 @@ class TestMetatile(unittest.TestCase):
             buf, json_format, offset=Coordinate(zoom=1, column=1, row=1)))
 
     def test_extract_metatiles_single(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tile = dict(tile=json, coord=Coordinate(0, 0, 0),
                     format=json_format, layer='all')
         metatiles = make_metatiles(1, [tile])
@@ -95,7 +95,7 @@ class TestMetatile(unittest.TestCase):
         # generated. to do this, we should try to make the tiles as similar
         # as possible across multiple runs.
 
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [dict(tile=json, coord=Coordinate(0, 0, 0),
                       format=json_format, layer='all')]
 

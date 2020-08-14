@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from collections import namedtuple
 from contextlib import closing
-from io import BytesIO
+from io import BytesIO, TextIOWrapper
 from datetime import datetime
 from edtf import parse_edtf
 from operator import attrgetter
@@ -15,7 +15,7 @@ import csv
 import json
 import os.path
 import psycopg2
-import Queue
+import queue
 import requests
 import shapely.geometry
 import shapely.ops
@@ -27,7 +27,7 @@ DATABASE_SRID = 3857
 
 
 def generate_csv_lines(requests_result):
-    for line in requests_result.iter_lines():
+    for line in requests_result.iter_lines(decode_unicode=True):
         if line:
             yield line
 
@@ -59,8 +59,7 @@ Neighbourhood = namedtuple(
 def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
     reader = csv.reader(csv_line_generator)
 
-    it = iter(reader)
-    header = it.next()
+    header = next(reader)
 
     lbl_lat_idx = header.index('lbl_latitude')
     lbl_lng_idx = header.index('lbl_longitude')
@@ -73,7 +72,7 @@ def parse_neighbourhood_meta_csv(csv_line_generator, placetype):
         lbl_lat_idx, lbl_lng_idx, name_idx, wof_id_idx, hash_idx,
         superseded_by_idx) + 1)
 
-    for row in it:
+    for row in reader:
         if len(row) < min_row_length:
             continue
 
@@ -466,8 +465,8 @@ def make_fetch_raw_filesystem_fn(data_path):
 
 def threaded_fetch(neighbourhood_metas, n_threads, fetch_raw_fn):
     queue_size = n_threads * 10
-    neighbourhood_input_queue = Queue.Queue(queue_size)
-    neighbourhood_output_queue = Queue.Queue(len(neighbourhood_metas))
+    neighbourhood_input_queue = queue.Queue(queue_size)
+    neighbourhood_output_queue = queue.Queue(len(neighbourhood_metas))
 
     stop = threading.Event()
 
@@ -568,8 +567,9 @@ class WofFilesystemNeighbourhoodFetcher(object):
         meta_fs_path = os.path.join(
             self.wof_data_path, 'meta', 'wof-%s-latest.csv' % placetype)
         with open(meta_fs_path) as fp:
+            decoded_fp = TextIOWrapper(fp, encoding='utf8')
             meta_neighbourhoods = list(
-                parse_neighbourhood_meta_csv(fp, placetype))
+                parse_neighbourhood_meta_csv(decoded_fp, placetype))
         return meta_neighbourhoods
 
     def fetch_meta_neighbourhoods(self):
@@ -937,12 +937,12 @@ class WofProcessor(object):
         # interest in parallel
 
         # queues to pass the results through the threads
-        prev_neighbourhoods_queue = Queue.Queue(1)
-        meta_neighbourhoods_queue = Queue.Queue(1)
-        meta_microhoods_queue = Queue.Queue(1)
-        meta_macrohoods_queue = Queue.Queue(1)
-        meta_boroughs_queue = Queue.Queue(1)
-        toi_queue = Queue.Queue(1)
+        prev_neighbourhoods_queue = queue.Queue(1)
+        meta_neighbourhoods_queue = queue.Queue(1)
+        meta_microhoods_queue = queue.Queue(1)
+        meta_macrohoods_queue = queue.Queue(1)
+        meta_boroughs_queue = queue.Queue(1)
+        toi_queue = queue.Queue(1)
 
         # functions for the threads
         def find_prev_neighbourhoods():
@@ -1196,7 +1196,7 @@ class WofProcessor(object):
                                  len(toi), len(expired_coord_ints)))
             toi_expired_coord_ints, _ = self.intersector(
                 expired_coord_ints, toi, self.zoom_until)
-            coords = map(coord_unmarshall_int, toi_expired_coord_ints)
+            coords = tuple(map(coord_unmarshall_int, toi_expired_coord_ints))
             self.logger.info('Intersection complete, will expire %d tiles' %
                              len(coords))
         else:

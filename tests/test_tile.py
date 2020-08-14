@@ -35,7 +35,7 @@ class TestSeedTiles(unittest.TestCase):
     def test_zoom_5(self):
         tiles = self._call_fut(5)
         # sorts by zoom (first), which is why group by zoom will work
-        tiles.sort()
+        tiles.sort(key=lambda t: (t.zoom, t.row, t.column))
         for zoom, tiles_per_zoom in groupby(tiles, attrgetter('zoom')):
             expected_num_tiles = pow(4, zoom)
             actual_num_tiles = len(list(tiles_per_zoom))
@@ -128,8 +128,8 @@ class TestTileGeneration(unittest.TestCase):
         from itertools import chain
         grandchildren = list(chain(*grandchildren_list))
         exp = children + grandchildren
-        actual.sort()
-        exp.sort()
+        actual.sort(key=lambda t: (t.zoom, t.row, t.column))
+        exp.sort(key=lambda t: (t.zoom, t.row, t.column))
         for actual_child, exp_child in zip(actual, exp):
             self.assertEqual(exp_child, actual_child)
 
