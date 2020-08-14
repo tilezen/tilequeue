@@ -230,7 +230,7 @@ class TestQueryRawr(RawrTestCase):
 
             props = read_rows[0]['__pois_properties__']
             self.assertEqual(expected_root_id,
-                              props.get('mz_transit_root_relation_id'))
+                             props.get('mz_transit_root_relation_id'))
 
         # the fixture code expects "raw" relations as if they come straight
         # from osm2pgsql. the structure is a little cumbersome, so this
