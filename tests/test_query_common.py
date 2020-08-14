@@ -93,7 +93,7 @@ class TestCommon(unittest.TestCase):
             modifier='business'))
 
         self.assertEqual(['road', 'US:I:Business', '70'],
-                          layer_props.get('mz_networks'))
+                         layer_props.get('mz_networks'))
 
     def test_business_and_spur_routes_existing(self):
         # check that, if the network is _already_ a US:I:Business, we don't
@@ -104,7 +104,7 @@ class TestCommon(unittest.TestCase):
             modifier='business'))
 
         self.assertEqual(['road', 'US:I:Business', '70'],
-                          layer_props.get('mz_networks'))
+                         layer_props.get('mz_networks'))
 
     def test_business_not_at_end(self):
         # check that, if the network contains 'Business', but it's not at the
@@ -115,4 +115,4 @@ class TestCommon(unittest.TestCase):
             modifier='business'))
 
         self.assertEqual(['road', 'US:I:Business:Loop', '70'],
-                          layer_props.get('mz_networks'))
+                         layer_props.get('mz_networks'))

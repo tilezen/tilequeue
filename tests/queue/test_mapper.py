@@ -78,7 +78,8 @@ class MultipleQueueMapperTest(unittest.TestCase):
 
         # common z10 parents are grouped together
         self.assertEqual(2, len(cg3.coords))
-        self.assertEqual(list(map(deserialize_coord, ['10/0/0', '15/0/0'])), cg3.coords)
+        self.assertEqual(list(map(deserialize_coord, ['10/0/0', '15/0/0'])),
+                         cg3.coords)
         self.assertEqual(hi_zoom_queue_id, cg3.queue_id)
 
         # different z10 parent grouped separately, even though it

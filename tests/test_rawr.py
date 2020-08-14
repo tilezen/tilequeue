@@ -32,7 +32,7 @@ class RawrS3SinkTest(unittest.TestCase):
         sink.tags = dict(prefix='foo', run_id='bar')
         sink(rawr_tile)
         self.assertEqual('prefix=foo&run_id=bar',
-                          sink.s3_client.put_props.get('Tagging'))
+                         sink.s3_client.put_props.get('Tagging'))
 
 
 class RawrKeyTest(unittest.TestCase):

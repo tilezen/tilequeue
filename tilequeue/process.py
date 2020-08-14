@@ -14,7 +14,6 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
-from tilequeue import utils
 from zope.dottedname.resolve import resolve
 
 

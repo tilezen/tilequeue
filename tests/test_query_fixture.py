@@ -38,7 +38,7 @@ class TestQueryFixture(FixtureTestCase):
         # query processing code expects WKB bytes in the __geometry__ column
         self.assertEqual(shape.wkb, read_row.get('__geometry__'))
         self.assertEqual({'min_zoom': 5},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
 
         # now, check that if the min zoom or geometry filters would exclude
         # the feature then it isn't returned.
@@ -118,7 +118,7 @@ class TestQueryFixture(FixtureTestCase):
 
             props = read_rows[0]['__pois_properties__']
             self.assertEqual(expected_root_id,
-                              props.get('mz_transit_root_relation_id'))
+                             props.get('mz_transit_root_relation_id'))
 
         # the fixture code expects "raw" relations as if they come straight
         # from osm2pgsql. the structure is a little cumbersome, so this
@@ -181,7 +181,7 @@ class TestQueryFixture(FixtureTestCase):
         # query processing code expects WKB bytes in the __geometry__ column
         self.assertEqual(shape.wkb, read_row.get('__geometry__'))
         self.assertEqual({'min_zoom': 5, 'source': 'testdata'},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
 
 
 class TestLabelPlacement(FixtureTestCase):
@@ -203,7 +203,7 @@ class TestLabelPlacement(FixtureTestCase):
         ]
 
         label_placement_layers = {
-            'polygon': set([layer_name]),
+            'polygon': {layer_name},
         }
         fetch = self._make(
             rows, min_zoom_fn, None, relations=[], layer_name=layer_name,

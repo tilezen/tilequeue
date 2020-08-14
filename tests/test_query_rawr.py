@@ -102,7 +102,7 @@ class TestQueryRawr(RawrTestCase):
         # query processing code expects WKB bytes in the __geometry__ column
         self.assertEqual(shape.wkb, read_row.get('__geometry__'))
         self.assertEqual({'min_zoom': 11},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
 
         # now, check that if the min zoom or geometry filters would exclude
         # the feature then it isn't returned.
@@ -301,9 +301,9 @@ class TestQueryRawr(RawrTestCase):
         # query processing code expects WKB bytes in the __geometry__ column
         self.assertEqual(shape.wkb, read_row.get('__geometry__'))
         self.assertEqual({'min_zoom': 11},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
         self.assertEqual({'source': 'testingquerysource'},
-                          read_row.get('__properties__'))
+                         read_row.get('__properties__'))
 
 
 class TestLabelPlacement(RawrTestCase):
@@ -334,7 +334,7 @@ class TestLabelPlacement(RawrTestCase):
         })
 
         label_placement_layers = {
-            'polygon': set([layer_name]),
+            'polygon': {layer_name},
         }
         fetch = self._make(
             min_zoom_fn, None, tables, tile_pyramid, layer_name=layer_name,
@@ -604,7 +604,7 @@ class TestMeta(RawrTestCase):
         # query processing code expects WKB bytes in the __geometry__ column
         self.assertEqual(shape.wkb, read_row.get('__geometry__'))
         self.assertEqual({'min_zoom': 11, 'barrier': 'gate'},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
 
     def test_meta_route(self):
         # test that we can use meta in the min zoom function to find out which
@@ -671,7 +671,7 @@ class TestMeta(RawrTestCase):
         read_row = read_rows[0]
         self.assertEqual(1, read_row.get('__id__'))
         self.assertEqual({'min_zoom': 11, 'highway': 'secondary'},
-                          read_row.get('__testlayer_properties__'))
+                         read_row.get('__testlayer_properties__'))
 
 
 class TestTileFootprint(unittest.TestCase):
