@@ -5,11 +5,11 @@
 #
 
 import sys
-import TileData_v4_pb2
+from . import TileData_v4_pb2
 
-if __name__ == "__main__" :
-    if len(sys.argv) != 2 :
-        print>>sys.stderr, "Usage:", sys.argv[0], "<osmtile>"
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage:", sys.argv[0], "<osmtile>")
         sys.exit(1)
 
     tile = TileData_v4_pb2.Data()
@@ -19,6 +19,6 @@ if __name__ == "__main__" :
         tile.ParseFromString(f.read()[4:])
         f.close()
     except IOError:
-        print sys.argv[1] + ": Could not open file.  Creating a new one."
+        print(sys.argv[1] + ": Could not open file.  Creating a new one.")
 
-    print tile
+    print(tile)

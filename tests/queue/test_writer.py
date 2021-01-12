@@ -24,5 +24,5 @@ class QueueWriterTest(unittest.TestCase):
         coords = [deserialize_coord('1/1/1'), deserialize_coord('15/1/1')]
         queue_writer = self.make_queue_writer()
         n_enqueued, n_inflight = queue_writer.enqueue_batch(coords)
-        self.assertEquals(2, n_enqueued)
-        self.assertEquals(0, n_inflight)
+        self.assertEqual(2, n_enqueued)
+        self.assertEqual(0, n_inflight)

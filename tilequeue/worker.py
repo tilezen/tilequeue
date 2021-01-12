@@ -1,6 +1,7 @@
 from collections import namedtuple
-from itertools import izip
+from functools import reduce
 from operator import attrgetter
+from queue import Queue
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
 from tilequeue.log import MsgType
@@ -16,7 +17,6 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import convert_seconds_to_millis
 from tilequeue.utils import format_stacktrace_one_line
-import Queue
 import signal
 import sys
 import time
@@ -230,7 +230,7 @@ class TileQueueReader(object):
                     queue_handle, coords, parent_tile)
 
                 all_coords_data = []
-                for coord, coord_handle in izip(coords, coord_handles):
+                for coord, coord_handle in zip(coords, coord_handles):
                     if coord.zoom > self.max_zoom:
                         self._reject_coord(coord, coord_handle, timing_state)
                         continue
@@ -511,7 +511,7 @@ class S3Storage(object):
                         n_stored += 1
                     else:
                         n_not_stored += 1
-                except Exception as e:
+                except Exception:
                     # it's important to wait for all async jobs to
                     # complete but we just keep a reference to the last
                     # exception it's unlikely that we would receive multiple

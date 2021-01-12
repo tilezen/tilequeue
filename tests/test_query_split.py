@@ -27,12 +27,11 @@ class TestQuerySplit(unittest.TestCase):
         splitter = make_split_data_fetcher(10, above, below)
 
         all_data = [above_data, below_data]
-        result = splitter.fetch_tiles(all_data)
+        result = list(splitter.fetch_tiles(all_data))
         expected = [(above, above_data), (below, below_data)]
 
-        # sadly, dicts aren't hashable and frozendict isn't a thing in the
-        # standard library, so seems easier to just sort the lists - although
-        # a defined sort order isn't available on these objects, they should
-        # be the same objects in memory, so even an id() based sorting should
-        # work.
-        self.assertEquals(sorted(expected), sorted(result))
+        self.assertEqual(len(expected), len(result))
+        self.assertEqual(
+            sorted(expected, key=lambda i: i[1]['coord'].zoom),
+            sorted(result, key=lambda i: i[1]['coord'].zoom)
+        )

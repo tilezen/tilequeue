@@ -30,11 +30,11 @@ class TestUniquifyGenerator(unittest.TestCase):
     def test_uniquify_generator(self):
         from tilequeue.command import uniquify_generator
         from itertools import cycle, islice, tee
-        gen = islice(cycle(xrange(5)), 10)
+        gen = islice(cycle(range(5)), 10)
         gen, gencopy = tee(gen)
         uniqued_gen = uniquify_generator(gencopy)
-        self.assertEqual(range(5) + range(5), list(gen))
-        self.assertEqual(range(5), list(uniqued_gen))
+        self.assertEqual(list(range(5)) + list(range(5)), list(gen))
+        self.assertEqual(list(range(5)), list(uniqued_gen))
 
     def test_tilequeue_explode_and_intersect(self):
         from tilequeue.command import explode_and_intersect
@@ -53,7 +53,7 @@ class TestUniquifyGenerator(unittest.TestCase):
         coord_ints = list(exploded)
         for coord_int in coord_ints:
             coord = coord_unmarshall_int(coord_int)
-            self.failUnless(coord.zoom > 10)
+            self.assertTrue(coord.zoom > 10)
 
         self.assertEqual(4, len(coord_ints))
 
@@ -139,6 +139,6 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         queue_names = ['q1']
         get_queue = make_get_queue_name_for_zoom(
             zoom_queue_map_cfg, queue_names)
-        zoom = long(7)
+        zoom = 7
         queue_name = get_queue(zoom)
         self.assertEqual(queue_name, 'q1')

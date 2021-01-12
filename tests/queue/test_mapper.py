@@ -14,21 +14,21 @@ class SingleQueueMapperTest(unittest.TestCase):
         queue_mapper = self.make_queue_mapper('queue_name', tile_queue_mock)
         coords = [deserialize_coord('1/1/1'), deserialize_coord('15/1/1')]
         coord_groups = list(queue_mapper.group(coords))
-        self.assertEquals(2, len(coord_groups))
+        self.assertEqual(2, len(coord_groups))
         cg1, cg2 = coord_groups
-        self.assertEquals('queue_name', cg1.queue_id)
-        self.assertEquals('queue_name', cg2.queue_id)
-        self.assertEquals(1, len(cg1.coords))
-        self.assertEquals(coords[0], cg1.coords[0])
-        self.assertEquals(1, len(cg2.coords))
-        self.assertEquals(coords[1], cg2.coords[0])
+        self.assertEqual('queue_name', cg1.queue_id)
+        self.assertEqual('queue_name', cg2.queue_id)
+        self.assertEqual(1, len(cg1.coords))
+        self.assertEqual(coords[0], cg1.coords[0])
+        self.assertEqual(1, len(cg2.coords))
+        self.assertEqual(coords[1], cg2.coords[0])
 
         self.assertIs(tile_queue_mock, queue_mapper.get_queue('queue_name'))
 
         qs = queue_mapper.queues_in_priority_order()
-        self.assertEquals(1, len(qs))
+        self.assertEqual(1, len(qs))
         qn, q = qs[0]
-        self.assertEquals('queue_name', qn)
+        self.assertEqual('queue_name', qn)
         self.assertIs(tile_queue_mock, q)
 
 
@@ -58,7 +58,7 @@ class MultipleQueueMapperTest(unittest.TestCase):
             '14/65536/65536',
             '15/0/0',
         )
-        coords = map(deserialize_coord, coord_strs)
+        coords = list(map(deserialize_coord, coord_strs))
         coord_groups = list(qm.group(coords))
         assert len(coord_groups) == 4
 
@@ -68,25 +68,25 @@ class MultipleQueueMapperTest(unittest.TestCase):
         hi_zoom_queue_id = 1
 
         # low zooms are grouped separately
-        self.assertEquals(1, len(cg1.coords))
-        self.assertEquals([deserialize_coord('1/1/1')], cg1.coords)
-        self.assertEquals(lo_zoom_queue_id, cg1.queue_id)
+        self.assertEqual(1, len(cg1.coords))
+        self.assertEqual([deserialize_coord('1/1/1')], cg1.coords)
+        self.assertEqual(lo_zoom_queue_id, cg1.queue_id)
 
-        self.assertEquals(1, len(cg2.coords))
-        self.assertEquals([deserialize_coord('9/0/0')], cg2.coords)
-        self.assertEquals(lo_zoom_queue_id, cg2.queue_id)
+        self.assertEqual(1, len(cg2.coords))
+        self.assertEqual([deserialize_coord('9/0/0')], cg2.coords)
+        self.assertEqual(lo_zoom_queue_id, cg2.queue_id)
 
         # common z10 parents are grouped together
-        self.assertEquals(2, len(cg3.coords))
-        self.assertEquals(map(deserialize_coord, ['10/0/0', '15/0/0']),
-                          cg3.coords)
-        self.assertEquals(hi_zoom_queue_id, cg3.queue_id)
+        self.assertEqual(2, len(cg3.coords))
+        self.assertEqual(list(map(deserialize_coord, ['10/0/0', '15/0/0'])),
+                         cg3.coords)
+        self.assertEqual(hi_zoom_queue_id, cg3.queue_id)
 
         # different z10 parent grouped separately, even though it
         # should be sent to the same queue
-        self.assertEquals(1, len(cg4.coords))
-        self.assertEquals([deserialize_coord('14/65536/65536')], cg4.coords)
-        self.assertEquals(hi_zoom_queue_id, cg4.queue_id)
+        self.assertEqual(1, len(cg4.coords))
+        self.assertEqual([deserialize_coord('14/65536/65536')], cg4.coords)
+        self.assertEqual(hi_zoom_queue_id, cg4.queue_id)
 
     def test_group_coord_out_of_range(self):
         from tilequeue.tile import deserialize_coord
@@ -98,13 +98,13 @@ class MultipleQueueMapperTest(unittest.TestCase):
 
         coords = [deserialize_coord('20/0/0')]
         coord_groups = list(qm.group(coords))
-        self.assertEquals(0, len(coord_groups))
+        self.assertEqual(0, len(coord_groups))
 
-        coords = map(deserialize_coord, ['20/0/0', '1/1/1', '16/0/0'])
+        coords = list(map(deserialize_coord, ['20/0/0', '1/1/1', '16/0/0']))
         coord_groups = list(qm.group(coords))
-        self.assertEquals(1, len(coord_groups))
-        self.assertEquals([deserialize_coord('1/1/1')], coord_groups[0].coords)
-        self.assertEquals(0, coord_groups[0].queue_id)
+        self.assertEqual(1, len(coord_groups))
+        self.assertEqual([deserialize_coord('1/1/1')], coord_groups[0].coords)
+        self.assertEqual(0, coord_groups[0].queue_id)
 
     def test_queue_mappings(self):
         q1 = object()
@@ -122,29 +122,29 @@ class MultipleQueueMapperTest(unittest.TestCase):
         self.assertIs(q2, qm.get_queue(q2_id))
         self.assertIs(q3, qm.get_queue(q3_id))
 
-        ordered_queue_result = list(qm.queues_in_priority_order())
-        self.assertEquals(3, len(ordered_queue_result))
+        ordered_queue_result = qm.queues_in_priority_order()
+        self.assertEqual(3, len(ordered_queue_result))
         r1_id, r1_q = ordered_queue_result[0]
         r2_id, r2_q = ordered_queue_result[1]
         r3_id, r3_q = ordered_queue_result[2]
         self.assertIs(q1, r1_q)
-        self.assertEquals(q1_id, r1_id)
+        self.assertEqual(q1_id, r1_id)
         self.assertIs(q2, r2_q)
-        self.assertEquals(q2_id, r2_id)
+        self.assertEqual(q2_id, r2_id)
         self.assertIs(q3, r3_q)
-        self.assertEquals(q3_id, r3_id)
+        self.assertEqual(q3_id, r3_id)
 
         from tilequeue.tile import deserialize_coord
 
         # verify that the queue ids line up with those that have zooms
         # specified
         coord_groups = list(qm.group([deserialize_coord('5/0/0')]))
-        self.assertEquals(1, len(coord_groups))
-        self.assertEquals(1, coord_groups[0].queue_id)
+        self.assertEqual(1, len(coord_groups))
+        self.assertEqual(1, coord_groups[0].queue_id)
 
         coord_groups = list(qm.group([deserialize_coord('15/0/0')]))
-        self.assertEquals(1, len(coord_groups))
-        self.assertEquals(2, coord_groups[0].queue_id)
+        self.assertEqual(1, len(coord_groups))
+        self.assertEqual(2, coord_groups[0].queue_id)
 
     def test_toi_priority(self):
         from tilequeue.queue.mapper import ZoomRangeAndZoomGroupQueueMapper
@@ -171,5 +171,5 @@ class MultipleQueueMapperTest(unittest.TestCase):
 
         for coord in (coord_in_toi, coord_not_in_toi):
             group = list(mapper.group([coord]))
-            self.assertEquals(1, len(group))
-            self.assertEquals(coord == coord_in_toi, group[0].queue_id == 0)
+            self.assertEqual(1, len(group))
+            self.assertEqual(coord == coord_in_toi, group[0].queue_id == 0)

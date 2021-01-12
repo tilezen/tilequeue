@@ -86,9 +86,9 @@ class MapboxVectorTileTest(unittest.TestCase):
                                    resolution))
                 self.assertIn('extents', kwargs)
                 actual_extent = kwargs['extents']
-                self.assertEquals(extent, actual_extent,
-                                  "Expected %r, not %r, for coord %r" %
-                                  (extent, actual_extent, coord))
+                self.assertEqual(extent, actual_extent,
+                                 "Expected %r, not %r, for coord %r" %
+                                 (extent, actual_extent, coord))
 
     def test_single_tile(self):
         self._check_metatile(1)

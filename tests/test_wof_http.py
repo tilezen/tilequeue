@@ -60,7 +60,7 @@ class _WofErrorHandler(http.BaseHTTPRequestHandler):
             self.wof_ctx.request_counts[self.path] = request_count + 1
             self.send_response(self.wof_ctx.failure_code)
             self.end_headers()
-            self.wfile.write("")
+            self.wfile.write(b"")
 
         else:
             self.send_response(200)
@@ -68,7 +68,7 @@ class _WofErrorHandler(http.BaseHTTPRequestHandler):
                 = self.wof_ctx.content.get(self.path, ('text/plain', ''))
             self.send_header('Content-Type', content_type)
             self.end_headers()
-            self.wfile.write(content)
+            self.wfile.write(content.encode('utf8'))
 
 
 # fake Redis object to keep the code happy
@@ -95,15 +95,15 @@ class _SimpleLogger(object):
 
     def info(self, msg):
         if self.verbose:
-            print "INFO: %s" % msg
+            print("INFO: %s" % msg)
 
     def warn(self, msg):
         if self.verbose:
-            print "WARN: %s" % msg
+            print("WARN: %s" % msg)
 
     def error(self, msg):
         if self.verbose:
-            print "ERROR: %s" % msg
+            print("ERROR: %s" % msg)
 
 
 class TestWofHttp(unittest.TestCase):
@@ -128,6 +128,13 @@ class TestWofHttp(unittest.TestCase):
                 "source,superseded_by,supersedes\n"
             ),
             '/meta/macrohoods.csv': (
+                'text/plain; charset=utf-8',
+                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
+                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
+                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
+                "source,superseded_by,supersedes\n"
+            ),
+            '/meta/boroughs.csv': (
                 'text/plain; charset=utf-8',
                 "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
                 "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"

@@ -1,8 +1,8 @@
 from collections import namedtuple
 from collections import defaultdict
-from itertools import izip
-from tilequeue.process import Source
 from enum import Enum
+from tilequeue.process import Source
+from typing import NamedTuple
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -45,8 +45,8 @@ class ShapeType(Enum):
 # determine the shape type from the raw WKB bytes. this means we don't have to
 # parse the WKB, which can be an expensive operation for large polygons.
 def wkb_shape_type(wkb):
-    reverse = ord(wkb[0]) == 1
-    type_bytes = map(ord, wkb[1:5])
+    reverse = (wkb[0] == 1)
+    type_bytes = list(wkb[1:5])
     if reverse:
         type_bytes.reverse()
     typ = type_bytes[3]
@@ -76,7 +76,7 @@ def deassoc(x):
     """
 
     pairs = [iter(x)] * 2
-    return dict(izip(*pairs))
+    return dict(zip(*pairs))
 
 
 # fixtures extend metadata to include ways and relations for the feature.
@@ -90,10 +90,9 @@ class Metadata(object):
         self.relations = relations
 
 
-class Table(namedtuple('Table', 'source rows')):
-    def __init__(self, source, rows):
-        super(Table, self).__init__(source, rows)
-        assert isinstance(source, Source)
+class Table(NamedTuple):
+    source: Source
+    rows: list
 
 
 def shape_type_lookup(shape):
@@ -103,15 +102,15 @@ def shape_type_lookup(shape):
     return typ.lower()
 
 
-# list of road types which are likely to have buses on them. used to cut
+# set of road types which are likely to have buses on them. used to cut
 # down the number of queries the SQL used to do for relations. although this
 # isn't necessary for fixtures, we replicate the logic to keep the behaviour
 # the same.
-BUS_ROADS = set([
+BUS_ROADS = {
     'motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary',
     'primary_link', 'secondary', 'secondary_link', 'tertiary',
     'tertiary_link', 'residential', 'unclassified', 'road', 'living_street',
-])
+}
 
 
 class Relation(object):
@@ -142,8 +141,8 @@ def mz_recurse_up_transit_relations(seed_relations, osm):
     all_relations = set()
 
     for rel_id in seed_relations:
-        front = set([rel_id])
-        seen = set([rel_id])
+        front = {rel_id}
+        seen = {rel_id}
         level = 0
 
         if root_relation_level == 0:
@@ -349,7 +348,7 @@ def name_keys(props):
     return name_keys
 
 
-_US_ROUTE_MODIFIERS = set([
+_US_ROUTE_MODIFIERS = {
     'Business',
     'Spur',
     'Truck',
@@ -359,7 +358,7 @@ _US_ROUTE_MODIFIERS = set([
     'Historic',
     'Toll',
     'Scenic',
-])
+}
 
 
 # properties for a feature (fid, shape, props) in layer `layer_name` at zoom

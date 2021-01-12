@@ -1,15 +1,15 @@
 from tilequeue.metatile import make_metatiles, extract_metatile
 from tilequeue.format import json_format, zip_format, topojson_format
+from io import BytesIO
 from ModestMaps.Core import Coordinate
 import zipfile
-import cStringIO as StringIO
 import unittest
 
 
 class TestMetatile(unittest.TestCase):
 
     def test_make_metatiles_single(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [dict(tile=json, coord=Coordinate(0, 0, 0),
                       format=json_format, layer='all')]
         metatiles = make_metatiles(1, tiles)
@@ -17,12 +17,12 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(Coordinate(0, 0, 0), metatiles[0]['coord'])
         self.assertEqual('all', metatiles[0]['layer'])
         self.assertEqual(zip_format, metatiles[0]['format'])
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('0/0/0.json').read())
 
     def test_make_metatiles_multiple(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [
             dict(tile=json, coord=Coordinate(0, 0, 0),
                  format=json_format, layer='all'),
@@ -35,7 +35,7 @@ class TestMetatile(unittest.TestCase):
         self.assertEqual(Coordinate(0, 0, 0), metatiles[0]['coord'])
         self.assertEqual('all', metatiles[0]['layer'])
         self.assertEqual(zip_format, metatiles[0]['format'])
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('0/0/0.json').read())
             self.assertEqual(json, z.open('0/0/0.topojson').read())
@@ -45,7 +45,7 @@ class TestMetatile(unittest.TestCase):
         # coordinates. this is used for "512px" tiles as well as cutting out
         # z17+ tiles and storing them in the z16 (z15 if "512px") metatile.
 
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [
             # NOTE: coordinates are (y, x, z), possibly the most confusing
             # possible permutation.
@@ -65,7 +65,7 @@ class TestMetatile(unittest.TestCase):
 
         self.assertEqual('all', meta['layer'])
         self.assertEqual(zip_format, meta['format'])
-        buf = StringIO.StringIO(meta['tile'])
+        buf = BytesIO(meta['tile'])
         with zipfile.ZipFile(buf, mode='r') as z:
             self.assertEqual(json, z.open('1/0/1.json').read())
             self.assertEqual(json, z.open('1/1/1.json').read())
@@ -77,12 +77,12 @@ class TestMetatile(unittest.TestCase):
             buf, json_format, offset=Coordinate(zoom=1, column=1, row=1)))
 
     def test_extract_metatiles_single(self):
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tile = dict(tile=json, coord=Coordinate(0, 0, 0),
                     format=json_format, layer='all')
         metatiles = make_metatiles(1, [tile])
         self.assertEqual(1, len(metatiles))
-        buf = StringIO.StringIO(metatiles[0]['tile'])
+        buf = BytesIO(metatiles[0]['tile'])
         extracted = extract_metatile(buf, json_format)
         self.assertEqual(json, extracted)
 
@@ -95,7 +95,7 @@ class TestMetatile(unittest.TestCase):
         # generated. to do this, we should try to make the tiles as similar
         # as possible across multiple runs.
 
-        json = "{\"json\":true}"
+        json = b"{\"json\":true}"
         tiles = [dict(tile=json, coord=Coordinate(0, 0, 0),
                       format=json_format, layer='all')]
 

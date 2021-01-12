@@ -79,8 +79,8 @@ class TestProcess(unittest.TestCase):
             features = [dict(
                 __id__=1,
                 # this is a point at (90, 40) in mercator
-                __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
-                'cA\x1f\x85\xeb\x91\xe5\x8fRA',
+                __geometry__=b'\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
+                             b'cA\x1f\x85\xeb\x91\xe5\x8fRA',
                 __properties__=dict(foo='bar'),
             )]
             post_process_data = [
@@ -130,8 +130,8 @@ class TestProcess(unittest.TestCase):
         features = [dict(
             __id__=1,
             # this is a point at (90, 40) in mercator
-            __geometry__='\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
-            'cA\x1f\x85\xeb\x91\xe5\x8fRA',
+            __geometry__=b'\x01\x01\x00\x00\x00\xd7\xa3pE\xf8\x1b' + \
+                         b'cA\x1f\x85\xeb\x91\xe5\x8fRA',
             __properties__=dict(foo='bar'),
         )]
         post_process_data = [
@@ -244,13 +244,13 @@ class TestCalculateCutZooms(unittest.TestCase):
         sizes = calculate_sizes_by_zoom(
             Coordinate(zoom=13, column=0, row=0),
             metatile_zoom, cfg_tile_sizes, max_zoom)
-        self.assertEquals(sizes, {16: [512, 256]})
+        self.assertEqual(sizes, {16: [512, 256]})
 
         # zoom 12 (nominal 15) should be 512 only
         sizes = calculate_sizes_by_zoom(
             Coordinate(zoom=12, column=0, row=0),
             metatile_zoom, cfg_tile_sizes, max_zoom)
-        self.assertEquals(sizes, {15: [512]})
+        self.assertEqual(sizes, {15: [512]})
 
     def test_mid_zoom(self):
         from tilequeue.process import calculate_sizes_by_zoom
@@ -322,7 +322,7 @@ class TestCalculateCutZooms(unittest.TestCase):
 
         # with a 1x1 metatile (i.e: not really a metatile) then we just get
         # the configured size.
-        for z in xrange(0, 3):
+        for z in range(0, 3):
             meta_sz = 1 << z
             tile_sz = 256 * meta_sz
             self.assertEqual({z: [tile_sz]}, _calc(meta_sz, [tile_sz]))
@@ -340,18 +340,18 @@ class TestMetatileChildrenWithSize(unittest.TestCase):
         from tilequeue.process import metatile_children_with_size
         coord = Coordinate(zoom=0, column=0, row=0)
         result = metatile_children_with_size(coord, 1, 1, 256)
-        self.assertEqual(set([
+        self.assertEqual({
             Coordinate(zoom=1, column=0, row=0),
             Coordinate(zoom=1, column=1, row=0),
             Coordinate(zoom=1, column=0, row=1),
             Coordinate(zoom=1, column=1, row=1),
-        ]), set(result))
+        }, set(result))
 
     def test_8x8_512_tile(self):
         from tilequeue.process import metatile_children_with_size
         coord = Coordinate(zoom=0, column=0, row=0)
         result = metatile_children_with_size(coord, 3, 3, 512)
-        self.assertEqual(set([
+        self.assertEqual({
             Coordinate(zoom=2, column=0, row=0),
             Coordinate(zoom=2, column=1, row=0),
             Coordinate(zoom=2, column=2, row=0),
@@ -368,15 +368,15 @@ class TestMetatileChildrenWithSize(unittest.TestCase):
             Coordinate(zoom=2, column=1, row=3),
             Coordinate(zoom=2, column=2, row=3),
             Coordinate(zoom=2, column=3, row=3),
-        ]), set(result))
+        }, set(result))
 
     def test_2x2_tile_nominal_1(self):
         from tilequeue.process import metatile_children_with_size
         coord = Coordinate(zoom=0, column=0, row=0)
         result = metatile_children_with_size(coord, 1, 0, 256)
-        self.assertEqual(set([
+        self.assertEqual({
             Coordinate(zoom=0, column=0, row=0),
-        ]), set(result))
+        }, set(result))
 
 
 class TestCalculateCutCoords(unittest.TestCase):
@@ -439,8 +439,8 @@ class TestCalculateCutCoords(unittest.TestCase):
         cut_coords = calculate_cut_coords_by_zoom(
             _c(max_zoom - metatile_zoom, 0, 0), metatile_zoom, [512],
             max_zoom - metatile_zoom)
-        self.assertEqual([max_zoom], cut_coords.keys())
-        self.assertEqual(set([
+        self.assertEqual({max_zoom}, cut_coords.keys())
+        self.assertEqual({
             # some 512 tiles
             _c(max_zoom - 1, 0, 0),
             _c(max_zoom - 1, 0, 1),
@@ -464,7 +464,7 @@ class TestCalculateCutCoords(unittest.TestCase):
             _c(max_zoom, 1, 3),
             _c(max_zoom, 2, 3),
             _c(max_zoom, 3, 3),
-        ]), set(cut_coords[max_zoom]))
+        }, set(cut_coords[max_zoom]))
 
     def test_8x8_512_min(self):
         from tilequeue.process import calculate_cut_coords_by_zoom
@@ -477,23 +477,23 @@ class TestCalculateCutCoords(unittest.TestCase):
         metatile_zoom = 3
         cut_coords = calculate_cut_coords_by_zoom(
             _c(0, 0, 0), metatile_zoom, [512], 16 - metatile_zoom)
-        self.assertEqual([1, 2, 3], cut_coords.keys())
+        self.assertEqual({1, 2, 3}, cut_coords.keys())
 
         # we get 1x1 nominal zoom 1 tile
-        self.assertEqual(set([
+        self.assertEqual({
             _c(0, 0, 0),
-        ]), set(cut_coords[1]))
+        }, set(cut_coords[1]))
 
         # we get 2x2 nominal zoom 2 tiles
-        self.assertEqual(set([
+        self.assertEqual({
             _c(1, 0, 0),
             _c(1, 0, 1),
             _c(1, 1, 0),
             _c(1, 1, 1),
-        ]), set(cut_coords[2]))
+        }, set(cut_coords[2]))
 
         # we get 4x4 nominal zoom 3 tiles
-        self.assertEqual(set([
+        self.assertEqual({
             _c(2, 0, 0),
             _c(2, 0, 1),
             _c(2, 0, 2),
@@ -510,7 +510,7 @@ class TestCalculateCutCoords(unittest.TestCase):
             _c(2, 3, 1),
             _c(2, 3, 2),
             _c(2, 3, 3),
-        ]), set(cut_coords[3]))
+        }, set(cut_coords[3]))
 
 
 def _only_zoom(ctx, zoom):

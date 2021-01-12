@@ -135,7 +135,7 @@ class Configuration(object):
         self.tile_sizes = self._cfg('metatile tile-sizes')
         if self.tile_sizes is None:
             self.tile_sizes = [256 * (1 << z) for z in
-                               reversed(xrange(0, self.metatile_zoom + 1))]
+                               reversed(range(0, self.metatile_zoom + 1))]
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()

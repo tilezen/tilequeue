@@ -2,7 +2,7 @@ from __future__ import division
 
 from collections import defaultdict
 from collections import namedtuple
-from cStringIO import StringIO
+from io import BytesIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
@@ -14,7 +14,6 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
-from tilequeue import utils
 from zope.dottedname.resolve import resolve
 
 
@@ -44,7 +43,7 @@ def _sizeof(val):
     elif isinstance(val, list):
         for v in val:
             size += _sizeof(v)
-    elif isinstance(val, (str, bytes, unicode)):
+    elif isinstance(val, (str, bytes)):
         size += len(val)
     else:
         size += getsizeof(val)
@@ -202,7 +201,7 @@ def _create_formatted_tile(
         meters_per_pixel_dim, buffer_cfg)
 
     # use the formatter to generate the tile
-    tile_data_file = StringIO()
+    tile_data_file = BytesIO()
     format.format_tile(
         tile_data_file, transformed_feature_layers, nominal_zoom,
         unpadded_bounds, unpadded_bounds_lnglat, scale)
@@ -335,13 +334,7 @@ def process_coord_no_format(
                 props['mz_label_placement'] = label
             feature_size += len('__label__') + _sizeof(label)
 
-            # first ensure that all strings are utf-8 encoded
-            # it would be better for it all to be unicode instead, but
-            # some downstream transforms / formatters might be
-            # expecting utf-8
-            row = utils.encode_utf8(row)
-
-            query_props = row.pop('__properties__')
+            query_props = row.pop('__properties__', None)
             feature_size += len('__properties__') + _sizeof(query_props)
 
             # TODO:
@@ -721,7 +714,7 @@ def calculate_cut_coords_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
 
     cut_coords_by_zoom = {}
-    for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
+    for nominal_zoom, tile_sizes in tile_sizes_by_zoom.items():
         cut_coords = []
         for tile_size in tile_sizes:
             cut_coords.extend(metatile_children_with_size(

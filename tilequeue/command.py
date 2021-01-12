@@ -5,6 +5,7 @@ from contextlib import closing
 from itertools import chain
 from ModestMaps.Core import Coordinate
 from multiprocessing.pool import ThreadPool
+from queue import Queue
 from random import randrange
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
@@ -44,7 +45,7 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import TileQueueReader
 from tilequeue.worker import TileQueueWriter
-from urllib2 import urlopen
+from urllib.request import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
 import datetime
@@ -54,7 +55,6 @@ import multiprocessing
 import operator
 import os
 import os.path
-import Queue
 import signal
 import sys
 import threading
@@ -97,7 +97,7 @@ class GetSqsQueueNameForZoom(object):
         self.zoom_queue_table = zoom_queue_table
 
     def __call__(self, zoom):
-        assert isinstance(zoom, (int, long))
+        assert isinstance(zoom, int)
         assert 0 <= zoom <= 20
         result = self.zoom_queue_table.get(zoom)
         assert result is not None, 'No queue name found for zoom: %d' % zoom
@@ -476,7 +476,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
     resources_cfg = post_process_item.get('resources', {})
     resources = {}
 
-    for resource_name, resource_cfg in resources_cfg.iteritems():
+    for resource_name, resource_cfg in resources_cfg.items():
         resource_type = resource_cfg.get('type')
         init_fn_name = resource_cfg.get('init_fn')
 
@@ -1106,16 +1106,16 @@ def tilequeue_enqueue_random_pyramids(cfg, peripherals, args):
     rawr_enqueuer = make_rawr_enqueuer_from_cfg(
         cfg, logger, stats_handler, peripherals.msg_marshaller)
 
-    for grid_y in xrange(gridsize):
+    for grid_y in range(gridsize):
         tile_y_min = int(grid_y * scale_factor)
         tile_y_max = int((grid_y+1) * scale_factor)
-        for grid_x in xrange(gridsize):
+        for grid_x in range(gridsize):
             tile_x_min = int(grid_x * scale_factor)
             tile_x_max = int((grid_x+1) * scale_factor)
 
             cell_samples = set()
 
-            for i in xrange(samples_per_cell):
+            for i in range(samples_per_cell):
 
                 while True:
                     rand_x = randrange(tile_x_min, tile_x_max)
@@ -1297,7 +1297,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     new_toi = set()
     for coord_int, count in sorted(
-            redshift_results.iteritems(),
+            redshift_results.items(),
             key=operator.itemgetter(1),
             reverse=True)[:cutoff_tiles]:
         if count >= cutoff_requests:
@@ -1328,8 +1328,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         elif 'file' in info:
             with open(info['file'], 'r') as f:
                 immortal_tiles.update(
-                    coord_marshall_int(deserialize_coord(l.strip()))
-                    for l in f
+                    coord_marshall_int(deserialize_coord(line.strip()))
+                    for line in f
                 )
         elif 'bucket' in info:
             from boto import connect_s3
@@ -1555,7 +1555,7 @@ def tilequeue_stuck_tiles(cfg, peripherals):
     for coord in store.list_tiles(format, layer):
         coord_int = coord_marshall_int(coord)
         if coord_int not in toi:
-            print serialize_coord(coord)
+            print(serialize_coord(coord))
 
 
 def tilequeue_delete_stuck_tiles(cfg, peripherals):
@@ -1688,13 +1688,13 @@ class FakeStatsTimer(object):
 
 def tilequeue_process_tile(cfg, peripherals, args):
     if not args.coord:
-        print >> sys.stderr, 'Missing coord argument'
+        print('Missing coord argument', file=sys.stderr)
         sys.exit(1)
 
     coord_str = args.coord
     coord = deserialize_coord(coord_str)
     if not coord:
-        print >> sys.stderr, 'Invalid coordinate: %s' % coord_str
+        print('Invalid coordinate: %s' % coord_str, file=sys.stderr)
         sys.exit(2)
 
     with open(cfg.query_cfg) as query_cfg_fp:
@@ -1723,7 +1723,7 @@ def tilequeue_process_tile(cfg, peripherals, args):
     assert json_tile
     json_tile = json_tile[0]
     tile_data = json_tile['tile']
-    print tile_data
+    print(tile_data)
 
 
 def tilequeue_rawr_enqueue(cfg, args):
@@ -1944,8 +1944,8 @@ def tilequeue_rawr_seed_all(cfg, peripherals):
     # if we handle the TOI okay then we should be okay with z10. if the group
     # by zoom is much larger, then it might start running into problems.
     coords = []
-    for x in xrange(0, max_coord):
-        for y in xrange(0, max_coord):
+    for x in range(0, max_coord):
+        for y in range(0, max_coord):
             coords.append(Coordinate(zoom=group_by_zoom, column=x, row=y))
 
     _tilequeue_rawr_seed(cfg, peripherals, coords)
@@ -2061,13 +2061,13 @@ def find_job_coords_for(coord, target_zoom):
     xmax = coord.column
     ymin = coord.row
     ymax = coord.row
-    for i in xrange(target_zoom - coord.zoom):
+    for i in range(target_zoom - coord.zoom):
         xmin *= 2
         ymin *= 2
         xmax = xmax * 2 + 1
         ymax = ymax * 2 + 1
-    for y in xrange(ymin, ymax+1):
-        for x in xrange(xmin, xmax+1):
+    for y in range(ymin, ymax+1):
+        for x in range(xmin, xmax+1):
             yield Coordinate(zoom=10, column=x, row=y)
 
 

@@ -31,8 +31,8 @@ class RawrS3SinkTest(unittest.TestCase):
         self.assertIsNone(sink.s3_client.put_props.get('Tagging'))
         sink.tags = dict(prefix='foo', run_id='bar')
         sink(rawr_tile)
-        self.assertEquals('prefix=foo&run_id=bar',
-                          sink.s3_client.put_props.get('Tagging'))
+        self.assertEqual('prefix=foo&run_id=bar',
+                         sink.s3_client.put_props.get('Tagging'))
 
 
 class RawrKeyTest(unittest.TestCase):

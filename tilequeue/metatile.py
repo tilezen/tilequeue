@@ -1,6 +1,6 @@
 import zipfile
-import cStringIO as StringIO
 from collections import defaultdict
+from io import BytesIO
 from tilequeue.format import zip_format
 from time import gmtime
 
@@ -24,7 +24,7 @@ def make_multi_metatile(parent, tiles, date_time=None):
 
     layer = tiles[0]['layer']
 
-    buf = StringIO.StringIO()
+    buf = BytesIO()
     with zipfile.ZipFile(buf, mode='w') as z:
         for tile in tiles:
             assert tile['layer'] == layer
@@ -108,7 +108,7 @@ def make_metatiles(size, tiles, date_time=None):
         groups[key].append(tile)
 
     metatiles = []
-    for group in groups.itervalues():
+    for group in groups.values():
         parent = _parent_tile(t['coord'] for t in group)
         metatiles.extend(make_multi_metatile(parent, group, date_time))
 
@@ -168,14 +168,14 @@ def metatiles_are_equal(tile_data_1, tile_data_2):
     """
 
     try:
-        buf_1 = StringIO.StringIO(tile_data_1)
-        buf_2 = StringIO.StringIO(tile_data_2)
+        buf_1 = BytesIO(tile_data_1)
+        buf_2 = BytesIO(tile_data_2)
 
         with zipfile.ZipFile(buf_1, mode='r') as zip_1:
             with zipfile.ZipFile(buf_2, mode='r') as zip_2:
                 return _metatile_contents_equal(zip_1, zip_2)
 
-    except (StandardError, zipfile.BadZipFile, zipfile.LargeZipFile):
+    except (Exception, zipfile.BadZipFile, zipfile.LargeZipFile):
         # errors, such as files not being proper zip files, or missing
         # some attributes or contents that we expect, are treated as not
         # equal.
