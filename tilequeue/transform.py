@@ -110,7 +110,10 @@ def _intersect_multipolygon(shape, tile_bounds, clip_bounds):
     for poly in shape.geoms:
         if tile_bounds.intersects(poly):
             if not clip_bounds.contains(poly):
-                poly = clip_bounds.intersection(poly)
+                try:
+                    poly = clip_bounds.intersection(poly)
+                except shapely.errors.TopologicalError:
+                    continue
 
             # the intersection operation can make the resulting polygon
             # invalid. including it in a MultiPolygon would make that
