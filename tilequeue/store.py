@@ -14,7 +14,7 @@ import random
 import threading
 import time
 from io import StringIO
-from urllib.parse import urlencode
+from six.moves.urllib.parse import urlencode
 
 
 def calc_hash(s):

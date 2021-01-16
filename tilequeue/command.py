@@ -1,11 +1,12 @@
 from __future__ import absolute_import
+from __future__ import print_function
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
 from ModestMaps.Core import Coordinate
 from multiprocessing.pool import ThreadPool
-from queue import Queue
+from six.moves.queue import Queue
 from random import randrange
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
@@ -45,7 +46,7 @@ from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import TileQueueReader
 from tilequeue.worker import TileQueueWriter
-from urllib.request import urlopen
+from six.moves.urllib.request import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
 import datetime

@@ -2,7 +2,6 @@ from collections import namedtuple
 from collections import defaultdict
 from enum import Enum
 from tilequeue.process import Source
-from typing import NamedTuple
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -90,9 +89,10 @@ class Metadata(object):
         self.relations = relations
 
 
-class Table(NamedTuple):
-    source: Source
-    rows: list
+class Table(namedtuple('Table', 'source rows')):
+    def __init__(self, source, rows):
+        super(Table, self).__init__(source, rows)
+        assert isinstance(source, Source)
 
 
 def shape_type_lookup(shape):
