@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from collections import namedtuple
 from contextlib import closing
-from io import BytesIO, TextIOWrapper
+from six import BytesIO
 from datetime import datetime
 from edtf import parse_edtf
 from operator import attrgetter
@@ -12,6 +12,7 @@ from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import mercator_point_to_coord
 from tilequeue.tile import reproject_lnglat_to_mercator
 import csv
+import codecs
 import json
 import os.path
 import psycopg2
@@ -566,8 +567,8 @@ class WofFilesystemNeighbourhoodFetcher(object):
     def _fetch_meta_neighbourhoods(self, placetype):
         meta_fs_path = os.path.join(
             self.wof_data_path, 'meta', 'wof-%s-latest.csv' % placetype)
-        with open(meta_fs_path) as fp:
-            decoded_fp = TextIOWrapper(fp, encoding='utf8')
+        with open(meta_fs_path, 'rb') as fp:
+            decoded_fp = codecs.getreader('utf-8')(fp)
             meta_neighbourhoods = list(
                 parse_neighbourhood_meta_csv(decoded_fp, placetype))
         return meta_neighbourhoods

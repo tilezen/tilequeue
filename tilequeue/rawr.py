@@ -2,7 +2,7 @@ from botocore.exceptions import ClientError
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
-from io import BytesIO
+from six import BytesIO
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
 from raw_tiles.tile import Tile
@@ -18,7 +18,7 @@ from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from tilequeue.utils import time_block
 from time import gmtime
-from urllib.parse import urlencode
+from six.moves.urllib.parse import urlencode
 import zipfile
 
 
