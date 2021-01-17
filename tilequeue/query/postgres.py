@@ -7,6 +7,11 @@ from tilequeue.transform import calculate_padded_bounds
 import sys
 
 
+# http://python3porting.com/differences.html#buffer
+if sys.version_info > (3,):
+    buffer = memoryview
+
+
 TemplateSpec = namedtuple('TemplateSpec', 'template start_zoom end_zoom')
 DataSource = namedtuple('DataSource', 'name template_specs')
 
