@@ -1,6 +1,6 @@
 import zipfile
 from collections import defaultdict
-from io import BytesIO
+from six import BytesIO
 from tilequeue.format import zip_format
 from time import gmtime
 

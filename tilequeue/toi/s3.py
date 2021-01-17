@@ -1,5 +1,5 @@
 import boto
-from io import BytesIO
+from six import BytesIO
 from tilequeue.toi import (
     load_set_from_gzipped_fp,
     save_set_to_gzipped_fp,

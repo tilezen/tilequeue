@@ -2,7 +2,7 @@ from __future__ import division
 
 from collections import defaultdict
 from collections import namedtuple
-from io import BytesIO
+from six import BytesIO
 from shapely.geometry import MultiPolygon
 from shapely import geometry
 from shapely.wkb import loads
