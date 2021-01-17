@@ -13,7 +13,7 @@ class SingleMessageMarshallerTest(unittest.TestCase):
 
     def test_marshall_multiple_coords(self):
         from tilequeue.tile import deserialize_coord
-        coords = tuple(map(deserialize_coord, ('1/1/1', '2/2/2')))
+        coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
         with self.assertRaises(AssertionError):
             self.msg_marshaller.marshall(coords)
 
@@ -49,7 +49,7 @@ class MultipleMessageMarshallerTest(unittest.TestCase):
 
     def test_marshall_multiple_coords(self):
         from tilequeue.tile import deserialize_coord
-        coords = tuple(map(deserialize_coord, ('1/1/1', '2/2/2')))
+        coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
         actual = self.msg_marshaller.marshall(coords)
         self.assertEqual('1/1/1,2/2/2', actual)
 
@@ -120,7 +120,7 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         from tilequeue.queue.message import QueueHandle
         queue_id = 1
         queue_handle = QueueHandle(queue_id, 'handle')
-        coords = tuple(map(deserialize_coord, ('1/1/1', '2/2/2')))
+        coords = map(deserialize_coord, ('1/1/1', '2/2/2'))
         parent_tile = deserialize_coord('1/1/1')
         self._assert_track_done(coords, queue_handle, parent_tile)
 
@@ -129,7 +129,7 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         from tilequeue.queue.message import QueueHandle
         queue_id = 1
         queue_handle = QueueHandle(queue_id, 'handle')
-        coords = tuple(map(deserialize_coord, ('2/2/3', '2/2/2')))
+        coords = map(deserialize_coord, ('2/2/3', '2/2/2'))
         parent_tile = deserialize_coord('1/1/1')
         self._assert_track_done(coords, queue_handle, parent_tile)
 
@@ -153,7 +153,7 @@ class MultipleMessageTrackerTest(unittest.TestCase):
         from tilequeue.queue.message import QueueHandle
         queue_id = 1
         queue_handle = QueueHandle(queue_id, 'handle')
-        coords = tuple(map(deserialize_coord, ('2/2/2', '2/2/2')))
+        coords = map(deserialize_coord, ('2/2/2', '2/2/2'))
         parent_tile = deserialize_coord('1/1/1')
 
         with self.assertRaises(AssertionError):

@@ -2,9 +2,9 @@
 Unit tests for `tilequeue.queue.file`.
 '''
 
-from io import BytesIO
 from ModestMaps.Core import Coordinate
 import unittest
+import StringIO
 
 
 class TestQueue(unittest.TestCase):
@@ -25,18 +25,17 @@ class TestQueue(unittest.TestCase):
             for (z, c, r) in self.test_tile_coords]
         self.tile_coords_str = '\n'.join(
             map(tile.serialize_coord, self.test_tile_objs)) + '\n'
-        self.tile_coords_str = self.tile_coords_str.encode('utf8')
-        self.tiles_fp = BytesIO()
+        self.tiles_fp = StringIO.StringIO()
         self.queue = OutputFileQueue(self.tiles_fp)
 
     def test_read(self):
         from tilequeue.tile import serialize_coord
-        self._write_bytes_to_file(self.tile_coords_str)
+        self._write_str_to_file(self.tile_coords_str)
 
         # Test `.read() for multiple records.`
         actual_coord_strs = [
             msg.payload for msg in self.queue.read()]
-        expected = list(map(serialize_coord, self.test_tile_objs))
+        expected = map(serialize_coord, self.test_tile_objs)
         self.assertEqual(
             actual_coord_strs, expected, 'Reading multiple records failed')
 
@@ -61,12 +60,12 @@ class TestQueue(unittest.TestCase):
             'Contents of file do not match expected')
 
     def test_clear(self):
-        self._write_bytes_to_file(self.tile_coords_str)
+        self._write_str_to_file(self.tile_coords_str)
         self.assertEqual(
             self.queue.clear(), -1,
             'Return value of `clear()` does not match expected.')
         self.assertEqual(
-            self.tiles_fp.getvalue(), b'', '`clear()` did not clear the file!')
+            self.tiles_fp.getvalue(), '', '`clear()` did not clear the file!')
 
     def test_close(self):
         self.assertFalse(
@@ -76,6 +75,6 @@ class TestQueue(unittest.TestCase):
         self.queue.close()
         self.assertTrue(self.tiles_fp.closed, 'File pointer was not closed!')
 
-    def _write_bytes_to_file(self, data):
-        self.tiles_fp.write(data)
+    def _write_str_to_file(self, string):
+        self.tiles_fp.write(string)
         self.tiles_fp.seek(0)

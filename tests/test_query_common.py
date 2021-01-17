@@ -7,7 +7,7 @@ class TestCommon(unittest.TestCase):
         from tilequeue.query.common import ShapeType
 
         def _test(expects, inputs):
-            self.assertEqual(set(expects), ShapeType.parse_set(inputs))
+            self.assertEquals(set(expects), ShapeType.parse_set(inputs))
 
         # basic types
         _test([ShapeType.point], ['point'])
@@ -38,7 +38,7 @@ class TestCommon(unittest.TestCase):
         ])
 
         # should return None rather than an empty set.
-        self.assertEqual(None, ShapeType.parse_set([]))
+        self.assertEquals(None, ShapeType.parse_set([]))
 
         # should throw KeyError if the name isn't recognised
         with self.assertRaises(KeyError):
@@ -92,8 +92,8 @@ class TestCommon(unittest.TestCase):
             type='route', route='road', network='US:I', ref='70',
             modifier='business'))
 
-        self.assertEqual(['road', 'US:I:Business', '70'],
-                         layer_props.get('mz_networks'))
+        self.assertEquals(['road', 'US:I:Business', '70'],
+                          layer_props.get('mz_networks'))
 
     def test_business_and_spur_routes_existing(self):
         # check that, if the network is _already_ a US:I:Business, we don't
@@ -103,8 +103,8 @@ class TestCommon(unittest.TestCase):
             type='route', route='road', network='US:I:Business', ref='70',
             modifier='business'))
 
-        self.assertEqual(['road', 'US:I:Business', '70'],
-                         layer_props.get('mz_networks'))
+        self.assertEquals(['road', 'US:I:Business', '70'],
+                          layer_props.get('mz_networks'))
 
     def test_business_not_at_end(self):
         # check that, if the network contains 'Business', but it's not at the
@@ -114,5 +114,5 @@ class TestCommon(unittest.TestCase):
             type='route', route='road', network='US:I:Business:Loop', ref='70',
             modifier='business'))
 
-        self.assertEqual(['road', 'US:I:Business:Loop', '70'],
-                         layer_props.get('mz_networks'))
+        self.assertEquals(['road', 'US:I:Business:Loop', '70'],
+                          layer_props.get('mz_networks'))

@@ -9,7 +9,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
 
     def test_no_neighbourhoods(self):
         diffs = self._call_fut([], [])
-        self.assertFalse(diffs)
+        self.failIf(diffs)
 
     def _n(self, wof_id, name, hash):
         from tilequeue.wof import NeighbourhoodMeta
@@ -22,7 +22,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
     def test_neighbourhood_added(self):
         n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([], [n])
-        self.assertTrue(diffs)
+        self.failUnless(diffs)
         self.assertEqual(len(diffs), 1)
         x, y = diffs[0]
         self.assertIsNone(x)
@@ -31,16 +31,16 @@ class TestNeighbourhoodDiff(unittest.TestCase):
     def test_neighbourhood_removed(self):
         n = self._n(1, 'foo', 'hash')
         diffs = self._call_fut([n], [])
-        self.assertTrue(diffs)
+        self.failUnless(diffs)
         self.assertEqual(len(diffs), 1)
         x, y = diffs[0]
         self.assertIsNone(y)
         self.assertEqual(x, n)
 
     def test_neighbourhoods_equal(self):
-        ns = [self._n(i, 'foo', 'hash-%d' % i) for i in range(32)]
+        ns = [self._n(i, 'foo', 'hash-%d' % i) for i in xrange(32)]
         diffs = self._call_fut(ns, ns)
-        self.assertFalse(diffs)
+        self.failIf(diffs)
 
     def test_neighbourhoods_id_mismatch_cases(self):
         def _make(wof_id):
@@ -50,7 +50,7 @@ class TestNeighbourhoodDiff(unittest.TestCase):
         diffs = self._call_fut(xs, ys)
 
         def assert_id(n, wof_id):
-            self.assertTrue(n)
+            self.failUnless(n)
             self.assertEqual(wof_id, n.wof_id)
 
         self.assertEqual(len(diffs), 4)
@@ -126,49 +126,49 @@ class TestEmptyDates(unittest.TestCase):
         from tilequeue.wof import NeighbourhoodMeta
         import shapely.geometry
         props = {
-            'geom:area': 0.0,
-            'geom:bbox': '0.0,0.0,0.0,0.0',
-            'geom:latitude': 0.0,
-            'geom:longitude': 0.0,
-            'iso:country': 'XN',
-            'lbl:latitude': 0.0,
-            'lbl:longitude': 0.0,
-            'mz:hierarchy_label': 1,
-            'mz:is_funky': 0,
-            'mz:is_hard_boundary': 0,
-            'mz:is_landuse_aoi': 0,
-            'mz:is_official': 0,
-            'mz:max_zoom': 18,
-            'mz:min_zoom': 8,
-            'mz:tier_locality': 1,
-            'src:geom': 'mapzen',
-            'src:geom_alt': [],
-            'src:lbl:centroid': 'mapzen',
-            'wof:belongsto': [1],
-            'wof:breaches': [],
-            'wof:concordances': {},
-            'wof:country': 'XN',
-            'wof:geomhash': 'fc4d4085e55d16b479f231dbf54d3cfb',
-            'wof:hierarchy': [{'country_id': 1,
-                               'neighbourhood_id': 874397665}],
-            'wof:id': 874397665,
-            'wof:lastmodified': 1468006253,
-            'wof:name': 'Null Island',
-            'wof:parent_id': -2,
-            'wof:placetype': 'neighbourhood',
-            'wof:repo': 'whosonfirst-data',
-            'wof:superseded_by': [],
-            'wof:supersedes': [],
-            'wof:tags': []
+            u'geom:area': 0.0,
+            u'geom:bbox': u'0.0,0.0,0.0,0.0',
+            u'geom:latitude': 0.0,
+            u'geom:longitude': 0.0,
+            u'iso:country': u'XN',
+            u'lbl:latitude': 0.0,
+            u'lbl:longitude': 0.0,
+            u'mz:hierarchy_label': 1,
+            u'mz:is_funky': 0,
+            u'mz:is_hard_boundary': 0,
+            u'mz:is_landuse_aoi': 0,
+            u'mz:is_official': 0,
+            u'mz:max_zoom': 18,
+            u'mz:min_zoom': 8,
+            u'mz:tier_locality': 1,
+            u'src:geom': u'mapzen',
+            u'src:geom_alt': [],
+            u'src:lbl:centroid': u'mapzen',
+            u'wof:belongsto': [1],
+            u'wof:breaches': [],
+            u'wof:concordances': {},
+            u'wof:country': u'XN',
+            u'wof:geomhash': u'fc4d4085e55d16b479f231dbf54d3cfb',
+            u'wof:hierarchy': [{u'country_id': 1,
+                                u'neighbourhood_id': 874397665}],
+            u'wof:id': 874397665,
+            u'wof:lastmodified': 1468006253,
+            u'wof:name': u'Null Island',
+            u'wof:parent_id': -2,
+            u'wof:placetype': u'neighbourhood',
+            u'wof:repo': u'whosonfirst-data',
+            u'wof:superseded_by': [],
+            u'wof:supersedes': [],
+            u'wof:tags': []
         }
-        props['edtf:inception'] = inception_date_str
-        props['edtf:cessation'] = cessation_date_str
+        props[u'edtf:inception'] = inception_date_str
+        props[u'edtf:cessation'] = cessation_date_str
         json_data = {
-            'bbox': [0.0, 0.0, 0.0, 0.0],
-            'geometry': {'coordinates': [0.0, 0.0], 'type': 'Point'},
-            'id': 874397665,
-            'properties': props,
-            'type': 'Fetaure'
+            u'bbox': [0.0, 0.0, 0.0, 0.0],
+            u'geometry': {u'coordinates': [0.0, 0.0], u'type': u'Point'},
+            u'id': 874397665,
+            u'properties': props,
+            u'type': u'Fetaure'
         }
         label_position = shapely.geometry.Point(0, 0)
         meta = NeighbourhoodMeta(
@@ -189,19 +189,19 @@ class TestEmptyDates(unittest.TestCase):
 
     def test_empty_dates(self):
         from datetime import date
-        result = self._call_fut('', '')
+        result = self._call_fut(u'', u'')
         self.assertEqual(date(1, 1, 1), result.inception)
         self.assertEqual(date(9999, 12, 31), result.cessation)
 
     def test_u_dates(self):
         from datetime import date
-        result = self._call_fut('u', 'u')
+        result = self._call_fut(u'u', u'u')
         self.assertEqual(date(1, 1, 1), result.inception)
         self.assertEqual(date(9999, 12, 31), result.cessation)
 
     def test_uuuu_dates(self):
         from datetime import date
-        result = self._call_fut('uuuu', 'uuuu')
+        result = self._call_fut(u'uuuu', u'uuuu')
         self.assertEqual(date(1, 1, 1), result.inception)
         self.assertEqual(date(9999, 12, 31), result.cessation)
 
@@ -213,7 +213,7 @@ class TestEmptyDates(unittest.TestCase):
 
     def test_valid_dates(self):
         from datetime import date
-        result = self._call_fut('1985-10-26', '1985-10-26')
+        result = self._call_fut(u'1985-10-26', u'1985-10-26')
         self.assertEqual(date(1985, 10, 26), result.inception)
         self.assertEqual(date(1985, 10, 26), result.cessation)
 
@@ -224,49 +224,49 @@ class MinMaxZoomFloatTest(unittest.TestCase):
         from tilequeue.wof import NeighbourhoodMeta
         import shapely.geometry
         props = {
-            'geom:area': 0.0,
-            'geom:bbox': '0.0,0.0,0.0,0.0',
-            'geom:latitude': 0.0,
-            'geom:longitude': 0.0,
-            'iso:country': 'XN',
-            'lbl:latitude': 0.0,
-            'lbl:longitude': 0.0,
-            'mz:hierarchy_label': 1,
-            'mz:is_funky': 0,
-            'mz:is_hard_boundary': 0,
-            'mz:is_landuse_aoi': 0,
-            'mz:is_official': 0,
-            'mz:tier_locality': 1,
-            'src:geom': 'mapzen',
-            'src:geom_alt': [],
-            'src:lbl:centroid': 'mapzen',
-            'wof:belongsto': [1],
-            'wof:breaches': [],
-            'wof:concordances': {},
-            'wof:country': 'XN',
-            'wof:geomhash': 'fc4d4085e55d16b479f231dbf54d3cfb',
-            'wof:hierarchy': [{'country_id': 1,
-                               'neighbourhood_id': 874397665}],
-            'wof:id': 874397665,
-            'wof:lastmodified': 1468006253,
-            'wof:name': 'Null Island',
-            'wof:parent_id': -2,
-            'wof:placetype': 'neighbourhood',
-            'wof:repo': 'whosonfirst-data',
-            'wof:superseded_by': [],
-            'wof:supersedes': [],
-            'wof:tags': [],
-            'edtf:inception': 'uuuu',
-            'edtf:cessation': 'uuuu',
-            'mz:min_zoom': min_zoom,
-            'mz:max_zoom': max_zoom,
+            u'geom:area': 0.0,
+            u'geom:bbox': u'0.0,0.0,0.0,0.0',
+            u'geom:latitude': 0.0,
+            u'geom:longitude': 0.0,
+            u'iso:country': u'XN',
+            u'lbl:latitude': 0.0,
+            u'lbl:longitude': 0.0,
+            u'mz:hierarchy_label': 1,
+            u'mz:is_funky': 0,
+            u'mz:is_hard_boundary': 0,
+            u'mz:is_landuse_aoi': 0,
+            u'mz:is_official': 0,
+            u'mz:tier_locality': 1,
+            u'src:geom': u'mapzen',
+            u'src:geom_alt': [],
+            u'src:lbl:centroid': u'mapzen',
+            u'wof:belongsto': [1],
+            u'wof:breaches': [],
+            u'wof:concordances': {},
+            u'wof:country': u'XN',
+            u'wof:geomhash': u'fc4d4085e55d16b479f231dbf54d3cfb',
+            u'wof:hierarchy': [{u'country_id': 1,
+                                u'neighbourhood_id': 874397665}],
+            u'wof:id': 874397665,
+            u'wof:lastmodified': 1468006253,
+            u'wof:name': u'Null Island',
+            u'wof:parent_id': -2,
+            u'wof:placetype': u'neighbourhood',
+            u'wof:repo': u'whosonfirst-data',
+            u'wof:superseded_by': [],
+            u'wof:supersedes': [],
+            u'wof:tags': [],
+            u'edtf:inception': 'uuuu',
+            u'edtf:cessation': 'uuuu',
+            u'mz:min_zoom': min_zoom,
+            u'mz:max_zoom': max_zoom,
         }
         json_data = {
-            'bbox': [0.0, 0.0, 0.0, 0.0],
-            'geometry': {'coordinates': [0.0, 0.0], 'type': 'Point'},
-            'id': 874397665,
-            'properties': props,
-            'type': 'Fetaure'
+            u'bbox': [0.0, 0.0, 0.0, 0.0],
+            u'geometry': {u'coordinates': [0.0, 0.0], u'type': u'Point'},
+            u'id': 874397665,
+            u'properties': props,
+            u'type': u'Fetaure'
         }
         label_position = shapely.geometry.Point(0, 0)
         meta = NeighbourhoodMeta(

@@ -61,7 +61,7 @@ class QueueWriter(object):
                 self._enqueue_batch(queue_id, send_data)
                 del send_data[:]
 
-        for queue_id, send_data in queue_send_buffer.items():
+        for queue_id, send_data in queue_send_buffer.iteritems():
             if send_data:
                 self._enqueue_batch(queue_id, send_data)
 

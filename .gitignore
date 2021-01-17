@@ -3,7 +3,6 @@ tilequeue.egg-info
 config.yaml
 logging.conf
 *.sw*
-.eggs
 build
 dist
 .env

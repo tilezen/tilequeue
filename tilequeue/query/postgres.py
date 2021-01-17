@@ -229,6 +229,8 @@ class DataFetcher(object):
         for row in all_source_rows:
             read_row = {}
             for k, v in row.items():
+                if isinstance(v, buffer):
+                    v = bytes(v)
                 if v is not None:
                     read_row[k] = v
             read_rows.append(read_row)
