@@ -1328,8 +1328,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         elif 'file' in info:
             with open(info['file'], 'r') as f:
                 immortal_tiles.update(
-                    coord_marshall_int(deserialize_coord(l.strip()))
-                    for l in f
+                    coord_marshall_int(deserialize_coord(line.strip()))
+                    for line in f
                 )
         elif 'bucket' in info:
             from boto import connect_s3
