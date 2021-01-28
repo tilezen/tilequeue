@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='TileData_v4.proto',
   package='org.oscim.database.oscimap4',
-  serialized_pb=b'\n\x11TileData_v4.proto\x12\x1borg.oscim.database.oscimap4\"\xe2\x03\n\x04\x44\x61ta\x12\x0f\n\x07version\x18\x01 \x02(\r\x12\x11\n\ttimestamp\x18\x02 \x01(\x04\x12\r\n\x05water\x18\x03 \x01(\x08\x12\x10\n\x08num_tags\x18\x0b \x02(\r\x12\x13\n\x08num_keys\x18\x0c \x01(\r:\x01\x30\x12\x13\n\x08num_vals\x18\r \x01(\r:\x01\x30\x12\x0c\n\x04keys\x18\x0e \x03(\t\x12\x0e\n\x06values\x18\x0f \x03(\t\x12\x10\n\x04tags\x18\x10 \x03(\rB\x02\x10\x01\x12\x38\n\x05lines\x18\x15 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x12;\n\x08polygons\x18\x16 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x12\x39\n\x06points\x18\x17 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x1a\x88\x01\n\x07\x45lement\x12\x16\n\x0bnum_indices\x18\x01 \x01(\r:\x01\x31\x12\x13\n\x08num_tags\x18\x02 \x01(\r:\x01\x31\x12\x10\n\x04tags\x18\x0b \x03(\rB\x02\x10\x01\x12\x13\n\x07indices\x18\x0c \x03(\rB\x02\x10\x01\x12\x17\n\x0b\x63oordinates\x18\r \x03(\x11\x42\x02\x10\x01\x12\x10\n\x05layer\x18\x15 \x01(\r:\x01\x35')
+  serialized_pb='\n\x11TileData_v4.proto\x12\x1borg.oscim.database.oscimap4\"\xe2\x03\n\x04\x44\x61ta\x12\x0f\n\x07version\x18\x01 \x02(\r\x12\x11\n\ttimestamp\x18\x02 \x01(\x04\x12\r\n\x05water\x18\x03 \x01(\x08\x12\x10\n\x08num_tags\x18\x0b \x02(\r\x12\x13\n\x08num_keys\x18\x0c \x01(\r:\x01\x30\x12\x13\n\x08num_vals\x18\r \x01(\r:\x01\x30\x12\x0c\n\x04keys\x18\x0e \x03(\t\x12\x0e\n\x06values\x18\x0f \x03(\t\x12\x10\n\x04tags\x18\x10 \x03(\rB\x02\x10\x01\x12\x38\n\x05lines\x18\x15 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x12;\n\x08polygons\x18\x16 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x12\x39\n\x06points\x18\x17 \x03(\x0b\x32).org.oscim.database.oscimap4.Data.Element\x1a\x88\x01\n\x07\x45lement\x12\x16\n\x0bnum_indices\x18\x01 \x01(\r:\x01\x31\x12\x13\n\x08num_tags\x18\x02 \x01(\r:\x01\x31\x12\x10\n\x04tags\x18\x0b \x03(\rB\x02\x10\x01\x12\x13\n\x07indices\x18\x0c \x03(\rB\x02\x10\x01\x12\x17\n\x0b\x63oordinates\x18\r \x03(\x11\x42\x02\x10\x01\x12\x10\n\x05layer\x18\x15 \x01(\r:\x01\x35')
 
 
 
@@ -43,21 +43,21 @@ _DATA_ELEMENT = descriptor.Descriptor(
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), b'\020\001')),
+      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), '\020\001')),
     descriptor.FieldDescriptor(
       name='indices', full_name='org.oscim.database.oscimap4.Data.Element.indices', index=3,
       number=12, type=13, cpp_type=3, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), b'\020\001')),
+      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), '\020\001')),
     descriptor.FieldDescriptor(
       name='coordinates', full_name='org.oscim.database.oscimap4.Data.Element.coordinates', index=4,
       number=13, type=17, cpp_type=1, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), b'\020\001')),
+      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), '\020\001')),
     descriptor.FieldDescriptor(
       name='layer', full_name='org.oscim.database.oscimap4.Data.Element.layer', index=5,
       number=21, type=13, cpp_type=3, label=1,
@@ -147,7 +147,7 @@ _DATA = descriptor.Descriptor(
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), b'\020\001')),
+      options=descriptor._ParseOptions(descriptor_pb2.FieldOptions(), '\020\001')),
     descriptor.FieldDescriptor(
       name='lines', full_name='org.oscim.database.oscimap4.Data.lines', index=9,
       number=21, type=11, cpp_type=10, label=3,

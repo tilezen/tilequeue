@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
-import hashlib
+import md5
 from ModestMaps.Core import Coordinate
 import os
 from tilequeue.metatile import metatiles_are_equal
@@ -13,12 +13,13 @@ from tilequeue.format import zip_format
 import random
 import threading
 import time
-from io import StringIO
-from urllib.parse import urlencode
+from cStringIO import StringIO
+from urllib import urlencode
 
 
 def calc_hash(s):
-    m = hashlib.md5(s.encode('utf-8'))
+    m = md5.new()
+    m.update(s)
     md5_hash = m.hexdigest()
     return md5_hash[:5]
 
@@ -97,7 +98,7 @@ def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
             interval = retry_interval
             factor = retry_factor
 
-            for _ in range(1, num_tries):
+            for _ in xrange(1, num_tries):
                 try:
                     return f(*args, **kwargs)
 
@@ -188,7 +189,7 @@ class S3(object):
 
         num_deleted = 0
         chunk_size = 1000
-        for idx in range(0, len(key_names), chunk_size):
+        for idx in xrange(0, len(key_names), chunk_size):
             chunk = key_names[idx:idx+chunk_size]
 
             while chunk:

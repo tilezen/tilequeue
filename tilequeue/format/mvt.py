@@ -10,4 +10,4 @@ def encode(fp, feature_layers, bounds_merc, extents=4096):
         round_fn=round,
         extents=extents,
     )
-    fp.write(tile.encode('ascii'))
+    fp.write(tile)

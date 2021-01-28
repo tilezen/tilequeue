@@ -8,9 +8,9 @@ class TestMetroExtractParse(unittest.TestCase):
         return parse_metro_extract(fp)
 
     def test_invalid_json(self):
-        from io import BytesIO
+        from cStringIO import StringIO
         from tilequeue.metro_extract import MetroExtractParseError
-        fp = BytesIO(b'{"foo": "bar"}')
+        fp = StringIO('{"foo": "bar"}')
         try:
             self._call_fut(fp)
         except MetroExtractParseError:
@@ -44,7 +44,7 @@ class TestMetroExtractParse(unittest.TestCase):
     def test_valid_parse(self):
         from json import dumps
         stub = self._generate_stub()
-        from io import StringIO
+        from cStringIO import StringIO
         fp = StringIO(dumps(stub))
         results = self._call_fut(fp)
         self.assertEqual(2, len(results))
@@ -62,7 +62,7 @@ class TestMetroExtractParse(unittest.TestCase):
     def test_city_bounds(self):
         from json import dumps
         stub = self._generate_stub()
-        from io import StringIO
+        from cStringIO import StringIO
         fp = StringIO(dumps(stub))
         results = self._call_fut(fp)
         self.assertEqual(2, len(results))

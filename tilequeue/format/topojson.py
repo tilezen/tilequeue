@@ -83,7 +83,7 @@ def encode(file, features_by_layer, bounds, size=4096):
 
     geometries_by_layer = {}
 
-    for layer, features in features_by_layer.items():
+    for layer, features in features_by_layer.iteritems():
         geometries = []
         for shape, props, fid in features:
             if shape.type == 'GeometryCollection':

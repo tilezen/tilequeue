@@ -48,16 +48,16 @@ def parse_expired_coord_string(coord_string):
 def n_tiles_in_zoom(zoom):
     assert zoom >= 0
     n = 0
-    for i in range(zoom + 1):
+    for i in xrange(zoom + 1):
         n += math.pow(4, i)
     return int(n)
 
 
 def seed_tiles(zoom_start=0, zoom_until=10):
-    for zoom in range(zoom_start, zoom_until + 1):
+    for zoom in xrange(zoom_start, zoom_until + 1):
         limit = int(math.pow(2, zoom))
-        for col in range(limit):
-            for row in range(limit):
+        for col in xrange(limit):
+            for row in xrange(limit):
                 yield Coordinate(zoom=zoom, column=col, row=row)
 
 
@@ -174,7 +174,7 @@ def bounds_to_coords(bounds, zoom):
 
 
 def tile_generator_for_single_bounds(bounds, zoom_start, zoom_until):
-    for zoom in range(zoom_start, zoom_until + 1):
+    for zoom in xrange(zoom_start, zoom_until + 1):
         coords = bounds_to_coords(bounds, zoom)
         assert len(coords) in (1, 2)
         if len(coords) == 1:
@@ -207,11 +207,11 @@ def tile_generator_for_range(
     end_col += 1
     end_row += 1
     zoom_until += 1
-    for zoom in range(zoom_start, zoom_until):
-        for col in range(start_col * zoom_multiplier,
-                         end_col * zoom_multiplier):
-            for row in range(start_row * zoom_multiplier,
-                             end_row * zoom_multiplier):
+    for zoom in xrange(zoom_start, zoom_until):
+        for col in xrange(start_col * zoom_multiplier,
+                          end_col * zoom_multiplier):
+            for row in xrange(start_row * zoom_multiplier,
+                              end_row * zoom_multiplier):
                 yield Coordinate(row=row, column=col, zoom=zoom)
         zoom_multiplier *= 2
 
@@ -256,7 +256,7 @@ def coord_marshall_int(coord):
 
 
 def coord_unmarshall_int(coord_int):
-    if isinstance(coord_int, str):
+    if isinstance(coord_int, (str, unicode)):
         coord_int = int(coord_int)
     zoom = zoom_mask & coord_int
     row = row_mask & (coord_int >> row_offset)

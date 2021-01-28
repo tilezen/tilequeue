@@ -4,21 +4,20 @@ from tilequeue.tile import (
     deserialize_coord,
     serialize_coord,
 )
-import codecs
 import gzip
 
 
 def save_set_to_fp(the_set, fp):
     for coord_int in sorted(the_set):
         coord = coord_unmarshall_int(coord_int)
-        fp.write(serialize_coord(coord).encode('utf8'))
-        fp.write(b'\n')
+        fp.write(serialize_coord(coord))
+        fp.write('\n')
 
 
 def load_set_from_fp(fp):
     toi_set = set()
 
-    for coord_str in codecs.getreader('utf8')(fp):
+    for coord_str in fp:
         coord = deserialize_coord(coord_str)
         coord_int = coord_marshall_int(coord)
         toi_set.add(coord_int)

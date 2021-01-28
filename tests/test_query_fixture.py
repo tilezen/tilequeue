@@ -32,21 +32,21 @@ class TestQueryFixture(FixtureTestCase):
         # min zoom filter and geometry filter are okay.
         read_rows = fetch(5, (-1, -1, 1, 1))
 
-        self.assertEqual(1, len(read_rows))
+        self.assertEquals(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEqual(0, read_row.get('__id__'))
+        self.assertEquals(0, read_row.get('__id__'))
         # query processing code expects WKB bytes in the __geometry__ column
-        self.assertEqual(shape.wkb, read_row.get('__geometry__'))
-        self.assertEqual({'min_zoom': 5},
-                         read_row.get('__testlayer_properties__'))
+        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
+        self.assertEquals({'min_zoom': 5},
+                          read_row.get('__testlayer_properties__'))
 
         # now, check that if the min zoom or geometry filters would exclude
         # the feature then it isn't returned.
         read_rows = fetch(4, (-1, -1, 1, 1))
-        self.assertEqual(0, len(read_rows))
+        self.assertEquals(0, len(read_rows))
 
         read_rows = fetch(5, (1, 1, 2, 2))
-        self.assertEqual(0, len(read_rows))
+        self.assertEquals(0, len(read_rows))
 
     def test_query_min_zoom_fraction(self):
         from shapely.geometry import Point
@@ -64,10 +64,10 @@ class TestQueryFixture(FixtureTestCase):
         # check that the fractional zoom of 4.999 means that it's included in
         # the zoom 4 tile, but not the zoom 3 one.
         read_rows = fetch(4, (-1, -1, 1, 1))
-        self.assertEqual(1, len(read_rows))
+        self.assertEquals(1, len(read_rows))
 
         read_rows = fetch(3, (-1, -1, 1, 1))
-        self.assertEqual(0, len(read_rows))
+        self.assertEquals(0, len(read_rows))
 
     def test_query_past_max_zoom(self):
         from shapely.geometry import Point
@@ -86,11 +86,11 @@ class TestQueryFixture(FixtureTestCase):
         # 16, even though 16<20, because 16 is the "max zoom" at which all the
         # data is included.
         read_rows = fetch(16, (-1, -1, 1, 1))
-        self.assertEqual(1, len(read_rows))
+        self.assertEquals(1, len(read_rows))
 
         # but it should not exist at zoom 15
         read_rows = fetch(15, (-1, -1, 1, 1))
-        self.assertEqual(0, len(read_rows))
+        self.assertEquals(0, len(read_rows))
 
     def test_root_relation_id(self):
         from shapely.geometry import Point, Polygon
@@ -114,11 +114,11 @@ class TestQueryFixture(FixtureTestCase):
                                layer_name='pois')
 
             read_rows = fetch(16, (-1, -1, 1, 1))
-            self.assertEqual(1, len(read_rows))
+            self.assertEquals(1, len(read_rows))
 
             props = read_rows[0]['__pois_properties__']
-            self.assertEqual(expected_root_id,
-                             props.get('mz_transit_root_relation_id'))
+            self.assertEquals(expected_root_id,
+                              props.get('mz_transit_root_relation_id'))
 
         # the fixture code expects "raw" relations as if they come straight
         # from osm2pgsql. the structure is a little cumbersome, so this
@@ -175,13 +175,13 @@ class TestQueryFixture(FixtureTestCase):
         # min zoom filter and geometry filter are okay.
         read_rows = fetch(5, (-1, -1, 1, 1))
 
-        self.assertEqual(1, len(read_rows))
+        self.assertEquals(1, len(read_rows))
         read_row = read_rows[0]
-        self.assertEqual(0, read_row.get('__id__'))
+        self.assertEquals(0, read_row.get('__id__'))
         # query processing code expects WKB bytes in the __geometry__ column
-        self.assertEqual(shape.wkb, read_row.get('__geometry__'))
-        self.assertEqual({'min_zoom': 5, 'source': 'testdata'},
-                         read_row.get('__testlayer_properties__'))
+        self.assertEquals(shape.wkb, read_row.get('__geometry__'))
+        self.assertEquals({'min_zoom': 5, 'source': 'testdata'},
+                          read_row.get('__testlayer_properties__'))
 
 
 class TestLabelPlacement(FixtureTestCase):
@@ -203,7 +203,7 @@ class TestLabelPlacement(FixtureTestCase):
         ]
 
         label_placement_layers = {
-            'polygon': {layer_name},
+            'polygon': set([layer_name]),
         }
         fetch = self._make(
             rows, min_zoom_fn, None, relations=[], layer_name=layer_name,
@@ -218,7 +218,7 @@ class TestLabelPlacement(FixtureTestCase):
         layer_name = 'testlayer'
         read_rows = self._test(layer_name, {'name': 'Foo'})
 
-        self.assertEqual(1, len(read_rows))
+        self.assertEquals(1, len(read_rows))
 
         label_prop = '__label__'
         self.assertTrue(label_prop in read_rows[0])
@@ -334,13 +334,13 @@ class TestNameHandling(FixtureTestCase):
                 actual_name = read_rows[0][properties_name].get(key)
                 if layer_name in expected_layer_names:
                     expected_name = props.get(key)
-                    self.assertEqual(
+                    self.assertEquals(
                         expected_name, actual_name,
                         msg=('expected=%r, actual=%r for key=%r'
                              % (expected_name, actual_name, key)))
                 else:
                     # check the name doesn't appear anywhere else
-                    self.assertEqual(
+                    self.assertEquals(
                         None, actual_name,
                         msg=('got actual=%r for key=%r, expected no value'
                              % (actual_name, key)))

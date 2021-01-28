@@ -20,7 +20,7 @@ class OutputFileQueue(object):
 
     def enqueue(self, payload):
         with self.lock:
-            self.fp.write(payload.encode('utf8') + b'\n')
+            self.fp.write(payload + '\n')
 
     def enqueue_batch(self, payloads):
         n = 0
@@ -35,7 +35,7 @@ class OutputFileQueue(object):
             for _ in range(self.read_size):
                 payload = self.fp.readline().strip()
                 if payload:
-                    msg_handle = MessageHandle(None, payload.decode('utf8'))
+                    msg_handle = MessageHandle(None, payload)
                     msg_handles.append(msg_handle)
 
         return msg_handles

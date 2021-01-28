@@ -12,13 +12,13 @@ class QueryBoundsTest(unittest.TestCase):
     def test_no_bounds(self):
         bounds = (0, 0, 1, 1)
         result = self._call_fut(bounds, 'foo', {})
-        self.assertEqual(bounds, result['point'])
+        self.assertEquals(bounds, result['point'])
 
     def test_layer_not_configured(self):
         bounds = (0, 0, 1, 1)
         buffer_cfg = dict(foo={})
         result = self._call_fut(bounds, 'baz', buffer_cfg)
-        self.assertEqual(bounds, result['point'])
+        self.assertEquals(bounds, result['point'])
 
     def test_layer_configured(self):
         bounds = (1, 1, 2, 2)
@@ -33,7 +33,7 @@ class QueryBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEqual(result['point'], exp_bounds)
+        self.assertEquals(result['point'], exp_bounds)
 
     def test_geometry_configured(self):
         bounds = (1, 1, 2, 2)
@@ -46,7 +46,7 @@ class QueryBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEqual(result['line'], exp_bounds)
+        self.assertEquals(result['line'], exp_bounds)
 
     def test_layer_trumps_geometry(self):
         bounds = (2, 2, 3, 3)
@@ -64,7 +64,7 @@ class QueryBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(bounds, 'foo', buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
-        self.assertEqual(result['polygon'], exp_bounds)
+        self.assertEquals(result['polygon'], exp_bounds)
 
     def test_multiple_bounds(self):
         bounds = (2, 2, 3, 3)
@@ -81,10 +81,10 @@ class QueryBoundsTest(unittest.TestCase):
         result = self._call_fut(bounds, 'foo', buffer_cfg)
 
         exp_bounds_poly = (0, 0, 5, 5)
-        self.assertEqual(result['polygon'], exp_bounds_poly)
+        self.assertEquals(result['polygon'], exp_bounds_poly)
 
         exp_bounds_point = (1, 1, 4, 4)
-        self.assertEqual(result['point'], exp_bounds_point)
+        self.assertEquals(result['point'], exp_bounds_point)
 
 
 class ClipBoundsTest(unittest.TestCase):
@@ -102,13 +102,13 @@ class ClipBoundsTest(unittest.TestCase):
     def test_empty(self):
         bounds = (1, 1, 2, 2)
         result = self._call_fut(bounds, 'foo', 'bar', 'Point', 1, {})
-        self.assertEqual(result, bounds)
+        self.assertEquals(result, bounds)
 
     def test_diff_format(self):
         bounds = (1, 1, 2, 2)
         ext = 'quux'
         result = self._call_fut(bounds, ext, 'bar', 'Point', 1, dict(foo=42))
-        self.assertEqual(result, bounds)
+        self.assertEquals(result, bounds)
 
     def test_layer_match(self):
         bounds = (1, 1, 2, 2)
@@ -126,7 +126,7 @@ class ClipBoundsTest(unittest.TestCase):
         result = self._call_fut(
             bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
     def test_geometry_match(self):
         bounds = (1, 1, 2, 2)
@@ -142,7 +142,7 @@ class ClipBoundsTest(unittest.TestCase):
         result = self._call_fut(
             bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
     def test_layer_trumps_geometry(self):
         bounds = (2, 2, 3, 3)
@@ -163,7 +163,7 @@ class ClipBoundsTest(unittest.TestCase):
         result = self._call_fut(
             bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
     def test_multiple_layer_geometry_types(self):
         bounds = (2, 2, 3, 3)
@@ -183,7 +183,7 @@ class ClipBoundsTest(unittest.TestCase):
         result = self._call_fut(
             bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
     def test_multi_geometry(self):
         bounds = (1, 1, 2, 2)
@@ -199,7 +199,7 @@ class ClipBoundsTest(unittest.TestCase):
         result = self._call_fut(bounds, ext, layer_name, 'MultiPolygon', 1,
                                 buffer_cfg)
         exp_bounds = (0, 0, 3, 3)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
     def test_geometry_no_match(self):
         bounds = (1, 1, 2, 2)
@@ -214,7 +214,7 @@ class ClipBoundsTest(unittest.TestCase):
         }
         result = self._call_fut(
             bounds, ext, layer_name, 'LineString', 1, buffer_cfg)
-        self.assertEqual(result, bounds)
+        self.assertEquals(result, bounds)
 
     def test_meters_per_pixel(self):
         bounds = (2, 2, 3, 3)
@@ -232,7 +232,7 @@ class ClipBoundsTest(unittest.TestCase):
             bounds, ext, layer_name, 'LineString', meters_per_pixel,
             buffer_cfg)
         exp_bounds = (0, 0, 5, 5)
-        self.assertEqual(result, exp_bounds)
+        self.assertEquals(result, exp_bounds)
 
 
 class MetersPerPixelDimTest(unittest.TestCase):
@@ -244,7 +244,7 @@ class MetersPerPixelDimTest(unittest.TestCase):
 
     def test_z10(self):
         meters_per_pixel_dim = self._call_fut(10)
-        self.assertAlmostEqual(152.746093811, meters_per_pixel_dim)
+        self.assertAlmostEquals(152.746093811, meters_per_pixel_dim)
 
     def test_compare_z10_bounds(self):
         from tilequeue.tile import coord_to_mercator_bounds
@@ -256,7 +256,7 @@ class MetersPerPixelDimTest(unittest.TestCase):
         exp_meters_per_pixel_dim = tile_meters_wide / 256
 
         act_meters_per_pixel_dim = self._call_fut(10)
-        self.assertAlmostEqual(
+        self.assertAlmostEquals(
             exp_meters_per_pixel_dim, act_meters_per_pixel_dim, places=0)
 
 
@@ -269,7 +269,7 @@ class MetersPerPixelAreaTest(unittest.TestCase):
 
     def test_z10(self):
         meters_per_pixel_area = self._call_fut(10)
-        self.assertAlmostEqual(23331.3691744, meters_per_pixel_area)
+        self.assertAlmostEquals(23331.3691744, meters_per_pixel_area)
 
     def test_z10_compare_with_dim(self):
         from tilequeue.tile import calc_meters_per_pixel_dim
@@ -278,5 +278,5 @@ class MetersPerPixelAreaTest(unittest.TestCase):
         meters_per_pixel_area = self._call_fut(10)
         exp_meters_per_pixel_area = (
             meters_per_pixel_dim * meters_per_pixel_dim)
-        self.assertAlmostEqual(
+        self.assertAlmostEquals(
             exp_meters_per_pixel_area, meters_per_pixel_area)
