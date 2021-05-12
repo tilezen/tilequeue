@@ -61,6 +61,7 @@ import threading
 import time
 import traceback
 import yaml
+import md5
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
@@ -1969,6 +1970,12 @@ def make_statsd_client_from_cfg(cfg):
     return stats
 
 
+def calc_hash(s):
+    m = md5.new()
+    m.update(s)
+    md5_hash = m.hexdigest()
+    return md5_hash[:5]
+
 def tilequeue_batch_enqueue(cfg, args):
     logger = make_logger(cfg, 'batch_enqueue')
 
@@ -2019,6 +2026,11 @@ def tilequeue_batch_enqueue(cfg, args):
         coord_str = serialize_coord(coord)
         job_name = '%s-%d-%d-%d' % (
             job_name_prefix, coord.zoom, coord.column, coord.row)
+
+        path_to_hash = '%d/%d/%d.%s' % (
+            coord.zoom, coord.column, coord.row, 'zip')
+        md5_hash = calc_hash(path_to_hash)
+
         job_parameters = dict(
             tile=coord_str,
             run_id=run_id,
