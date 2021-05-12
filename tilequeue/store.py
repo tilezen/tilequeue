@@ -123,7 +123,7 @@ class S3(object):
     def __init__(
             self, s3_client, bucket_name, date_prefix,
             reduced_redundancy, delete_retry_interval, logger,
-            object_acl, tags, tile_key_gen):
+            object_acl, tags, tile_key_gen, verbose_log=True):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
@@ -133,6 +133,7 @@ class S3(object):
         self.object_acl = object_acl
         self.tags = tags
         self.tile_key_gen = tile_key_gen
+        self.verbose_log = verbose_log
 
     def write_tile(self, tile_data, coord, format):
         key_name = self.tile_key_gen(
@@ -155,6 +156,11 @@ class S3(object):
             if self.tags:
                 put_obj_props['Tagging'] = urlencode(self.tags)
             try:
+                if self.verbose_log:
+                    if self.logger:
+                        self.logger.info("[tilequeue]Write tile to key: {}".format(key_name))
+                    else:
+                        print("[tilequeue]Write tile to key: {}".format(key_name))
                 self.s3_client.put_object(**put_obj_props)
             except ClientError as e:
                 # it's really useful for debugging if we know exactly what
@@ -171,6 +177,11 @@ class S3(object):
 
         try:
             io = StringIO()
+            if self.verbose_log:
+                if self.logger:
+                    self.logger.info("[tilequeue]Read tile from key: {}".format(key_name))
+                else:
+                    print("[tilequeue]Read tile from key: {}".format(key_name))
             self.s3_client.download_fileobj(self.bucket_name, key_name, io)
             return io.getvalue()
 
@@ -193,6 +204,14 @@ class S3(object):
             chunk = key_names[idx:idx+chunk_size]
 
             while chunk:
+                if self.verbose_log:
+                    if self.logger:
+                        self.logger.info("[tilequeue]Delete tile of keys: {}".
+                                         format(",".join(chunk)))
+                    else:
+                        print("[tilequeue]Delete tile of keys: {}".
+                              format(",".join(chunk)))
+
                 objects = [dict(Key=k) for k in chunk]
                 del_result = self.s3_client.delete_objects(
                     Bucket=self.bucket_name,
@@ -477,7 +496,7 @@ def _make_s3_store(cfg_name, constructor):
 def make_s3_store(cfg_name, tile_key_gen,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
-                  object_acl='public-read', tags=None):
+                  object_acl='public-read', tags=None, verbose_log=False):
     s3 = boto3.client('s3')
 
     # extract out the construction of the bucket, so that it can be abstracted
@@ -485,7 +504,8 @@ def make_s3_store(cfg_name, tile_key_gen,
     def _construct(bucket_name):
         return S3(
             s3, bucket_name, date_prefix, reduced_redundancy,
-            delete_retry_interval, logger, object_acl, tags, tile_key_gen)
+            delete_retry_interval, logger, object_acl, tags,
+            tile_key_gen, verbose_log)
 
     return _make_s3_store(cfg_name, _construct)
 
@@ -535,7 +555,7 @@ def make_s3_tile_key_generator(yml_cfg):
     return S3TileKeyGenerator(key_format_type=key_format_type)
 
 
-def make_store(yml, credentials={}, logger=None):
+def make_store(yml, credentials={}, logger=None, verbose_log=False):
     store_type = yml.get('type')
 
     if store_type == 'directory':
@@ -557,7 +577,7 @@ def make_store(yml, credentials={}, logger=None):
             reduced_redundancy=reduced_redundancy,
             date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,
-            object_acl=object_acl, tags=tags)
+            object_acl=object_acl, tags=tags, verbose_log=verbose_log)
 
     else:
         raise ValueError('Unrecognized store type: `{}`'.format(store_type))
