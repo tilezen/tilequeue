@@ -1,4 +1,5 @@
 import unittest
+from ModestMaps.Core import Coordinate
 
 
 class tempdir(object):
@@ -142,3 +143,23 @@ class ZoomToQueueNameMapTest(unittest.TestCase):
         zoom = long(7)
         queue_name = get_queue(zoom)
         self.assertEqual(queue_name, 'q1')
+
+
+class CalcHashTest(unittest.TestCase):
+
+    def test_calc_hash(self):
+        from tilequeue.command import calc_hash
+
+        coord = Coordinate(column=165, row=355, zoom=10)
+
+        path_to_hash = '%d/%d/%d.%s' % (
+            coord.zoom, coord.column, coord.row, 'zip')
+        md5_hash = calc_hash(path_to_hash)
+        key_format = '%(hash)s/%(prefix)s/%(path)s'
+        prefix = '20210426'
+        s3_key_path = key_format % dict(
+            prefix=prefix,
+            hash=md5_hash,
+            path=path_to_hash,
+        )
+        self.assertEqual('b2df7/20210426/10/165/355.zip', s3_key_path)
