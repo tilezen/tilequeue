@@ -123,7 +123,7 @@ class S3(object):
     def __init__(
             self, s3_client, bucket_name, date_prefix,
             reduced_redundancy, delete_retry_interval, logger,
-            object_acl, tags, tile_key_gen, verbose_log=False):
+            object_acl, tags, tile_key_gen, verbose_log=True):
         self.s3_client = s3_client
         self.bucket_name = bucket_name
         self.date_prefix = date_prefix
