@@ -401,7 +401,7 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def _make_store(cfg, logger=None, verbose_log=False):
+def _make_store(cfg, logger=None, verbose_log=True):
     store_cfg = cfg.yml.get('store')
     assert store_cfg, "Store was not configured, but is necessary."
     credentials = cfg.subtree('aws credentials')

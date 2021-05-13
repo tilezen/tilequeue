@@ -496,7 +496,7 @@ def _make_s3_store(cfg_name, constructor):
 def make_s3_store(cfg_name, tile_key_gen,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
-                  object_acl='public-read', tags=None, verbose_log=False):
+                  object_acl='public-read', tags=None, verbose_log=True):
     s3 = boto3.client('s3')
 
     # extract out the construction of the bucket, so that it can be abstracted
@@ -555,7 +555,7 @@ def make_s3_tile_key_generator(yml_cfg):
     return S3TileKeyGenerator(key_format_type=key_format_type)
 
 
-def make_store(yml, credentials={}, logger=None, verbose_log=False):
+def make_store(yml, credentials={}, logger=None, verbose_log=True):
     store_type = yml.get('type')
 
     if store_type == 'directory':
