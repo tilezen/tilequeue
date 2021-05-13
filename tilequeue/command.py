@@ -2030,6 +2030,15 @@ def tilequeue_batch_enqueue(cfg, args):
         path_to_hash = '%d/%d/%d.%s' % (
             coord.zoom, coord.column, coord.row, 'zip')
         md5_hash = calc_hash(path_to_hash)
+        key_format = '%(hash)s/%(prefix)s/%(path)s'
+        prefix = '20210426-peiti'
+        s3_key_path = key_format % dict(
+            prefix=prefix,
+            hash=md5_hash,
+            path=path_to_hash,
+        )
+
+        print("about to generate file to s3: {}".format(s3_key_path))
 
         job_parameters = dict(
             tile=coord_str,
