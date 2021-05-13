@@ -1976,6 +1976,7 @@ def calc_hash(s):
     md5_hash = m.hexdigest()
     return md5_hash[:5]
 
+
 def tilequeue_batch_enqueue(cfg, args):
     logger = make_logger(cfg, 'batch_enqueue')
 

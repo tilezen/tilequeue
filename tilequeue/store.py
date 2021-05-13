@@ -158,9 +158,9 @@ class S3(object):
             try:
                 if self.verbose_log:
                     if self.logger:
-                        self.logger.info("[tilequeue]Write tile to key: {}".format(key_name))
+                        self.logger.info("[tilequeue]Write tile to key: {}/{}".format(self.bucket_name, key_name))
                     else:
-                        print("[tilequeue]Write tile to key: {}".format(key_name))
+                        print("[tilequeue]Write tile to key: {}/{}".format(self.bucket_name, key_name))
                 self.s3_client.put_object(**put_obj_props)
             except ClientError as e:
                 # it's really useful for debugging if we know exactly what
@@ -179,9 +179,9 @@ class S3(object):
             io = StringIO()
             if self.verbose_log:
                 if self.logger:
-                    self.logger.info("[tilequeue]Read tile from key: {}".format(key_name))
+                    self.logger.info("[tilequeue]Read tile from key: {}/{}".format(self.bucket_name, key_name))
                 else:
-                    print("[tilequeue]Read tile from key: {}".format(key_name))
+                    print("[tilequeue]Read tile from key: {}/{}".format(self.bucket_name, key_name))
             self.s3_client.download_fileobj(self.bucket_name, key_name, io)
             return io.getvalue()
 
