@@ -1889,6 +1889,8 @@ def tilequeue_rawr_tile(cfg, args):
                 coord_timing = {}
                 with time_block(coord_timing, 'total'):
                     rawr_tile_coord = convert_coord_object(coord)
+                    print("peitili")
+                    print(rawr_tile_coord)
                     with conn_ctx() as conn:
                         # commit transaction
                         with conn as conn:
