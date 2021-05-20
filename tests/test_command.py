@@ -150,7 +150,7 @@ class CalcHashTest(unittest.TestCase):
     def test_calc_hash(self):
         from tilequeue.command import calc_hash
 
-        coord = Coordinate(column=165, row=355, zoom=10)
+        coord = Coordinate(column=163, row=353, zoom=10)
 
         path_to_hash = '%d/%d/%d.%s' % (
             coord.zoom, coord.column, coord.row, 'zip')
