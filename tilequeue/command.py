@@ -2132,6 +2132,7 @@ def tilequeue_meta_tile(cfg, args):
 
     job_coords = find_job_coords_for(parent, group_by_zoom)
     for job_coord in job_coords:
+        print('[tilequeue][tilequeue_meta_tile] job_coord ' + str(job_coord))
 
         meta_tile_logger.begin_pyramid(parent, job_coord)
 
@@ -2148,6 +2149,9 @@ def tilequeue_meta_tile(cfg, args):
 
         for fetch, coord_datum in fetched_coord_data:
             coord = coord_datum['coord']
+
+            print('[tilequeue][tilequeue_meta_tile] coord_datum[coord] ' + str(coord))
+
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format)
                 if existing_data is not None:
@@ -2184,6 +2188,8 @@ def tilequeue_meta_tile(cfg, args):
             try:
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
                 for tile in tiles:
+                    print('[tilequeue][tilequeue_meta_tile] tile[coord] ' + str(
+                        tile['coord'] + " tile[tile]" + str(tile['tile'])))
                     store.write_tile(
                         tile['tile'], tile['coord'], tile['format'])
             except Exception as e:
@@ -2263,6 +2269,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
     for coord in coords:
+        print('[tilequeue][tilequeue_meta_tile_low_zoom] coord ' + str(coord))
         if check_metatile_exists:
             existing_data = store.read_tile(coord, zip_format)
             if existing_data is not None:
@@ -2282,6 +2289,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         assert len(fetched_coord_data) == 1
         fetch, coord_datum = fetched_coord_data[0]
         coord = coord_datum['coord']
+        print('[tilequeue][tilequeue_meta_tile_low_zoom] coord_datum[coord] ' + str(coord))
 
         def log_fn(data):
             meta_low_zoom_logger._log(data, parent, coord)
@@ -2311,6 +2319,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
             for tile in tiles:
+                print('[tilequeue][tilequeue_meta_tile_low_zoom] tile[coord] ' + str(tile['coord'] + " tile[tile]" + str(tile['tile'])))
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
         except Exception as e:
             meta_low_zoom_logger.metatile_storage_failed(
