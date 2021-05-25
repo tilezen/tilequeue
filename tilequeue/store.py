@@ -145,7 +145,7 @@ class S3(object):
             put_obj_props = dict(
                 Bucket=self.bucket_name,
                 Key=key_name,
-                Body={'content': content},
+                Body=content,
                 ContentType='text/plain',
                 ACL=self.object_acl,
                 StorageClass=storage_class,
