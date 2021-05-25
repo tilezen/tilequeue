@@ -2196,7 +2196,7 @@ def tilequeue_meta_tile(cfg, args):
                     print('[tilequeue][tilequeue_meta_tile] tile[coord] ' + str(tile['coord']))
                     store.write_tile(
                         tile['tile'], tile['coord'], tile['format'])
-                store.write_indicator('tilequeue_meta_tile_success')
+
             except Exception as e:
                 meta_tile_logger.metatile_storage_failed(
                     e, parent, job_coord, coord)
@@ -2205,7 +2205,7 @@ def tilequeue_meta_tile(cfg, args):
             meta_tile_logger.tile_processed(parent, job_coord, coord)
 
         meta_tile_logger.end_pyramid(parent, job_coord)
-
+    store.write_indicator('tilequeue_meta_tile_success')
     meta_tile_logger.end_run(parent)
 
 
@@ -2328,15 +2328,15 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
             for tile in tiles:
                 print('[tilequeue][tilequeue_meta_tile_low_zoom] tile[coord] ' + str(tile['coord']))
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
-            store.write_indicator('tilequeue_meta_tile_low_zoom_success')
+
 
         except Exception as e:
             meta_low_zoom_logger.metatile_storage_failed(
                 e, parent, coord)
             continue
-
         meta_low_zoom_logger.tile_processed(parent, coord)
 
+    store.write_indicator('tilequeue_meta_tile_low_zoom_success')
     meta_low_zoom_logger.end_run(parent)
 
 
