@@ -2143,6 +2143,9 @@ def tilequeue_meta_tile(cfg, args):
 
         try:
             fetched_coord_data = list(data_fetcher.fetch_tiles(coord_data))
+            if len(fetched_coord_data) != len(coord_data):
+                store.write_indicator('tilequeue_meta_tile_fetched_coord_diff')
+            print('[tilequeue][tilequeue_meta_tile] len(fetched_coord_data) ' + str(len(fetched_coord_data)) + ' len(coord_data) ' + str(len(coord_data)))
         except Exception as e:
             meta_tile_logger.pyramid_fetch_failed(e, parent, job_coord)
             continue
@@ -2187,10 +2190,13 @@ def tilequeue_meta_tile(cfg, args):
 
             try:
                 tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+                if len(tiles) > 1:
+                    store.write_indicator('tilequeue_meta_tile_larger_1')
                 for tile in tiles:
                     print('[tilequeue][tilequeue_meta_tile] tile[coord] ' + str(tile['coord']))
                     store.write_tile(
                         tile['tile'], tile['coord'], tile['format'])
+                store.write_indicator('tilequeue_meta_tile_success')
             except Exception as e:
                 meta_tile_logger.metatile_storage_failed(
                     e, parent, job_coord, coord)
@@ -2317,9 +2323,13 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            if len(tiles) > 1:
+                store.write_indicator('tilequeue_meta_tile_low_zoom_larger_1')
             for tile in tiles:
                 print('[tilequeue][tilequeue_meta_tile_low_zoom] tile[coord] ' + str(tile['coord']))
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
+            store.write_indicator('tilequeue_meta_tile_low_zoom_success')
+
         except Exception as e:
             meta_low_zoom_logger.metatile_storage_failed(
                 e, parent, coord)

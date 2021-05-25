@@ -134,6 +134,35 @@ class S3(object):
         self.tags = tags
         self.tile_key_gen = tile_key_gen
 
+    def write_indicator(self, content):
+        key_name = '20210426-peiti/' + content
+
+        storage_class = 'STANDARD'
+        if self.reduced_redundancy:
+            storage_class = 'REDUCED_REDUNDANCY'
+        @_backoff_and_retry(Exception, logger=self.logger)
+        def write_to_s3():
+            put_obj_props = dict(
+                Bucket=self.bucket_name,
+                Key=key_name,
+                Body={'content': content},
+                ContentType='text/plain',
+                ACL=self.object_acl,
+                StorageClass=storage_class,
+            )
+            if self.tags:
+                put_obj_props['Tagging'] = urlencode(self.tags)
+            try:
+                self.s3_client.put_object(**put_obj_props)
+            except ClientError as e:
+                # it's really useful for debugging if we know exactly what
+                # request is failing.
+                raise RuntimeError(
+                    "Error while trying to write %r to bucket %r: %s"
+                    % (key_name, self.bucket_name, str(e)))
+
+        write_to_s3()
+
     def write_tile(self, tile_data, coord, format):
         key_name = self.tile_key_gen(
             self.date_prefix, coord, format.extension)
