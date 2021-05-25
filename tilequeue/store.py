@@ -470,6 +470,10 @@ class MultiStore(object):
         for store in self.stores:
             store.write_tile(tile_data, coord, format)
 
+    def write_indicator(self, content):
+        for store in self.stores:
+            store.write_indicator(content)
+
     def read_tile(self, coord, format):
         return self.stores[-1].read_tile(coord, format)
 
