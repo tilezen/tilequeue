@@ -2123,6 +2123,8 @@ def tilequeue_meta_tile(cfg, args):
     # NOTE: max_zoom looks to be inclusive
     zoom_stop = cfg.max_zoom
     assert zoom_stop > group_by_zoom
+
+    print('peitili zoom_stop ' + str(zoom_stop))
     formats = lookup_formats(cfg.output_formats)
 
     meta_tile_logger.begin_run(parent)
