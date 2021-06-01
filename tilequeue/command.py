@@ -2127,6 +2127,8 @@ def tilequeue_meta_tile(cfg, args):
     print('peitili zoom_stop ' + str(zoom_stop))
     formats = lookup_formats(cfg.output_formats)
 
+    store.write_indicator('tilequeue_meta_tile_zoom_stop_' + str(zoom_stop))
+
     meta_tile_logger.begin_run(parent)
 
     zip_format = lookup_format_by_extension('zip')
