@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+v2.4.1
+------
+
+* Move default max zoom 16 to a constants module.
+
 v2.4.0
 ------
 
