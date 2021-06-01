@@ -14,6 +14,7 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
 from tilequeue.transform import mercator_point_to_lnglat
 from tilequeue.transform import transform_feature_layers_shape
+from tilequeue.constants import MAX_TILE_ZOOM
 from tilequeue import utils
 from zope.dottedname.resolve import resolve
 
@@ -375,8 +376,7 @@ def process_coord_no_format(
             assert min_zoom is not None, \
                 'Missing min_zoom in layer %s' % layer_name
 
-            # TODO would be better if 16 wasn't hard coded here
-            if nominal_zoom < 16 and min_zoom >= nominal_zoom + 1:
+            if nominal_zoom < MAX_TILE_ZOOM and min_zoom >= nominal_zoom + 1:
                 continue
 
             for k, v in output_props.items():
