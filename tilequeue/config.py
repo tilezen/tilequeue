@@ -436,6 +436,12 @@ def _make_yaml_key(s):
     return s.lower().replace("_", "-")
 
 
+def make_config_from_path(config_file_path, default_yml=None):
+    fh = os.open(config_file_path)
+    config = make_config_from_argparse(fh, default_yml)
+    print(config)
+
+
 def make_config_from_argparse(config_file_handle, default_yml=None):
     if default_yml is None:
         default_yml = default_yml_config()
