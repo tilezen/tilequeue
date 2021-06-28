@@ -137,6 +137,131 @@ class Configuration(object):
             self.tile_sizes = [256 * (1 << z) for z in
                                reversed(xrange(0, self.metatile_zoom + 1))]
 
+    def __repr__(self):
+        return '{aws_access_key_id: {aws_access_key_id},' \
+               'aws_secret_access_key: {aws_secret_access_key},' \
+               'queue_cfg: {queue_cfg},' \
+               'store_type: {store_type},' \
+               's3_bucket: {s3_bucket}' \
+               's3_reduced_redundancy: {s3_reduced_redundancy}' \
+               's3_path: {s3_path}' \
+               's3_date_prefix: {s3_date_prefix}' \
+               's3_delete_retry_interval: {s3_delete_retry_interval}' \
+               'seed_all_zoom_start: {seed_all_zoom_start}' \
+               'seed_all_zoom_until: {seed_all_zoom_until}' \
+               'seed_n_threads: {seed_n_threads}' \
+               'seed_metro_extract_url: {seed_metro_extract_url}' \
+               'seed_metro_extract_zoom_start: {seed_metro_extract_zoom_start}' \
+               'seed_metro_extract_zoom_until: {seed_metro_extract_zoom_until}' \
+               'seed_metro_extract_cities: {seed_metro_extract_cities}' \
+               'seed_top_tiles_url: {seed_top_tiles_url}' \
+               'seed_top_tiles_zoom_start: {seed_top_tiles_zoom_start}' \
+               'seed_top_tiles_zoom_until: {seed_top_tiles_zoom_until}' \
+               'seed_top_tiles_url: {seed_top_tiles_url}' \
+               'toi_store_type: {toi_store_type}' \
+               'toi_store_s3_bucket: {toi_store_s3_bucket}' \
+               'toi_store_s3_key: {toi_store_s3_key}' \
+               'toi_store_file_name: {toi_store_file_name}' \
+               'seed_custom_zoom_start: {seed_custom_zoom_start}' \
+               'seed_should_add_to_tiles_of_interest: {seed_should_add_to_tiles_of_interest}' \
+               'seed_custom_zoom_until: {seed_custom_zoom_until}' \
+               'seed_unique: {seed_unique}' \
+               'intersect_expired_tiles_location: {intersect_expired_tiles_location}' \
+               'intersect_zoom_until: {intersect_zoom_until}' \
+               'logconfig: {logconfig}' \
+               'redis_type: {redis_type}' \
+               'redis_host: {redis_host}' \
+               'redis_port: {redis_port}' \
+               'redis_db: {redis_db}' \
+               'redis_cache_set_key: {redis_cache_set_key}' \
+               'statsd_host: {statsd_host}' \
+               'statsd_port: {statsd_port}' \
+               'statsd_prefix: {statsd_prefix}' \
+               'n_simultaneous_query_sets: {n_simultaneous_query_sets}' \
+               'n_simultaneous_s3_storage: {n_simultaneous_s3_storage}' \
+               'log_queue_sizes: {log_queue_sizes}' \
+               'log_queue_sizes_interval_seconds: {log_queue_sizes_interval_seconds}' \
+               'query_cfg: {query_cfg}' \
+               'template_path: {template_path}' \
+               'reload_templates: {reload_templates}' \
+               'output_formats: {output_formats}' \
+               'buffer_cfg: {buffer_cfg}' \
+               'process_yaml_cfg: {process_yaml_cfg}' \
+               'postgresql_conn_info: {postgresql_conn_info}' \
+               'metatile_size: {metatile_size}' \
+               'metatile_zoom: {metatile_zoom}' \
+               'metatile_start_zoom: {metatile_start_zoom}' \
+               'max_zoom_with_changes: {max_zoom_with_changes}' \
+               'max_zoom: {max_zoom}' \
+               'sql_queue_buffer_size: {sql_queue_buffer_size}' \
+               'proc_queue_buffer_size: {proc_queue_buffer_size}' \
+               's3_queue_buffer_size: {s3_queue_buffer_size}' \
+               'tile_traffic_log_path: {tile_traffic_log_path}' \
+               'group_by_zoom: {group_by_zoom}' \
+               'tile_sizes: {tile_sizes}'.format(
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            queue_cfg=self.queue_cfg,
+            store_type=self.store_type,
+            s3_bucket=self.s3_bucket,
+            s3_reduced_redundancy=self.s3_reduced_redundancy,
+            s3_path=self.s3_path,
+            s3_date_prefix=self.s3_date_prefix,
+            s3_delete_retry_interval=self.s3_delete_retry_interval,
+            seed_all_zoom_start=self.seed_all_zoom_start,
+            seed_all_zoom_until=self.seed_all_zoom_until,
+            seed_n_threads=self.seed_n_threads,
+            seed_metro_extract_url=self.seed_metro_extract_url,
+            seed_metro_extract_zoom_start=self.seed_metro_extract_zoom_start,
+            seed_metro_extract_zoom_until=self.seed_metro_extract_zoom_until,
+            seed_metro_extract_cities=self.seed_metro_extract_cities,
+            seed_top_tiles_url=self.seed_top_tiles_url,
+            seed_top_tiles_zoom_start=self.seed_top_tiles_zoom_start,
+            seed_top_tiles_zoom_until=self.seed_top_tiles_zoom_until,
+            toi_store_type=self.toi_store_type,
+            toi_store_s3_bucket=self.toi_store_s3_bucket,
+            toi_store_s3_key=self.toi_store_s3_key,
+            toi_store_file_name=self.toi_store_file_name,
+            seed_custom_zoom_start=self.seed_custom_zoom_start,
+            seed_should_add_to_tiles_of_interest=self.seed_should_add_to_tiles_of_interest,
+            seed_custom_zoom_until=self.seed_custom_zoom_until,
+            seed_unique=self.seed_unique,
+            intersect_expired_tiles_location=self.intersect_expired_tiles_location,
+            intersect_zoom_until=self.intersect_zoom_until,
+            logconfig=self.logconfig,
+            redis_type=self.redis_type,
+            redis_host=self.redis_host,
+            redis_port=self.redis_port,
+            redis_db=self.redis_db,
+            redis_cache_set_key=self.redis_cache_set_key,
+            statsd_host=self.statsd_host,
+            statsd_port=self.statsd_port,
+            statsd_prefix=self.statsd_prefix,
+            n_simultaneous_query_sets=self.n_simultaneous_query_sets,
+            n_simultaneous_s3_storage=self.n_simultaneous_s3_storage,
+            log_queue_sizes=self.log_queue_sizes,
+            log_queue_sizes_interval_seconds=self.log_queue_sizes_interval_seconds,
+            query_cfg=self.query_cfg,
+            template_path=self.template_path,
+            reload_templates=self.reload_templates,
+            output_formats=self.output_formats,
+            buffer_cfg=self.buffer_cfg,
+            process_yaml_cfg=self.process_yaml_cfg,
+            postgresql_conn_info=self.postgresql_conn_info,
+            metatile_size=self.metatile_size,
+            metatile_zoom=self.metatile_zoom,
+            metatile_start_zoom=self.metatile_start_zoom,
+            max_zoom_with_changes=self.max_zoom_with_changes,
+            max_zoom=self.max_zoom,
+            sql_queue_buffer_size=self.sql_queue_buffer_size,
+            proc_queue_buffer_size=self.proc_queue_buffer_size,
+            s3_queue_buffer_size=self.s3_queue_buffer_size,
+            tile_traffic_log_path=self.tile_traffic_log_path,
+            group_by_zoom=self.group_by_zoom,
+            tile_sizes=self.tile_sizes)
+
+
+
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
         yamlval = self.yml
