@@ -509,3 +509,7 @@ def create_query_bounds_pad_fn(buffer_cfg, layer_name):
         return buffered_by_type
 
     return bounds_pad
+
+
+if __name__ == '__main__':
+    make_config_from_path('/config/meta-low-zoom-batch-config.yaml')
