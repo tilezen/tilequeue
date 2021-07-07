@@ -438,12 +438,6 @@ def _make_yaml_key(s):
     return s.lower().replace("_", "-")
 
 
-def make_config_from_path(config_file_path, default_yml=None):
-    fh = open(config_file_path, 'r')
-    config = make_config_from_argparse(fh, default_yml)
-    print(config)
-
-
 def make_config_from_argparse(config_file_handle, default_yml=None,
                               postgresql_host=None,
                               postgresql_dbnames=None,
@@ -565,7 +559,3 @@ def create_query_bounds_pad_fn(buffer_cfg, layer_name):
         return buffered_by_type
 
     return bounds_pad
-
-
-if __name__ == '__main__':
-    make_config_from_path('/config/meta-low-zoom-batch-config.yaml')

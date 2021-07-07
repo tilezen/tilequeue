@@ -2309,11 +2309,8 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
             for tile in tiles:
-                print("writing tile " + tile['coord'])
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
         except Exception as e:
-            print("write tile coord failed ")
-            print(e)
             meta_low_zoom_logger.metatile_storage_failed(
                 e, parent, coord)
             continue
@@ -2570,6 +2567,4 @@ def tilequeue_main(argv_args=None):
                                         store_name=args.store_name,
                                         store_date_prefix=args.store_date_prefix,
                                         batch_check_metafile_exists=args.batch_check_metafile_exists)
-
-    print cfg
-    #args.func(cfg, args)
+    args.func(cfg, args)
