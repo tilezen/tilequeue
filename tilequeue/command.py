@@ -2468,7 +2468,7 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
-    subparser.add_argument('--postgresql_host', required=False,
+    subparser.add_argument('--postgresql_hosts', required=False,
                            help='optional string of a list of db hosts e.g. '
                                 '`["aws.rds.url", "localhost"]`')
     subparser.add_argument('--postgresql_dbnames', required=False,
@@ -2498,7 +2498,7 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
-    subparser.add_argument('--postgresql_host', required=False,
+    subparser.add_argument('--postgresql_hosts', required=False,
                            help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')
     subparser.add_argument('--postgresql_dbnames', required=False,
                            help='optional string of a list of db names e.g. `["gis"]`')
@@ -2521,7 +2521,7 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
-    subparser.add_argument('--postgresql_host', required=False,
+    subparser.add_argument('--postgresql_hosts', required=False,
                            help='optional string of a list of db hosts e.g. '
                                 '`["aws.rds.url", "localhost"]`')
     subparser.add_argument('--postgresql_dbnames', required=False,
@@ -2560,11 +2560,12 @@ def tilequeue_main(argv_args=None):
         'Config file {} does not exist!'.format(args.config)
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh,
-                                        postgresql_host=args.postgresql_host,
+                                        postgresql_hosts=args.postgresql_hosts,
                                         postgresql_dbnames=args.postgresql_dbnames,
                                         postgresql_user=args.postgresql_user,
                                         postgresql_password=args.postgresql_password,
                                         store_name=args.store_name,
                                         store_date_prefix=args.store_date_prefix,
                                         batch_check_metafile_exists=args.batch_check_metafile_exists)
-    args.func(cfg, args)
+    print(cfg)
+    #args.func(cfg, args)

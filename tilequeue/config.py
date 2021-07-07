@@ -439,7 +439,7 @@ def _make_yaml_key(s):
 
 
 def make_config_from_argparse(config_file_handle, default_yml=None,
-                              postgresql_host=None,
+                              postgresql_hosts=None,
                               postgresql_dbnames=None,
                               postgresql_user=None,
                               postgresql_password=None,
@@ -477,9 +477,9 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
             _override_cfg(cfg, keys, value)
 
     # override config values with explicit arguments if set
-    if postgresql_host is not None:
-        keys = ['postgresql', 'host']
-        value = load(postgresql_host)
+    if postgresql_hosts is not None:
+        keys = ['postgresql', 'host']  # attention non-plural form `host`
+        value = load(postgresql_hosts)
         _override_cfg(cfg, keys, value)
 
     if postgresql_dbnames is not None:
