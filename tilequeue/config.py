@@ -444,7 +444,25 @@ def make_config_from_path(config_file_path, default_yml=None):
     print(config)
 
 
-def make_config_from_argparse(config_file_handle, default_yml=None):
+def make_config_from_argparse(config_file_handle, default_yml=None,
+                              postgresql_host=None,
+                              postgresql_dbnames=None,
+                              postgresql_user=None,
+                              postgresql_password=None,
+                              store_name=None,
+                              store_date_prefix=None,
+                              batch_check_metafile_exists=None,
+                              ):
+    """ Generate config from various sources. The configurations chain
+        includes these in order:
+        1. a hardcoded default_yml_config
+        2. a passed-in config file
+        3. environment variables with prefix `TILEQUEUE__`
+        4. explicit override arguments such as postgresql_host
+
+        the configuration values at the end of the chain override the values
+        of those at the beginning of the chain
+    """
     if default_yml is None:
         default_yml = default_yml_config()
 
@@ -463,6 +481,42 @@ def make_config_from_argparse(config_file_handle, default_yml=None):
             keys = map(_make_yaml_key, k.split('__')[1:])
             value = load(os.environ[k])
             _override_cfg(cfg, keys, value)
+
+    # override config values with explicit arguments if set
+    if postgresql_host is not None:
+        keys = ['postgresql', 'host']
+        value = load(postgresql_host)
+        _override_cfg(cfg, keys, value)
+
+    if postgresql_dbnames is not None:
+        keys = ['postgresql', 'dbnames']
+        value = load(postgresql_dbnames)
+        _override_cfg(cfg, keys, value)
+
+    if postgresql_user is not None:
+        keys = ['postgresql', 'user']
+        value = load(postgresql_user)
+        _override_cfg(cfg, keys, value)
+
+    if postgresql_password is not None:
+        keys = ['postgresql', 'password']
+        value = load(postgresql_password)
+        _override_cfg(cfg, keys, value)
+
+    if store_name is not None:
+        keys = ['store', 'name']
+        value = load(store_name)
+        _override_cfg(cfg, keys, value)
+
+    if store_date_prefix is not None:
+        keys = ['store', 'date-prefix']
+        value = load(store_date_prefix)
+        _override_cfg(cfg, keys, value)
+
+    if batch_check_metafile_exists is not None:
+        keys = ['batch', 'check-metatile-exists']
+        value = load(batch_check_metafile_exists)
+        _override_cfg(cfg, keys, value)
 
     return Configuration(cfg)
 
