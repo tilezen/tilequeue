@@ -452,7 +452,7 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
         1. a hardcoded default_yml_config
         2. a passed-in config file
         3. environment variables with prefix `TILEQUEUE__`
-        4. explicit override arguments such as postgresql_host
+        4. explicit override arguments such as postgresql_hosts
 
         the configuration values at the end of the chain override the values
         of those at the beginning of the chain
