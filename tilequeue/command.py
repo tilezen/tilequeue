@@ -2567,5 +2567,4 @@ def tilequeue_main(argv_args=None):
                                         store_name=args.store_name,
                                         store_date_prefix=args.store_date_prefix,
                                         batch_check_metafile_exists=args.batch_check_metafile_exists)
-    print(cfg)
-    #args.func(cfg, args)
+    args.func(cfg, args)
