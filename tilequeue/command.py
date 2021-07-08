@@ -2367,7 +2367,7 @@ def tilequeue_main(argv_args=None):
     cfg_commands = (
         ('process', tilequeue_process),
         ('seed', tilequeue_seed),
-        ('test_tile', test_tile),
+        ('test-tile', test_tile),
         ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
         ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
         ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
