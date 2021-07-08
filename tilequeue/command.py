@@ -2468,6 +2468,27 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
+    subparser.add_argument('--postgresql_hosts', required=False,
+                           help='optional string of a list of db hosts e.g. '
+                                '`["aws.rds.url", "localhost"]`')
+    subparser.add_argument('--postgresql_dbnames', required=False,
+                           help='optional string of a list of db names e.g. '
+                                '`["gis"]`')
+    subparser.add_argument('--postgresql_user', required=False,
+                           help='optional string of db user e.g. `gisuser`')
+    subparser.add_argument('--postgresql_password', required=False,
+                           help='optional string of db password e.g. '
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+    subparser.add_argument('--store_name', required=False,
+                           help='optional string of a list of tile store '
+                                'names e.g. `["my-meta-tiles-us-east-1"]`')
+    subparser.add_argument('--store_date_prefix', required=False,
+                           help='optional string of store bucket date prefix '
+                                'e.g. `20210426`')
+    subparser.add_argument('--batch_check_metafile_exists', required=False,
+                           help='optional string of a boolean indicating '
+                                'whether to check metafile exists or not '
+                                'e.g. `false`')
     subparser.set_defaults(func=tilequeue_meta_tile)
 
     subparser = subparsers.add_parser('meta-tile-low-zoom')
@@ -2477,6 +2498,20 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
+    subparser.add_argument('--postgresql_hosts', required=False,
+                           help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')
+    subparser.add_argument('--postgresql_dbnames', required=False,
+                           help='optional string of a list of db names e.g. `["gis"]`')
+    subparser.add_argument('--postgresql_user', required=False,
+                           help='optional string of db user e.g. `gisuser`')
+    subparser.add_argument('--postgresql_password', required=False,
+                           help='optional string of db password e.g. `VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+    subparser.add_argument('--store_name', required=False,
+                           help='optional string of a list of tile store names e.g. `["my-meta-tiles-us-east-1"]`')
+    subparser.add_argument('--store_date_prefix', required=False,
+                           help='optional string of store bucket date prefix e.g. `20210426`')
+    subparser.add_argument('--batch_check_metafile_exists', required=False,
+                           help='optional string of a boolean indicating whether to check metafile exists or not e.g. `false`')
     subparser.set_defaults(func=tilequeue_meta_tile_low_zoom)
 
     subparser = subparsers.add_parser('rawr-tile')
@@ -2486,6 +2521,27 @@ def tilequeue_main(argv_args=None):
                            help='Tile coordinate as "z/x/y".')
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
+    subparser.add_argument('--postgresql_hosts', required=False,
+                           help='optional string of a list of db hosts e.g. '
+                                '`["aws.rds.url", "localhost"]`')
+    subparser.add_argument('--postgresql_dbnames', required=False,
+                           help='optional string of a list of db names e.g. '
+                                '`["gis"]`')
+    subparser.add_argument('--postgresql_user', required=False,
+                           help='optional string of db user e.g. `gisuser`')
+    subparser.add_argument('--postgresql_password', required=False,
+                           help='optional string of db password e.g. '
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+    subparser.add_argument('--store_name', required=False,
+                           help='optional string of a list of tile store '
+                                'names e.g. `["my-meta-tiles-us-east-1"]`')
+    subparser.add_argument('--store_date_prefix', required=False,
+                           help='optional string of store bucket date prefix '
+                                'e.g. `20210426`')
+    subparser.add_argument('--batch_check_metafile_exists', required=False,
+                           help='optional string of a boolean indicating '
+                                'whether to check metafile exists or not '
+                                'e.g. `false`')
     subparser.set_defaults(func=tilequeue_rawr_tile)
 
     subparser = subparsers.add_parser('batch-enqueue')
@@ -2503,6 +2559,12 @@ def tilequeue_main(argv_args=None):
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
     with open(args.config) as fh:
-        cfg = make_config_from_argparse(fh)
-
+        cfg = make_config_from_argparse(fh,
+                                        postgresql_hosts=args.postgresql_hosts,
+                                        postgresql_dbnames=args.postgresql_dbnames,
+                                        postgresql_user=args.postgresql_user,
+                                        postgresql_password=args.postgresql_password,
+                                        store_name=args.store_name,
+                                        store_date_prefix=args.store_date_prefix,
+                                        batch_check_metafile_exists=args.batch_check_metafile_exists)
     args.func(cfg, args)
