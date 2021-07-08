@@ -486,9 +486,10 @@ def make_s3_store(cfg_name, tile_key_gen,
         assert s3_role_session_duration_s > 0
         session = botocore.session.get_session()
         client = session.create_client('sts')
-        assume_role_object = client.assume_role(RoleArn=s3_role_arn,
-                                                RoleSessionName='tilequeue_dataaccess',
-                                                DurationSeconds=s3_role_session_duration_s)
+        assume_role_object = \
+            client.assume_role(RoleArn=s3_role_arn,
+                               RoleSessionName='tilequeue_dataaccess',
+                               DurationSeconds=s3_role_session_duration_s)
         creds = assume_role_object['Credentials']
         s3 = boto3.client('s3',
                           aws_access_key_id=creds['AccessKeyId'],

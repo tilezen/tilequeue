@@ -400,7 +400,10 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def _make_store(cfg, s3_role_arn='', s3_role_session_duration_s=0, logger=None):
+def _make_store(cfg,
+                s3_role_arn='',
+                s3_role_session_duration_s=0,
+                logger=None):
     store_cfg = cfg.yml.get('store')
     assert store_cfg, "Store was not configured, but is necessary."
     if logger is None:
