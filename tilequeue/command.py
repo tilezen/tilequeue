@@ -400,13 +400,15 @@ def make_seed_tile_generator(cfg):
     return tile_generator
 
 
-def _make_store(cfg, logger=None):
+def _make_store(cfg, s3_role_arn='', s3_role_session_duration_s=0, logger=None):
     store_cfg = cfg.yml.get('store')
     assert store_cfg, "Store was not configured, but is necessary."
-    credentials = cfg.subtree('aws credentials')
     if logger is None:
         logger = make_logger(cfg, 'process')
-    store = make_store(store_cfg, credentials=credentials, logger=logger)
+    store = make_store(store_cfg,
+                       s3_role_arn=s3_role_arn,
+                       s3_role_session_duration_s=s3_role_session_duration_s,
+                       logger=logger)
     return store
 
 
@@ -1773,8 +1775,7 @@ def _tilequeue_rawr_setup(cfg):
 
     rawr_store = rawr_yaml.get('store')
     if rawr_store:
-        store = make_store(
-            rawr_store, credentials=cfg.subtree('aws credentials'))
+        store = make_store(rawr_store)
         rawr_sink = RawrStoreSink(store)
 
     else:

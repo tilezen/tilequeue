@@ -2,6 +2,7 @@
 
 import boto3
 from botocore.exceptions import ClientError
+import botocore.session
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
@@ -475,10 +476,27 @@ def _make_s3_store(cfg_name, constructor):
 
 
 def make_s3_store(cfg_name, tile_key_gen,
+                  s3_role_arn='',
+                  s3_role_session_duration_s=0,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
-    s3 = boto3.client('s3')
+    if s3_role_arn:
+        # use provided role to access S3
+        assert s3_role_session_duration_s > 0
+        session = botocore.session.get_session()
+        client = session.create_client('sts')
+        assume_role_object = client.assume_role(RoleArn=s3_role_arn,
+                                                RoleSessionName='tilequeue_dataaccess',
+                                                DurationSeconds=s3_role_session_duration_s)
+        creds = assume_role_object['Credentials']
+        s3 = boto3.client('s3',
+                          aws_access_key_id=creds['AccessKeyId'],
+                          aws_secret_access_key=creds['SecretAccessKey'],
+                          aws_session_token=creds['SessionToken'])
+    else:
+        # use the credentials created from default config chain to access S3
+        s3 = boto3.client('s3')
 
     # extract out the construction of the bucket, so that it can be abstracted
     # from the the logic of interpreting the configuration file.
@@ -535,7 +553,11 @@ def make_s3_tile_key_generator(yml_cfg):
     return S3TileKeyGenerator(key_format_type=key_format_type)
 
 
-def make_store(yml, credentials={}, logger=None):
+def make_store(yml, s3_role_arn='', s3_role_session_duration_s=0, logger=None):
+    """ Make a store object.
+    If the type is S3, optionally a s3_role_arn and s3_role_session_duration_s
+    can be provided to explicitly specify which role(and how long)
+    to assume to access the S3 """
     store_type = yml.get('type')
 
     if store_type == 'directory':
@@ -554,6 +576,8 @@ def make_store(yml, credentials={}, logger=None):
 
         return make_s3_store(
             bucket, tile_key_gen,
+            s3_role_arn=s3_role_arn,
+            s3_role_session_duration_s=s3_role_session_duration_s,
             reduced_redundancy=reduced_redundancy,
             date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,

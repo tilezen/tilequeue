@@ -129,8 +129,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         from tilequeue.rawr import RawrStoreSource
 
         store_cfg = rawr_source_yaml.get('store')
-        store = make_store(store_cfg,
-                           credentials=cfg.subtree('aws credentials'))
+        store = make_store(store_cfg)
         storage = RawrStoreSource(store, table_sources)
 
     else:
