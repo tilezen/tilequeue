@@ -2367,6 +2367,7 @@ def tilequeue_main(argv_args=None):
     cfg_commands = (
         ('process', tilequeue_process),
         ('seed', tilequeue_seed),
+        ('test_tile', test_tile),
         ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
         ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
         ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
@@ -2528,6 +2529,7 @@ def tilequeue_main(argv_args=None):
                            help='optional string of the S3 access role ARN'
                                 'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           type=int,
                            help='optional integer which indicates the number '
                                 'of seconds for the S3 session using the '
                                 'provided s3_role_arn'
@@ -2560,6 +2562,7 @@ def tilequeue_main(argv_args=None):
                                 'e.g. '
                                 '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           type=int,
                            help='optional integer which indicates the number '
                                 'of seconds for the S3 session using the '
                                 'provided s3_role_arn'
@@ -2599,6 +2602,7 @@ def tilequeue_main(argv_args=None):
                                 'e.g. '
                                 '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           type=int,
                            help='optional integer which indicates the number '
                                 'of seconds for the S3 session using the '
                                 'provided s3_role_arn'
@@ -2638,6 +2642,7 @@ def tilequeue_main(argv_args=None):
                                 'e.g. '
                                 '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           type=int,
                            help='optional integer which indicates the number '
                                 'of seconds for the S3 session using the '
                                 'provided s3_role_arn'
@@ -2656,7 +2661,6 @@ def tilequeue_main(argv_args=None):
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
 
-
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
@@ -2664,8 +2668,9 @@ def tilequeue_main(argv_args=None):
     if args.s3_role_arn:
         assert args.s3_role_arn.strip(), 's3_role_arn is invalid'
         assert args.s3_role_session_duration_s, \
-            's3_role_arn is provided but s3_role_session_duration_s is ' \
-            'either not provided or 0'
+            's3_role_arn is provided but s3_role_session_duration_s is not'
+        assert args.s3_role_session_duration_s > 0, \
+            's3_role_session_duration_s is non-positive'
 
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh,
