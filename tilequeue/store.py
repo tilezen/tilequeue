@@ -476,14 +476,15 @@ def _make_s3_store(cfg_name, constructor):
 
 
 def make_s3_store(cfg_name, tile_key_gen,
-                  s3_role_arn='',
-                  s3_role_session_duration_s=0,
+                  s3_role_arn=None,
+                  s3_role_session_duration_s=None,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
     if s3_role_arn:
         # use provided role to access S3
-        assert s3_role_session_duration_s > 0
+        assert s3_role_session_duration_s, \
+            's3_role_session_duration_s is either None or 0'
         session = botocore.session.get_session()
         client = session.create_client('sts')
         assume_role_object = \
@@ -554,7 +555,10 @@ def make_s3_tile_key_generator(yml_cfg):
     return S3TileKeyGenerator(key_format_type=key_format_type)
 
 
-def make_store(yml, s3_role_arn='', s3_role_session_duration_s=0, logger=None):
+def make_store(yml,
+               s3_role_arn=None,
+               s3_role_session_duration_s=None,
+               logger=None):
     """ Make a store object.
     If the type is S3, optionally a s3_role_arn and s3_role_session_duration_s
     can be provided to explicitly specify which role(and how long)

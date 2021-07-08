@@ -1751,8 +1751,15 @@ def tilequeue_rawr_enqueue(cfg, args):
         rawr_enqueuer(coords)
 
 
-def _tilequeue_rawr_setup(cfg):
-    """command to read from rawr queue and generate rawr tiles"""
+def _tilequeue_rawr_setup(cfg,
+                          s3_role_arn=None,
+                          s3_role_session_duration_s=None):
+    """command to read from rawr queue and generate rawr tiles
+
+       if `s3_role_arn` is non-empty then it will be used as the IAM role
+       to access the S3 and `s3_role_session_duration_s` determines the S3
+       session duration in seconds
+    """
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
@@ -1778,7 +1785,10 @@ def _tilequeue_rawr_setup(cfg):
 
     rawr_store = rawr_yaml.get('store')
     if rawr_store:
-        store = make_store(rawr_store)
+        store = \
+            make_store(rawr_store,
+                       s3_role_arn=s3_role_arn,
+                       s3_role_session_duration_s=s3_role_session_duration_s)
         rawr_sink = RawrStoreSink(store)
 
     else:
@@ -1861,6 +1871,17 @@ def make_default_run_id(include_clock_time, now=None):
     return now.strftime(fmt)
 
 
+def test_tile(cfg, args):
+    logger = make_logger(cfg, 'rawr_tile')
+    store = _make_store(cfg,
+                        s3_role_arn=args.s3_role_arn,
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,
+                        logger=logger)
+    t = store.read_tile(Coordinate(row=44, column=20, zoom=7),
+                        lookup_format_by_extension('zip'))
+    print('tile in store')
+    print(bool(t))
+
 # run a single RAWR tile generation
 def tilequeue_rawr_tile(cfg, args):
     from raw_tiles.source.table_reader import TableReader
@@ -1879,7 +1900,11 @@ def tilequeue_rawr_tile(cfg, args):
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
     group_by_zoom = rawr_yaml.get('group-zoom')
     assert group_by_zoom is not None, 'Missing group-zoom rawr config'
-    rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
+    rawr_gen, conn_ctx = \
+        _tilequeue_rawr_setup(cfg,
+                              s3_role_arn=args.s3_role_arn,
+                              s3_role_session_duration_s=args.
+                              s3_role_session_duration_s)
 
     logger = make_logger(cfg, 'rawr_tile')
     rawr_tile_logger = JsonRawrTileLogger(logger, run_id)
@@ -2087,7 +2112,10 @@ def tilequeue_meta_tile(cfg, args):
     logger = make_logger(cfg, 'meta_tile')
     meta_tile_logger = JsonMetaTileLogger(logger, run_id)
 
-    store = _make_store(cfg, logger)
+    store = _make_store(cfg,
+                        s3_role_arn=args.s3_role_arn,
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,
+                        logger=logger)
 
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2215,7 +2243,10 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
     logger = make_logger(cfg, 'meta_tile_low_zoom')
     meta_low_zoom_logger = JsonMetaTileLowZoomLogger(logger, run_id)
 
-    store = _make_store(cfg, logger)
+    store = _make_store(cfg,
+                        s3_role_arn=args.s3_role_arn,
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,
+                        logger=logger)
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
 
@@ -2493,6 +2524,14 @@ def tilequeue_main(argv_args=None):
                            help='optional string of a boolean indicating '
                                 'whether to check metafile exists or not '
                                 'e.g. `false`')
+    subparser.add_argument('--s3_role_arn', required=False,
+                           help='optional string of the S3 access role ARN'
+                                'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')
+    subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           help='optional integer which indicates the number '
+                                'of seconds for the S3 session using the '
+                                'provided s3_role_arn'
+                                'e.g. `3600`')
     subparser.set_defaults(func=tilequeue_meta_tile)
 
     subparser = subparsers.add_parser('meta-tile-low-zoom')
@@ -2516,6 +2555,15 @@ def tilequeue_main(argv_args=None):
                            help='optional string of store bucket date prefix e.g. `20210426`')
     subparser.add_argument('--batch_check_metafile_exists', required=False,
                            help='optional string of a boolean indicating whether to check metafile exists or not e.g. `false`')
+    subparser.add_argument('--s3_role_arn', required=False,
+                           help='optional string of the S3 access role ARN'
+                                'e.g. '
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
+    subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           help='optional integer which indicates the number '
+                                'of seconds for the S3 session using the '
+                                'provided s3_role_arn'
+                                'e.g. `3600`')
     subparser.set_defaults(func=tilequeue_meta_tile_low_zoom)
 
     subparser = subparsers.add_parser('rawr-tile')
@@ -2546,7 +2594,55 @@ def tilequeue_main(argv_args=None):
                            help='optional string of a boolean indicating '
                                 'whether to check metafile exists or not '
                                 'e.g. `false`')
+    subparser.add_argument('--s3_role_arn', required=False,
+                           help='optional string of the S3 access role ARN'
+                                'e.g. '
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
+    subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           help='optional integer which indicates the number '
+                                'of seconds for the S3 session using the '
+                                'provided s3_role_arn'
+                                'e.g. `3600`')
     subparser.set_defaults(func=tilequeue_rawr_tile)
+
+    subparser = subparsers.add_parser('test-tile')
+    subparser.add_argument('--config', required=True,
+                           help='The path to the tilequeue config file.')
+    subparser.add_argument('--tile', required=True,
+                           help='Tile coordinate as "z/x/y".')
+    subparser.add_argument('--run_id', required=False,
+                           help='optional run_id used for logging')
+    subparser.add_argument('--postgresql_hosts', required=False,
+                           help='optional string of a list of db hosts e.g. '
+                                '`["aws.rds.url", "localhost"]`')
+    subparser.add_argument('--postgresql_dbnames', required=False,
+                           help='optional string of a list of db names e.g. '
+                                '`["gis"]`')
+    subparser.add_argument('--postgresql_user', required=False,
+                           help='optional string of db user e.g. `gisuser`')
+    subparser.add_argument('--postgresql_password', required=False,
+                           help='optional string of db password e.g. '
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+    subparser.add_argument('--store_name', required=False,
+                           help='optional string of a list of tile store '
+                                'names e.g. `["my-meta-tiles-us-east-1"]`')
+    subparser.add_argument('--store_date_prefix', required=False,
+                           help='optional string of store bucket date prefix '
+                                'e.g. `20210426`')
+    subparser.add_argument('--batch_check_metafile_exists', required=False,
+                           help='optional string of a boolean indicating '
+                                'whether to check metafile exists or not '
+                                'e.g. `false`')
+    subparser.add_argument('--s3_role_arn', required=False,
+                           help='optional string of the S3 access role ARN'
+                                'e.g. '
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
+    subparser.add_argument('--s3_role_session_duration_s', required=False,
+                           help='optional integer which indicates the number '
+                                'of seconds for the S3 session using the '
+                                'provided s3_role_arn'
+                                'e.g. `3600`')
+    subparser.set_defaults(func=test_tile)
 
     subparser = subparsers.add_parser('batch-enqueue')
     subparser.add_argument('--config', required=True,
@@ -2559,9 +2655,18 @@ def tilequeue_main(argv_args=None):
                            help='Enqueue all coordinates below queue zoom')
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
+
+
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
+
+    if args.s3_role_arn:
+        assert args.s3_role_arn.strip(), 's3_role_arn is invalid'
+        assert args.s3_role_session_duration_s, \
+            's3_role_arn is provided but s3_role_session_duration_s is ' \
+            'either not provided or 0'
+
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh,
                                         postgresql_hosts=args.postgresql_hosts,
