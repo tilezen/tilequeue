@@ -68,7 +68,7 @@ You can run the tests with the command `python setup.py test` in the top level s
 We use `flake8` to check our source code is PEP8 compatible. You can run this using the command:
 
 ```
-find . -not -path '*/.eggs/*' -not -path '*OSciMap4*' -name '*.py' | xargs flake8
+find . -not -path '*/.eggs/*' -not -path '*OSciMap4*'  -not -path '*/venv/*' -name '*.py' | xargs flake8
 ```
 
 You might find it useful to add that as a git pre-commit hook, or to run a PEP8 checker in your editor.
