@@ -1870,18 +1870,6 @@ def make_default_run_id(include_clock_time, now=None):
         fmt = '%Y%m%d'
     return now.strftime(fmt)
 
-
-def test_tile(cfg, args):
-    logger = make_logger(cfg, 'rawr_tile')
-    store = _make_store(cfg,
-                        s3_role_arn=args.s3_role_arn,
-                        s3_role_session_duration_s=args.s3_role_session_duration_s,
-                        logger=logger)
-    t = store.read_tile(Coordinate(row=44, column=20, zoom=7),
-                        lookup_format_by_extension('zip'))
-    print('tile in store')
-    print(bool(t))
-
 # run a single RAWR tile generation
 def tilequeue_rawr_tile(cfg, args):
     from raw_tiles.source.table_reader import TableReader
@@ -2367,7 +2355,6 @@ def tilequeue_main(argv_args=None):
     cfg_commands = (
         ('process', tilequeue_process),
         ('seed', tilequeue_seed),
-        ('test-tile', test_tile),
         ('dump-tiles-of-interest', tilequeue_dump_tiles_of_interest),
         ('load-tiles-of-interest', tilequeue_load_tiles_of_interest),
         ('enqueue-tiles-of-interest', tilequeue_enqueue_tiles_of_interest),
@@ -2608,46 +2595,6 @@ def tilequeue_main(argv_args=None):
                                 'provided s3_role_arn'
                                 'e.g. `3600`')
     subparser.set_defaults(func=tilequeue_rawr_tile)
-
-    subparser = subparsers.add_parser('test-tile')
-    subparser.add_argument('--config', required=True,
-                           help='The path to the tilequeue config file.')
-    subparser.add_argument('--tile', required=True,
-                           help='Tile coordinate as "z/x/y".')
-    subparser.add_argument('--run_id', required=False,
-                           help='optional run_id used for logging')
-    subparser.add_argument('--postgresql_hosts', required=False,
-                           help='optional string of a list of db hosts e.g. '
-                                '`["aws.rds.url", "localhost"]`')
-    subparser.add_argument('--postgresql_dbnames', required=False,
-                           help='optional string of a list of db names e.g. '
-                                '`["gis"]`')
-    subparser.add_argument('--postgresql_user', required=False,
-                           help='optional string of db user e.g. `gisuser`')
-    subparser.add_argument('--postgresql_password', required=False,
-                           help='optional string of db password e.g. '
-                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
-    subparser.add_argument('--store_name', required=False,
-                           help='optional string of a list of tile store '
-                                'names e.g. `["my-meta-tiles-us-east-1"]`')
-    subparser.add_argument('--store_date_prefix', required=False,
-                           help='optional string of store bucket date prefix '
-                                'e.g. `20210426`')
-    subparser.add_argument('--batch_check_metafile_exists', required=False,
-                           help='optional string of a boolean indicating '
-                                'whether to check metafile exists or not '
-                                'e.g. `false`')
-    subparser.add_argument('--s3_role_arn', required=False,
-                           help='optional string of the S3 access role ARN'
-                                'e.g. '
-                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
-    subparser.add_argument('--s3_role_session_duration_s', required=False,
-                           type=int,
-                           help='optional integer which indicates the number '
-                                'of seconds for the S3 session using the '
-                                'provided s3_role_arn'
-                                'e.g. `3600`')
-    subparser.set_defaults(func=test_tile)
 
     subparser = subparsers.add_parser('batch-enqueue')
     subparser.add_argument('--config', required=True,
