@@ -18,6 +18,8 @@ from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.queue import make_visibility_manager
 from tilequeue.store import make_store
+from tilequeue.store import MultiStore
+from tilequeue.store import S3
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
@@ -2233,7 +2235,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
     store = _make_store(cfg,
                         s3_role_arn=args.s3_role_arn,
-                        s3_role_session_duration_s=args.s3_role_session_duration_s,
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,  # noqa
                         logger=logger)
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2284,6 +2286,9 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
     for coord in coords:
+        meta_low_zoom_logger._log("start processing coord",
+                                  parent=parent,
+                                  coord=coord)
         if check_metatile_exists:
             existing_data = store.read_tile(coord, zip_format)
             if existing_data is not None:
@@ -2315,7 +2320,6 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
         try:
             processor.fetch()
-
         except Exception as e:
             meta_low_zoom_logger.fetch_failed(
                 e, parent, coord)
@@ -2331,6 +2335,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            meta_low_zoom_logger._log('start writing {n} tiles for coord'.format(n=len(tiles)), parent=parent, coord=coord)  # noqa
             for tile in tiles:
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
         except Exception as e:

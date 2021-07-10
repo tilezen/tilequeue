@@ -14,6 +14,7 @@ from tilequeue.format import zip_format
 import random
 import threading
 import time
+import json
 from cStringIO import StringIO
 from urllib import urlencode
 
@@ -33,6 +34,25 @@ class KeyFormatType(Enum):
 
     # prefix comes before hash
     prefix_hash = 2
+
+
+def int_if_exact(x):
+    try:
+        i = int(x)
+        return i if i == x else x
+    except ValueError:
+        # shouldn't practically happen, but prefer to just log the original
+        # instead of explode
+        return x
+
+
+def make_coord_dict(coord):
+    """helper function to make a dict from a coordinate for logging"""
+    return dict(
+        z=int_if_exact(coord.zoom),
+        x=int_if_exact(coord.column),
+        y=int_if_exact(coord.row),
+    )
 
 
 class S3TileKeyGenerator(object):
@@ -143,6 +163,15 @@ class S3(object):
         if self.reduced_redundancy:
             storage_class = 'REDUCED_REDUNDANCY'
 
+        log_json_obj = dict(
+            msg='try writing tile to S3',
+            tile_coord=make_coord_dict(coord),
+            tile_s3_bucket=self.bucket_name,
+            tile_s3_key_name=key_name,
+        )
+        json_str = json.dumps(log_json_obj)
+        self.logger.debug(json_str)
+
         @_backoff_and_retry(Exception, logger=self.logger)
         def write_to_s3():
             put_obj_props = dict(
@@ -165,6 +194,15 @@ class S3(object):
                     % (key_name, self.bucket_name, str(e)))
 
         write_to_s3()
+
+        log_json_obj = dict(
+            msg='successfully written tile to S3',
+            tile_coord=make_coord_dict(coord),
+            tile_s3_bucket=self.bucket_name,
+            tile_s3_key_name=key_name,
+        )
+        json_str = json.dumps(log_json_obj)
+        self.logger.debug(json_str)
 
     def read_tile(self, coord, format):
         key_name = self.tile_key_gen(
