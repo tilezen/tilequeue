@@ -18,8 +18,6 @@ from tilequeue.query import make_data_fetcher
 from tilequeue.queue import make_sqs_queue
 from tilequeue.queue import make_visibility_manager
 from tilequeue.store import make_store
-from tilequeue.store import MultiStore
-from tilequeue.store import S3
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_int_zoom_up
 from tilequeue.tile import coord_is_valid
