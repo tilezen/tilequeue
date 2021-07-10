@@ -163,14 +163,15 @@ class S3(object):
         if self.reduced_redundancy:
             storage_class = 'REDUCED_REDUNDANCY'
 
-        log_json_obj = dict(
-            msg='try writing tile to S3',
-            tile_coord=make_coord_dict(coord),
-            tile_s3_bucket=self.bucket_name,
-            tile_s3_key_name=key_name,
-        )
-        json_str = json.dumps(log_json_obj)
-        self.logger.debug(json_str)
+        if self.logger:
+            log_json_obj = dict(
+                msg='try writing tile to S3',
+                tile_coord=make_coord_dict(coord),
+                tile_s3_bucket=self.bucket_name,
+                tile_s3_key_name=key_name,
+            )
+            json_str = json.dumps(log_json_obj)
+            self.logger.debug(json_str)
 
         @_backoff_and_retry(Exception, logger=self.logger)
         def write_to_s3():
@@ -195,14 +196,15 @@ class S3(object):
 
         write_to_s3()
 
-        log_json_obj = dict(
-            msg='successfully written tile to S3',
-            tile_coord=make_coord_dict(coord),
-            tile_s3_bucket=self.bucket_name,
-            tile_s3_key_name=key_name,
-        )
-        json_str = json.dumps(log_json_obj)
-        self.logger.debug(json_str)
+        if self.logger:
+            log_json_obj = dict(
+                msg='successfully written tile to S3',
+                tile_coord=make_coord_dict(coord),
+                tile_s3_bucket=self.bucket_name,
+                tile_s3_key_name=key_name,
+            )
+            json_str = json.dumps(log_json_obj)
+            self.logger.debug(json_str)
 
     def read_tile(self, coord, format):
         key_name = self.tile_key_gen(
