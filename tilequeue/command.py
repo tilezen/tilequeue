@@ -1870,6 +1870,7 @@ def make_default_run_id(include_clock_time, now=None):
         fmt = '%Y%m%d'
     return now.strftime(fmt)
 
+
 # run a single RAWR tile generation
 def tilequeue_rawr_tile(cfg, args):
     from raw_tiles.source.table_reader import TableReader
@@ -2100,10 +2101,11 @@ def tilequeue_meta_tile(cfg, args):
     logger = make_logger(cfg, 'meta_tile')
     meta_tile_logger = JsonMetaTileLogger(logger, run_id)
 
-    store = _make_store(cfg,
-                        s3_role_arn=args.s3_role_arn,
-                        s3_role_session_duration_s=args.s3_role_session_duration_s,
-                        logger=logger)
+    store = \
+        _make_store(cfg,
+                    s3_role_arn=args.s3_role_arn,
+                    s3_role_session_duration_s=args.s3_role_session_duration_s,
+                    logger=logger)
 
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2233,7 +2235,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
     store = _make_store(cfg,
                         s3_role_arn=args.s3_role_arn,
-                        s3_role_session_duration_s=args.s3_role_session_duration_s,
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,  # noqa
                         logger=logger)
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2284,6 +2286,9 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
     for coord in coords:
+        meta_low_zoom_logger._log("start processing coord",
+                                  parent=parent,
+                                  coord=coord)
         if check_metatile_exists:
             existing_data = store.read_tile(coord, zip_format)
             if existing_data is not None:
@@ -2315,7 +2320,6 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
         try:
             processor.fetch()
-
         except Exception as e:
             meta_low_zoom_logger.fetch_failed(
                 e, parent, coord)
@@ -2331,6 +2335,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
         try:
             tiles = make_metatiles(cfg.metatile_size, formatted_tiles)
+            meta_low_zoom_logger._log('start writing {n} tiles for coord'.format(n=len(tiles)), parent=parent, coord=coord)  # noqa
             for tile in tiles:
                 store.write_tile(tile['tile'], tile['coord'], tile['format'])
         except Exception as e:
@@ -2501,7 +2506,7 @@ def tilequeue_main(argv_args=None):
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. '
-                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
     subparser.add_argument('--store_name', required=False,
                            help='optional string of a list of tile store '
                                 'names e.g. `["my-meta-tiles-us-east-1"]`')
@@ -2514,7 +2519,7 @@ def tilequeue_main(argv_args=None):
                                 'e.g. `false`')
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
-                                'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')
+                                'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')  # noqa
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2531,23 +2536,23 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
     subparser.add_argument('--postgresql_hosts', required=False,
-                           help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')
+                           help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')  # noqa
     subparser.add_argument('--postgresql_dbnames', required=False,
-                           help='optional string of a list of db names e.g. `["gis"]`')
+                           help='optional string of a list of db names e.g. `["gis"]`')  # noqa
     subparser.add_argument('--postgresql_user', required=False,
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
-                           help='optional string of db password e.g. `VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+                           help='optional string of db password e.g. `VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
     subparser.add_argument('--store_name', required=False,
-                           help='optional string of a list of tile store names e.g. `["my-meta-tiles-us-east-1"]`')
+                           help='optional string of a list of tile store names e.g. `["my-meta-tiles-us-east-1"]`')  # noqa
     subparser.add_argument('--store_date_prefix', required=False,
-                           help='optional string of store bucket date prefix e.g. `20210426`')
+                           help='optional string of store bucket date prefix e.g. `20210426`')  # noqa
     subparser.add_argument('--batch_check_metafile_exists', required=False,
-                           help='optional string of a boolean indicating whether to check metafile exists or not e.g. `false`')
+                           help='optional string of a boolean indicating whether to check metafile exists or not e.g. `false`')  # noqa
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
                                 'e.g. '
-                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')   # noqa
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2573,7 +2578,7 @@ def tilequeue_main(argv_args=None):
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. '
-                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
     subparser.add_argument('--store_name', required=False,
                            help='optional string of a list of tile store '
                                 'names e.g. `["my-meta-tiles-us-east-1"]`')
@@ -2587,7 +2592,7 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
                                 'e.g. '
-                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')  # noqa
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2607,7 +2612,6 @@ def tilequeue_main(argv_args=None):
                            help='Enqueue all coordinates below queue zoom')
     subparser.set_defaults(func=tilequeue_batch_enqueue)
 
-
     args = parser.parse_args(argv_args)
     assert os.path.exists(args.config), \
         'Config file {} does not exist!'.format(args.config)
@@ -2622,10 +2626,10 @@ def tilequeue_main(argv_args=None):
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh,
                                         postgresql_hosts=args.postgresql_hosts,
-                                        postgresql_dbnames=args.postgresql_dbnames,
+                                        postgresql_dbnames=args.postgresql_dbnames,  # noqa
                                         postgresql_user=args.postgresql_user,
-                                        postgresql_password=args.postgresql_password,
+                                        postgresql_password=args.postgresql_password,  # noqa
                                         store_name=args.store_name,
-                                        store_date_prefix=args.store_date_prefix,
-                                        batch_check_metafile_exists=args.batch_check_metafile_exists)
+                                        store_date_prefix=args.store_date_prefix,  # noqa
+                                        batch_check_metafile_exists=args.batch_check_metafile_exists)  # noqa
     args.func(cfg, args)
