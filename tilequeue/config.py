@@ -219,13 +219,13 @@ class Configuration(object):
                 seed_all_zoom_until=self.seed_all_zoom_until,
                 seed_n_threads=self.seed_n_threads,
                 seed_metro_extract_url=self.seed_metro_extract_url,
-                seed_metro_extract_zoom_start=self.seed_metro_extract_zoom_start,  # noqa: E501
-                seed_metro_extract_zoom_until=self.seed_metro_extract_zoom_until,  # noqa: E501
+                seed_metro_extract_zoom_start=self.seed_metro_extract_zoom_start,
+                seed_metro_extract_zoom_until=self.seed_metro_extract_zoom_until,
                 seed_metro_extract_cities=self.seed_metro_extract_cities,
                 seed_top_tiles_url=self.seed_top_tiles_url if self.seed_top_tiles_url is not None else 'None',  # noqa: E501
                 seed_top_tiles_zoom_start=self.seed_top_tiles_zoom_start if self.seed_top_tiles_zoom_start is not None else 'None',  # noqa: E501
                 seed_top_tiles_zoom_until=self.seed_top_tiles_zoom_until if self.seed_top_tiles_zoom_until is not None else 'None',  # noqa: E501
-                toi_store_type=self.toi_store_type if self.toi_store_type is not None else 'None',  # noqa: E501
+                toi_store_type=self.toi_store_type if self.toi_store_type is not None else 'None',
                 toi_store_s3_bucket=self.toi_store_s3_bucket if hasattr(self, 'property') and self.toi_store_s3_bucket is not None else 'None',  # noqa: E501
                 toi_store_s3_key=self.toi_store_s3_key if hasattr(self, 'toi_store_s3_key') and self.toi_store_s3_key is not None else 'None',  # noqa: E501
                 toi_store_file_name=self.toi_store_file_name if hasattr(self, 'toi_store_file_name') and self.toi_store_file_name is not None else 'None',  # noqa: E501
@@ -265,7 +265,7 @@ class Configuration(object):
                 s3_queue_buffer_size=self.s3_queue_buffer_size if hasattr(self, 's3_queue_buffer_size') and self.s3_queue_buffer_size is not None else 'None',  # noqa: E501
                 tile_traffic_log_path=self.tile_traffic_log_path if hasattr(self, 'tile_traffic_log_path') and self.tile_traffic_log_path is not None else 'None',  # noqa: E501
                 group_by_zoom=self.group_by_zoom if hasattr(self, 'group_by_zoom') and self.group_by_zoom is not None else 'None',  # noqa: E501
-                tile_sizes=self.tile_sizes if hasattr(self, 'tile_sizes') and self.tile_sizes is not None else 'None')  # noqa: E501
+                tile_sizes=self.tile_sizes if hasattr(self, 'tile_sizes') and self.tile_sizes is not None else 'None')
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
