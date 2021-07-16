@@ -1824,6 +1824,7 @@ def _tilequeue_rawr_setup(cfg,
                                        DurationSeconds=s3_role_session_duration_s)
                 creds = assume_role_object['Credentials']
                 s3_client = boto3.client('s3',
+                                         region_name=sink_region,
                                          aws_access_key_id=creds['AccessKeyId'],
                                          aws_secret_access_key=creds['SecretAccessKey'],
                                          aws_session_token=creds['SessionToken'])
