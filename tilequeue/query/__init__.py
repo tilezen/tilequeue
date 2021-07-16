@@ -15,14 +15,20 @@ __all__ = [
 ]
 
 
-def make_data_fetcher(cfg, layer_data, query_cfg, io_pool):
+def make_data_fetcher(cfg, layer_data, query_cfg, io_pool,
+                      s3_role_arn=None,
+                      s3_role_session_duration_s=None):
+    """ Make data fetcher from RAWR store and PostgreSQL database.
+        When s3_role_arn and s3_role_session_duration_s are available
+        the RAWR store will use the s3_role_arn to access the RAWR S3 bucket
+    """
     db_fetcher = make_db_data_fetcher(
         cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
         query_cfg, io_pool)
 
     if cfg.yml.get('use-rawr-tiles'):
         rawr_fetcher = _make_rawr_fetcher(
-            cfg, layer_data, query_cfg, io_pool)
+            cfg, layer_data, s3_role_arn, s3_role_session_duration_s)
 
         group_by_zoom = cfg.yml.get('rawr').get('group-zoom')
         assert group_by_zoom is not None, 'Missing group-zoom rawr config'
@@ -54,7 +60,14 @@ class _NullRawrStorage(object):
         return _tables
 
 
-def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
+def _make_rawr_fetcher(cfg, layer_data,
+                       s3_role_arn=None,
+                       s3_role_session_duration_s=None):
+    """
+        When s3_role_arn and s3_role_session_duration_s are available
+        the RAWR store will use the s3_role_arn to access the RAWR S3
+        bucket
+    """
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
@@ -106,8 +119,28 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
             'allow-missing-tiles', False)
 
         import boto3
+        import botocore
         from tilequeue.rawr import RawrS3Source
-        s3_client = boto3.client('s3', region_name=region)
+        if s3_role_arn:
+            # use provided role to access S3
+            assert s3_role_session_duration_s, \
+                's3_role_session_duration_s is either None or 0'
+            session = botocore.session.get_session()
+            client = session.create_client('sts')
+            assume_role_object = \
+                client.assume_role(RoleArn=s3_role_arn,
+                                   RoleSessionName='tilequeue_dataaccess',
+                                   DurationSeconds=s3_role_session_duration_s)
+            creds = assume_role_object['Credentials']
+            s3_client = boto3.client('s3',
+                                     region_name=region,
+                                     aws_access_key_id=creds['AccessKeyId'],
+                                     aws_secret_access_key=creds[
+                                         'SecretAccessKey'],
+                                     aws_session_token=creds['SessionToken'])
+        else:
+            s3_client = boto3.client('s3', region_name=region)
+
         tile_key_gen = make_s3_tile_key_generator(rawr_source_s3_yaml)
         storage = RawrS3Source(
             s3_client, bucket, prefix, extension, table_sources, tile_key_gen,
