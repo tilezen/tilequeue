@@ -1774,6 +1774,7 @@ def _tilequeue_rawr_setup(cfg,
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
     import boto3
+    import botocore
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
 
@@ -1811,7 +1812,23 @@ def _tilequeue_rawr_setup(cfg,
             from tilequeue.store import make_s3_tile_key_generator
             tile_key_gen = make_s3_tile_key_generator(s3_cfg)
 
-            s3_client = boto3.client('s3', region_name=sink_region)
+            if s3_role_arn:
+                # use provided role to access S3
+                assert s3_role_session_duration_s, \
+                    's3_role_session_duration_s is either None or 0'
+                session = botocore.session.get_session()
+                client = session.create_client('sts')
+                assume_role_object = \
+                    client.assume_role(RoleArn=s3_role_arn,
+                                       RoleSessionName='tilequeue_dataaccess',
+                                       DurationSeconds=s3_role_session_duration_s)
+                creds = assume_role_object['Credentials']
+                s3_client = boto3.client('s3',
+                                         aws_access_key_id=creds['AccessKeyId'],
+                                         aws_secret_access_key=creds['SecretAccessKey'],
+                                         aws_session_token=creds['SessionToken'])
+            else:
+                s3_client = boto3.client('s3', region_name=sink_region)
             rawr_sink = RawrS3Sink(
                 s3_client, bucket, prefix, extension, tile_key_gen, tags)
         elif sink_type == 'none':

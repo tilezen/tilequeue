@@ -484,30 +484,49 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
         keys = ['postgresql', 'host']  # attention non-plural form `host`
         value = load(postgresql_hosts)
         _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'postgresql', 'host']
+        _override_cfg(cfg, keys, value)
 
     if postgresql_dbnames is not None:
         keys = ['postgresql', 'dbnames']
         value = load(postgresql_dbnames)
         _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'postgresql', 'dbname']
+        single_value = value[0]
+        _override_cfg(cfg, keys, single_value)
 
     if postgresql_user is not None:
         keys = ['postgresql', 'user']
         value = load(postgresql_user)
+        _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'postgresql', 'user']
         _override_cfg(cfg, keys, value)
 
     if postgresql_password is not None:
         keys = ['postgresql', 'password']
         value = load(postgresql_password)
         _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'postgresql', 'password']
+        _override_cfg(cfg, keys, value)
 
     if store_name is not None:
         keys = ['store', 'name']
         value = load(store_name)
         _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'sink', 's3', 'bucket']
+        _override_cfg(cfg, keys, value[0])
 
     if store_date_prefix is not None:
         keys = ['store', 'date-prefix']
         value = load(store_date_prefix)
+        _override_cfg(cfg, keys, value)
+        # for RAWR
+        keys = ['rawr', 'sink', 's3', 'prefix']
         _override_cfg(cfg, keys, value)
 
     if batch_check_metafile_exists is not None:
