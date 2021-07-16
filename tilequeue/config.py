@@ -481,23 +481,25 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
 
     # override config values with explicit arguments if set
     if postgresql_hosts is not None:
+        # for high/low zoom metatile
         keys = ['postgresql', 'host']  # attention non-plural form `host`
         value = load(postgresql_hosts)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+        # for RAWR tile
         keys = ['rawr', 'postgresql', 'host']
         _override_cfg(cfg, keys, value)
 
     if postgresql_dbnames is not None:
+        # for high/low zoom metatile
         keys = ['postgresql', 'dbnames']
         value = load(postgresql_dbnames)
         _override_cfg(cfg, keys, value)
         # for RAWR
         keys = ['rawr', 'postgresql', 'dbname']
-        single_value = value[0]
-        _override_cfg(cfg, keys, single_value)
+        _override_cfg(cfg, keys, value[0])
 
     if postgresql_user is not None:
+        # for high/low zoom metatile
         keys = ['postgresql', 'user']
         value = load(postgresql_user)
         _override_cfg(cfg, keys, value)
@@ -506,6 +508,7 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
         _override_cfg(cfg, keys, value)
 
     if postgresql_password is not None:
+        # for high/low zoom metatile
         keys = ['postgresql', 'password']
         value = load(postgresql_password)
         _override_cfg(cfg, keys, value)
@@ -514,19 +517,27 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
         _override_cfg(cfg, keys, value)
 
     if store_name is not None:
+        # for low zoom metatile
         keys = ['store', 'name']
         value = load(store_name)
         _override_cfg(cfg, keys, value)
         # for RAWR
         keys = ['rawr', 'sink', 's3', 'bucket']
         _override_cfg(cfg, keys, value[0])
+        # for high zoom metatile
+        keys = ['rawr', 'source', 's3', 'bucket']
+        _override_cfg(cfg, keys, value[0])
 
     if store_date_prefix is not None:
+        # for low zoom metatile
         keys = ['store', 'date-prefix']
         value = load(store_date_prefix)
         _override_cfg(cfg, keys, value)
         # for RAWR
         keys = ['rawr', 'sink', 's3', 'prefix']
+        _override_cfg(cfg, keys, value)
+        # for high zoom metatile
+        keys = ['rawr', 'source', 's3', 'prefix']
         _override_cfg(cfg, keys, value)
 
     if batch_check_metafile_exists is not None:
