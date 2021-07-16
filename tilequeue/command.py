@@ -2146,7 +2146,12 @@ def tilequeue_meta_tile(cfg, args):
     output_calc_mapping = make_output_calc_mapping(cfg.process_yaml_cfg)
     io_pool = ThreadPool(len(layer_data))
 
-    data_fetcher = make_data_fetcher(cfg, layer_data, query_cfg, io_pool)
+    data_fetcher = make_data_fetcher(cfg,
+                                     layer_data,
+                                     query_cfg,
+                                     io_pool,
+                                     args.s3_role_arn,
+                                     args.s3_role_session_duration_s)
 
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
