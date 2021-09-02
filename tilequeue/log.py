@@ -289,6 +289,7 @@ class JsonRawrTileLogger(object):
             category=log_category_name(LogCategory.RAWR_TILE),
             coord=make_coord_dict(coord),
             parent=make_coord_dict(parent),
+            msg='tile processed',
             timing=timing,
             run_id=self.run_id,
         )
