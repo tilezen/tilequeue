@@ -3,6 +3,7 @@ from tilequeue.utils import format_stacktrace_one_line
 import json
 import logging
 import sys
+import time
 
 
 def int_if_exact(x):
@@ -291,6 +292,7 @@ class JsonRawrTileLogger(object):
             parent=make_coord_dict(parent),
             msg='tile processed',
             timing=timing,
+            duration_ms=timing.get('total', 0),
             run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
@@ -303,6 +305,7 @@ class JsonRawrTileLogger(object):
             category=log_category_name(LogCategory.RAWR_TILE),
             parent=make_coord_dict(parent),
             timing=timing,
+            duration_ms=timing.get('total', 0),
             run_id=self.run_id,
         )
         json_str = json.dumps(json_obj)
@@ -345,7 +348,7 @@ class JsonMetaTileLogger(object):
         self.logger = logger
         self.run_id = run_id
 
-    def _log(self, msg, parent, pyramid=None, coord=None):
+    def _log(self, msg, parent, pyramid=None, coord=None, coord_start_ms=None):
         json_obj = dict(
             parent=make_coord_dict(parent),
             type=log_level_name(LogLevel.INFO),
@@ -357,6 +360,9 @@ class JsonMetaTileLogger(object):
             json_obj['pyramid'] = make_coord_dict(pyramid)
         if coord:
             json_obj['coord'] = make_coord_dict(coord)
+        if coord_start_ms is not None:
+            json_obj['duration_ms'] = \
+                int(time.time() * 1000) - coord_start_ms
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
@@ -372,8 +378,8 @@ class JsonMetaTileLogger(object):
     def end_pyramid(self, parent, pyramid):
         self._log('pyramid end', parent, pyramid)
 
-    def tile_processed(self, parent, pyramid, coord):
-        self._log('tile processed', parent, pyramid, coord)
+    def tile_processed(self, parent, pyramid, coord, coord_start_ms):
+        self._log('tile processed', parent, pyramid, coord, coord_start_ms)
 
     def _log_exception(self, msg, exception, parent, pyramid, coord=None):
         stacktrace = format_stacktrace_one_line()
@@ -423,7 +429,7 @@ class JsonMetaTileLowZoomLogger(object):
         self.logger = logger
         self.run_id = run_id
 
-    def _log(self, msg, parent, coord=None):
+    def _log(self, msg, parent, coord=None, coord_start_ms=None):
         json_obj = dict(
             type=log_level_name(LogLevel.INFO),
             category=log_category_name(LogCategory.META_TILE_LOW_ZOOM),
@@ -433,6 +439,8 @@ class JsonMetaTileLowZoomLogger(object):
         )
         if coord:
             json_obj['coord'] = make_coord_dict(coord)
+        if coord_start_ms is not None:
+            json_obj['duration_ms'] = int(time.time() * 1000) - coord_start_ms
         json_str = json.dumps(json_obj)
         self.logger.info(json_str)
 
@@ -464,8 +472,8 @@ class JsonMetaTileLowZoomLogger(object):
         self._log_exception(
             'metatile storage failed', exception, parent, coord)
 
-    def tile_processed(self, parent, coord):
-        self._log('tile processed', parent, coord)
+    def tile_processed(self, parent, coord, coord_start_ms):
+        self._log('tile processed', parent, coord, coord_start_ms)
 
     def begin_run(self, parent):
         self._log('low zoom tile run begin', parent)
