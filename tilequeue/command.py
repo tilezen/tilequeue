@@ -2190,6 +2190,7 @@ def tilequeue_meta_tile(cfg, args):
             continue
 
         for fetch, coord_datum in fetched_coord_data:
+            coord_start_ms = int(time.time() * 1000)
             coord = coord_datum['coord']
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format)
@@ -2234,7 +2235,8 @@ def tilequeue_meta_tile(cfg, args):
                     e, parent, job_coord, coord)
                 continue
 
-            meta_tile_logger.tile_processed(parent, job_coord, coord)
+            meta_tile_logger.tile_processed(parent, job_coord,
+                                            coord, coord_start_ms)
 
         meta_tile_logger.end_pyramid(parent, job_coord)
 
@@ -2309,6 +2311,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
         coords.extend(coord_children_range(parent, group_by_zoom - 1))
 
     for coord in coords:
+        coord_start_ms = int(time.time() * 1000)
         meta_low_zoom_logger._log("start processing coord",
                                   parent=parent,
                                   coord=coord)
@@ -2366,7 +2369,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
                 e, parent, coord)
             continue
 
-        meta_low_zoom_logger.tile_processed(parent, coord)
+        meta_low_zoom_logger.tile_processed(parent, coord, coord_start_ms)
 
     meta_low_zoom_logger.end_run(parent)
 
