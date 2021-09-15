@@ -122,6 +122,9 @@ def _make_rawr_fetcher(cfg, layer_data,
         import boto3
         from tilequeue.rawr import RawrS3Source
         if s3_role_arn:
+            # use provided role to access S3
+            assert s3_role_session_duration_s, \
+                's3_role_session_duration_s is either None or 0'
             aws_helper = AwsSessionHelper('tilequeue_dataaccess',
                                           s3_role_arn,
                                           region,

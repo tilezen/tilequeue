@@ -523,8 +523,12 @@ def make_s3_store(cfg_name, tile_key_gen,
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
     if s3_role_arn:
+        # use provided role to access S3
+        assert s3_role_session_duration_s, \
+            's3_role_session_duration_s is either None or 0'
         aws_helper = AwsSessionHelper('tilequeue_dataaccess',
                                       s3_role_arn,
+                                      'us-east-1',
                                       s3_role_session_duration_s)
         s3 = aws_helper.get_client('s3')
     else:

@@ -1814,6 +1814,9 @@ def _tilequeue_rawr_setup(cfg,
             tile_key_gen = make_s3_tile_key_generator(s3_cfg)
 
             if s3_role_arn:
+                # use provided role to access S3
+                assert s3_role_session_duration_s, \
+                    's3_role_session_duration_s is either None or 0'
                 aws_helper = AwsSessionHelper('tilequeue_dataaccess',
                                               s3_role_arn,
                                               sink_region,
