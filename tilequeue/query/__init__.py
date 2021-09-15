@@ -5,6 +5,7 @@ from tilequeue.query.rawr import make_rawr_data_fetcher
 from tilequeue.query.split import make_split_data_fetcher
 from tilequeue.process import Source
 from tilequeue.store import make_s3_tile_key_generator
+from tilequeue.utils import AwsSessionHelper
 
 
 __all__ = [
@@ -119,25 +120,13 @@ def _make_rawr_fetcher(cfg, layer_data,
             'allow-missing-tiles', False)
 
         import boto3
-        import botocore
         from tilequeue.rawr import RawrS3Source
         if s3_role_arn:
-            # use provided role to access S3
-            assert s3_role_session_duration_s, \
-                's3_role_session_duration_s is either None or 0'
-            session = botocore.session.get_session()
-            client = session.create_client('sts')
-            assume_role_object = \
-                client.assume_role(RoleArn=s3_role_arn,
-                                   RoleSessionName='tilequeue_dataaccess',
-                                   DurationSeconds=s3_role_session_duration_s)
-            creds = assume_role_object['Credentials']
-            s3_client = boto3.client('s3',
-                                     region_name=region,
-                                     aws_access_key_id=creds['AccessKeyId'],
-                                     aws_secret_access_key=creds[
-                                         'SecretAccessKey'],
-                                     aws_session_token=creds['SessionToken'])
+            aws_helper = AwsSessionHelper('tilequeue_dataaccess',
+                                          s3_role_arn,
+                                          region,
+                                          s3_role_session_duration_s)
+            s3_client = aws_helper.get_client('s3')
         else:
             s3_client = boto3.client('s3', region_name=region)
 
