@@ -38,6 +38,7 @@ from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.utils import parse_log_file
 from tilequeue.utils import time_block
+from tilequeue.utils import AwsSessionHelper
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
@@ -1774,7 +1775,6 @@ def _tilequeue_rawr_setup(cfg,
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
     import boto3
-    import botocore
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
 
@@ -1816,18 +1816,11 @@ def _tilequeue_rawr_setup(cfg,
                 # use provided role to access S3
                 assert s3_role_session_duration_s, \
                     's3_role_session_duration_s is either None or 0'
-                session = botocore.session.get_session()
-                client = session.create_client('sts')
-                assume_role_object = \
-                    client.assume_role(RoleArn=s3_role_arn,
-                                       RoleSessionName='tilequeue_dataaccess',
-                                       DurationSeconds=s3_role_session_duration_s)
-                creds = assume_role_object['Credentials']
-                s3_client = boto3.client('s3',
-                                         region_name=sink_region,
-                                         aws_access_key_id=creds['AccessKeyId'],
-                                         aws_secret_access_key=creds['SecretAccessKey'],
-                                         aws_session_token=creds['SessionToken'])
+                aws_helper = AwsSessionHelper('tilequeue_dataaccess',
+                                              s3_role_arn,
+                                              sink_region,
+                                              s3_role_session_duration_s)
+                s3_client = aws_helper.get_client('s3')
             else:
                 s3_client = boto3.client('s3', region_name=sink_region)
             rawr_sink = RawrS3Sink(

@@ -2,7 +2,6 @@
 
 import boto3
 from botocore.exceptions import ClientError
-import botocore.session
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
@@ -17,6 +16,7 @@ import time
 import json
 from cStringIO import StringIO
 from urllib import urlencode
+from tilequeue.utils import AwsSessionHelper
 
 
 def calc_hash(s):
@@ -525,17 +525,11 @@ def make_s3_store(cfg_name, tile_key_gen,
         # use provided role to access S3
         assert s3_role_session_duration_s, \
             's3_role_session_duration_s is either None or 0'
-        session = botocore.session.get_session()
-        client = session.create_client('sts')
-        assume_role_object = \
-            client.assume_role(RoleArn=s3_role_arn,
-                               RoleSessionName='tilequeue_dataaccess',
-                               DurationSeconds=s3_role_session_duration_s)
-        creds = assume_role_object['Credentials']
-        s3 = boto3.client('s3',
-                          aws_access_key_id=creds['AccessKeyId'],
-                          aws_secret_access_key=creds['SecretAccessKey'],
-                          aws_session_token=creds['SessionToken'])
+        aws_helper = AwsSessionHelper('tilequeue_dataaccess',
+                                      s3_role_arn,
+                                      'us-east-1',
+                                      s3_role_session_duration_s)
+        s3 = aws_helper.get_client('s3')
     else:
         # use the credentials created from default config chain to access S3
         s3 = boto3.client('s3')
