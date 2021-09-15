@@ -126,10 +126,8 @@ def convert_seconds_to_millis(time_in_seconds):
 
 
 class AwsSessionHelper:
-    """ The AwsSessionHelper creates a autorefreshable refreshable boto3
-        session object
-        and allows for creating clients and resources with those refreshable
-        credentials.
+    """ The AwsSessionHelper creates a auto-refreshable boto3 session object
+        and allows for creating clients with those refreshable credentials.
     """
 
     def __init__(self, session_name, role_arn, region='us-east-1',
@@ -137,6 +135,7 @@ class AwsSessionHelper:
         """ session_name: str; The name of the session we are creating
             role_arn: str; The ARN of the role we are assuming with STS
             region: str; The region for the STS client to be created in
+            s3_role_session_duration_s: int; the time that session is good for
         """
         self.role_arn = role_arn
         self.session_name = session_name
