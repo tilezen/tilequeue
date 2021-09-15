@@ -1775,7 +1775,6 @@ def _tilequeue_rawr_setup(cfg,
     from tilequeue.rawr import RawrS3Sink
     from tilequeue.rawr import RawrStoreSink
     import boto3
-    import botocore
     # pass through the postgresql yaml config directly
     conn_ctx = ConnectionContextManager(rawr_postgresql_yaml)
 

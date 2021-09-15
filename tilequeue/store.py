@@ -2,7 +2,6 @@
 
 import boto3
 from botocore.exceptions import ClientError
-import botocore.session
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
