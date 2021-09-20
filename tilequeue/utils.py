@@ -181,6 +181,4 @@ class AwsSessionHelper:
             "token": response.get("SessionToken"),
             "expiry_time": response.get("Expiration").isoformat(),
         }
-        print("Created/refreshed AWS session with name {} and role arn {}".
-              format(self.session_name, self.role_arn))
         return credentials
