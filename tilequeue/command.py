@@ -2601,8 +2601,13 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--store_name', required=False,
                            help='optional string of a list of tile store '
                                 'names e.g. `["my-meta-tiles-us-east-1"]`')
+    subparser.add_argument('--rawr_store_name', required=False,
+                           help='optional string of rawr tile store '
+                                'names e.g. `"my-rawr-tiles-us-east-1"`')
     subparser.add_argument('--store_date_prefix', required=False,
                            help='optional string of store bucket date prefix '
+                                'which will override the prefix config'
+                                ' for meta tile and rawr tile s3 output'
                                 'e.g. `20210426`')
     subparser.add_argument('--batch_check_metafile_exists', required=False,
                            help='optional string of a boolean indicating '
@@ -2648,6 +2653,7 @@ def tilequeue_main(argv_args=None):
                                         postgresql_dbnames=args.postgresql_dbnames,  # noqa
                                         postgresql_user=args.postgresql_user,
                                         postgresql_password=args.postgresql_password,  # noqa
+                                        rawr_store_name=args.rawr_store_name,
                                         store_name=args.store_name,
                                         store_date_prefix=args.store_date_prefix,  # noqa
                                         batch_check_metafile_exists=args.batch_check_metafile_exists)  # noqa
