@@ -2604,6 +2604,9 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. '
                                 '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
+    subparser.add_argument('--store_name', required=False,
+                           help='optional string of a list of tile store '
+                                'names e.g. `["my-meta-tiles-us-east-1"]`')
     subparser.add_argument('--rawr_store_name', required=False,
                            help='optional string of rawr tile store '
                                 'names e.g. `"my-rawr-tiles-us-east-1"`')
