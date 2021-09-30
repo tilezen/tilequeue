@@ -446,6 +446,7 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
                               postgresql_dbnames=None,
                               postgresql_user=None,
                               postgresql_password=None,
+                              rawr_store_name=None,
                               store_name=None,
                               store_date_prefix=None,
                               batch_check_metafile_exists=None,
@@ -481,62 +482,65 @@ def make_config_from_argparse(config_file_handle, default_yml=None,
 
     # override config values with explicit arguments if set
     if postgresql_hosts is not None:
-        # for high/low zoom metatile
+        # overrides for tilequeue commands: meta-tile-low-zoom and meta-tile
         keys = ['postgresql', 'host']  # attention non-plural form `host`
         value = load(postgresql_hosts)
         _override_cfg(cfg, keys, value)
-        # for RAWR tile
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'postgresql', 'host']
         _override_cfg(cfg, keys, value)
 
     if postgresql_dbnames is not None:
-        # for high/low zoom metatile
+        # overrides for tilequeue commands: meta-tile-low-zoom and meta-tile
         keys = ['postgresql', 'dbnames']
         value = load(postgresql_dbnames)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'postgresql', 'dbname']
         _override_cfg(cfg, keys, value[0])
 
     if postgresql_user is not None:
-        # for high/low zoom metatile
+        # overrides for tilequeue commands: meta-tile-low-zoom and meta-tile
         keys = ['postgresql', 'user']
         value = load(postgresql_user)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'postgresql', 'user']
         _override_cfg(cfg, keys, value)
 
     if postgresql_password is not None:
-        # for high/low zoom metatile
+        # overrides for tilequeue commands: meta-tile-low-zoom and meta-tile
         keys = ['postgresql', 'password']
         value = load(postgresql_password)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'postgresql', 'password']
         _override_cfg(cfg, keys, value)
 
     if store_name is not None:
-        # for low zoom metatile
+        # overrides for tilequeue commands: meta-tile-low-zoom and meta-tile
         keys = ['store', 'name']
         value = load(store_name)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+
+    if rawr_store_name is not None:
+        value = load(rawr_store_name)
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'sink', 's3', 'bucket']
-        _override_cfg(cfg, keys, value[0])
-        # for high zoom metatile
+        _override_cfg(cfg, keys, value)
+        # overrides for tilequeue command: meta-tile
         keys = ['rawr', 'source', 's3', 'bucket']
-        _override_cfg(cfg, keys, value[0])
+        _override_cfg(cfg, keys, value)
 
     if store_date_prefix is not None:
-        # for low zoom metatile
+        # overrides for tilequeue command: meta-tile-low-zoom
         keys = ['store', 'date-prefix']
         value = load(store_date_prefix)
         _override_cfg(cfg, keys, value)
-        # for RAWR
+        # overrides for tilequeue command: rawr-tile
         keys = ['rawr', 'sink', 's3', 'prefix']
         _override_cfg(cfg, keys, value)
-        # for high zoom metatile
+        # overrides for tilequeue command: meta-tile
         keys = ['rawr', 'source', 's3', 'prefix']
         _override_cfg(cfg, keys, value)
 
