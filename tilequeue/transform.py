@@ -68,12 +68,13 @@ def calc_buffered_bounds(
     Calculate the buffered bounds per format per layer based on config.
     """
 
-    print("entering calc_buffered_bounds")
     if not buffer_cfg:
+        print("not buffer_cfg")
         return bounds
 
     format_buffer_cfg = buffer_cfg.get(format.extension)
     if format_buffer_cfg is None:
+        print("not format_buffer_cfg")
         return bounds
 
     geometry_type = normalize_geometry_type(geometry_type)
