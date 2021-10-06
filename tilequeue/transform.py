@@ -68,6 +68,7 @@ def calc_buffered_bounds(
     Calculate the buffered bounds per format per layer based on config.
     """
 
+    print("entering calc_buffered_bounds")
     if not buffer_cfg:
         return bounds
 
