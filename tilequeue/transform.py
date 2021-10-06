@@ -92,6 +92,7 @@ def calc_buffered_bounds(
         assert isinstance(by_geometry_pixels, Number)
         result = bounds_buffer(
             bounds, meters_per_pixel_dim * by_geometry_pixels)
+        print('reached buffered geometry bounds')
         return result
 
     print('reached buffered bounds')
