@@ -600,22 +600,24 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     return buf
 
 
+def escape_string(s):
+    return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
+
+
+def escape_hstore_string(s):
+    s = escape_string(s)
+    if ' ' in s or ',' in s:
+        s = s.replace('"', '\\\\"')
+        s = '"%s"' % s
+    return s
+
+
 def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
     if curdate is None:
         curdate = datetime.now().date()
 
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
-
-    def escape_string(s):
-        return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
-
-    def escape_hstore_string(s):
-        s = escape_string(s)
-        if ' ' in s or ',' in s:
-            s = s.replace('"', '\\\\"')
-            s = '"%s"' % s
-        return s
 
     def write_nullable_int(buf, x):
         if x is None:
