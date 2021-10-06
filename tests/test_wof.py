@@ -1,5 +1,7 @@
 import unittest
 
+from tilequeue.wof import escape_hstore_string
+
 
 class TestNeighbourhoodDiff(unittest.TestCase):
 
@@ -294,3 +296,30 @@ class MinMaxZoomFloatTest(unittest.TestCase):
         neighbourhood = self._call_fut(14.2, 16.8)
         self.assertEqual(neighbourhood.min_zoom, 14.2)
         self.assertEqual(neighbourhood.max_zoom, 16.8)
+
+class TestEscapeHStoreString(unittest.TestCase):
+
+    def test_has_spaces(self):
+        test = "a b c"
+        expected = "\"a b c\""
+        self.assertEqual(expected, escape_hstore_string(test))
+
+    def test_has_commas(self):
+        test = "a,b"
+        expected = "\"a,b\""
+        self.assertEqual(expected, escape_hstore_string(test))
+
+    def test_has_quote(self):
+        test = 'a"b '
+        expected = '\"a\\\\"b \"'
+        self.assertEqual(expected, escape_hstore_string(test))
+
+    def test_nothing_to_escape(self):
+        test = "normalstring"
+        expected = test
+        self.assertEqual(expected, escape_hstore_string(test))
+
+    def test_escape_for_several_reasons(self):
+        test = 'semicolons and, "oxford commas" are cool'
+        expected = '"semicolons and, \\\\"oxford commas\\\\" are cool"'
+        self.assertEqual(expected, escape_hstore_string(test))
