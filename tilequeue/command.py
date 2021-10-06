@@ -2663,4 +2663,5 @@ def tilequeue_main(argv_args=None):
                                         store_name=args.store_name,
                                         store_date_prefix=args.store_date_prefix,  # noqa
                                         batch_check_metafile_exists=args.batch_check_metafile_exists)  # noqa
+    print(cfg)
     args.func(cfg, args)

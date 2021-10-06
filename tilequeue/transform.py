@@ -94,6 +94,7 @@ def calc_buffered_bounds(
             bounds, meters_per_pixel_dim * by_geometry_pixels)
         return result
 
+    print('reached buffered bounds')
     return bounds
 
 
