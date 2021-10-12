@@ -9,6 +9,7 @@ from shapely.wkb import loads
 from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.log import make_coord_dict
+from tilequeue.tile import bounds_buffer
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
@@ -578,15 +579,17 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
 
                 features_by_layer[layer_name].append(query_props)
 
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(zoom)
     feature_layers = []
+    buffered_bounds = bounds_buffer(bounds, meters_per_pixel_dim * 32)
     for layer_datum in layer_data:
         layer_name = layer_datum['name']
         features = features_by_layer[layer_name]
         # TODO padded bounds
         padded_bounds = dict(
-            polygon=bounds,
-            line=bounds,
-            point=bounds,
+            polygon=buffered_bounds,
+            line=buffered_bounds,
+            point=buffered_bounds,
         )
         feature_layer = dict(
             name=layer_name,
