@@ -578,17 +578,15 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
 
                 features_by_layer[layer_name].append(query_props)
 
-    meters_per_pixel_dim = calc_meters_per_pixel_dim(zoom)
     feature_layers = []
-    buffered_bounds = bounds_buffer(bounds, meters_per_pixel_dim * 32)
     for layer_datum in layer_data:
         layer_name = layer_datum['name']
         features = features_by_layer[layer_name]
         # TODO padded bounds
         padded_bounds = dict(
-            polygon=buffered_bounds,
-            line=buffered_bounds,
-            point=buffered_bounds,
+            polygon=bounds,
+            line=bounds,
+            point=bounds,
         )
         feature_layer = dict(
             name=layer_name,
@@ -758,10 +756,13 @@ class Processor(object):
             self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
         feature_layers_by_zoom = {}
 
+        meters_per_pixel_dim = calc_meters_per_pixel_dim(self.coord.zoom)
+        buffered_bounds = bounds_buffer(unpadded_bounds, meters_per_pixel_dim * 32)
+
         for nominal_zoom, _ in cut_coords_by_zoom.items():
-            source_rows = self.fetch_fn(nominal_zoom, unpadded_bounds)
+            source_rows = self.fetch_fn(nominal_zoom, buffered_bounds)
             feature_layers = convert_source_data_to_feature_layers(
-                source_rows, self.layer_data, unpadded_bounds, self.coord.zoom)
+                source_rows, self.layer_data, buffered_bounds, self.coord.zoom)
             feature_layers_by_zoom[nominal_zoom] = feature_layers
 
         self.cut_coords_by_zoom = cut_coords_by_zoom
