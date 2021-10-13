@@ -735,7 +735,7 @@ class RawrTile(object):
         # loaded?
         assert zoom <= self.tile_pyramid.max_z
         assert zoom >= self.tile_pyramid.z
-        #assert bbox.within(self.tile_pyramid.bbox())
+        # assert bbox.within(self.tile_pyramid.bbox())
 
         for source, features in self._lookup(zoom, unpadded_bounds):
             for (fid, shape, props, layer_min_zooms) in features:
