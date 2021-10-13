@@ -69,7 +69,6 @@ def calc_buffered_bounds(
     """
 
     if not buffer_cfg:
-        #print("not buffer_cfg")
         return bounds
 
     format_buffer_cfg = buffer_cfg.get(format.extension)
