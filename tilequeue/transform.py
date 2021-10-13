@@ -69,13 +69,11 @@ def calc_buffered_bounds(
     """
 
     if not buffer_cfg:
-        print("not buffer_cfg")
+        #print("not buffer_cfg")
         return bounds
 
-    print("format.extension is {}".format(format.extension))
     format_buffer_cfg = buffer_cfg.get(format.extension)
     if format_buffer_cfg is None:
-        print("not format_buffer_cfg")
         return bounds
 
     geometry_type = normalize_geometry_type(geometry_type)
@@ -95,10 +93,8 @@ def calc_buffered_bounds(
         assert isinstance(by_geometry_pixels, Number)
         result = bounds_buffer(
             bounds, meters_per_pixel_dim * by_geometry_pixels)
-        print('reached buffered geometry bounds')
         return result
 
-    print('reached buffered bounds')
     return bounds
 
 

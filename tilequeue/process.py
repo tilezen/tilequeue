@@ -430,7 +430,6 @@ def _format_feature_layers(
     # and format the tile itself
     formatted_tiles = []
     layer = 'all'
-    print('process.py _format_feature_layers {}'.format(formats))
     for format in formats:
         formatted_tile = _create_formatted_tile(
             processed_feature_layers, format, scale, unpadded_bounds,
@@ -784,7 +783,6 @@ class Processor(object):
                     ))
 
             feature_layers = self.feature_layers_by_zoom[nominal_zoom]
-            print('process.py process_tiles {}'.format(self.formats))
             formatted_tiles, extra_data = process_coord(
                 self.coord, nominal_zoom, feature_layers,
                 self.post_process_data, self.formats, unpadded_bounds,
