@@ -580,7 +580,6 @@ def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoo
 
     feature_layers = []
     for layer_datum in layer_data:
-        create_query_bounds_pad_fn()
         layer_name = layer_datum['name']
         features = features_by_layer[layer_name]
         query_bounds_pad_fn = layer_datum['query_bounds_pad_fn']
