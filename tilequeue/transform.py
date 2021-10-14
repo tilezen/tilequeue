@@ -106,16 +106,16 @@ def calc_max_padded_bounds(bounds, meters_per_pixel_dim, buffer_cfg):
     if buffer_cfg is None:
         return bounds
 
-    for _, format_cfg in buffer_cfg:
+    for _, format_cfg in buffer_cfg.items():
         layer_cfg = format_cfg.get('layer', {})
         if layer_cfg is not None:
-            for _, value in layer_cfg:
+            for _, value in layer_cfg.items():
                 assert isinstance(value, Number)
                 max_buffer = max(max_buffer, value)
 
         geometry_cfg = format_cfg.get('geometry', {})
         if geometry_cfg is not None:
-            for _, value in geometry_cfg:
+            for _, value in geometry_cfg.items():
                 assert isinstance(value, Number)
                 max_buffer = max(max_buffer, value)
 
