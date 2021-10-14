@@ -13,7 +13,7 @@ from tilequeue.tile import bounds_buffer
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
-from tilequeue.transform import mercator_point_to_lnglat, calc_max_buffered_bounds
+from tilequeue.transform import mercator_point_to_lnglat, calc_max_padded_bounds
 from tilequeue.transform import transform_feature_layers_shape
 from tilequeue import utils
 from zope.dottedname.resolve import resolve
@@ -749,7 +749,7 @@ class Processor(object):
 
         self.unpadded_bounds = coord_to_mercator_bounds(self.coord)
         meters_per_pixel_dim = calc_meters_per_pixel_dim(self.coord.zoom)
-        self.max_buffered_bounds = calc_max_buffered_bounds(self.unpadded_bounds, meters_per_pixel_dim, self.buffer_cfg)
+        self.max_padded_bounds = calc_max_padded_bounds(self.unpadded_bounds, meters_per_pixel_dim, self.buffer_cfg)
 
     def fetch(self):
         cut_coords_by_zoom = calculate_cut_coords_by_zoom(
@@ -757,9 +757,9 @@ class Processor(object):
         feature_layers_by_zoom = {}
 
         for nominal_zoom, _ in cut_coords_by_zoom.items():
-            source_rows = self.fetch_fn(nominal_zoom, self.max_buffered_bounds)
+            source_rows = self.fetch_fn(nominal_zoom, self.max_padded_bounds)
             feature_layers = convert_source_data_to_feature_layers(
-                source_rows, self.layer_data, self.buffered_bounds, self.coord.zoom)
+                source_rows, self.layer_data, self.unpadded_bounds, self.coord.zoom)
             feature_layers_by_zoom[nominal_zoom] = feature_layers
 
         self.cut_coords_by_zoom = cut_coords_by_zoom

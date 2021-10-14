@@ -97,7 +97,7 @@ def calc_buffered_bounds(
     return bounds
 
 
-def calc_max_buffered_bounds(bounds, meters_per_pixel_dim, buffer_cfg):
+def calc_max_padded_bounds(bounds, meters_per_pixel_dim, buffer_cfg):
     """
     :return: The bounds expanded by the maximum value in buffer_cfg, default = 0
     """
