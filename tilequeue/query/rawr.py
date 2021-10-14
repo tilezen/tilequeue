@@ -725,8 +725,8 @@ class RawrTile(object):
         return source_features.iteritems()
 
     def __call__(self, zoom, bounds):
-        """ The bounds is either an unpadded bounds if bounds_cfg is not set
-        or a padded bounds if bounds_cfg is set """
+        """ The bounds is either an unpadded bounds if buffer_cfg is not set
+        or a padded bounds if buffer_cfg is set upstream """
         read_rows = []
         bbox = box(*bounds)
 
@@ -751,13 +751,13 @@ class RawrTile(object):
 
     def _parse_row(self, zoom, bounds, bbox, source, fid, shape,
                    props, layer_min_zooms):
-        """ The bounds is either an unpadded bounds if bounds_cfg is not set
-            or a padded bounds if bounds_cfg is set """
+        """ The bounds is either an unpadded bounds if buffer_cfg is not set
+            or a padded bounds if buffer_cfg is set upstream"""
         # reject any feature which doesn't intersect the given bounds
         if bbox.disjoint(shape):
             return None
 
-        # place for assembing the read row as if from postgres
+        # place for assembling the read row as if from postgres
         read_row = {}
         generate_label_placement = False
 
@@ -830,6 +830,10 @@ class RawrTile(object):
 
             # if this is a water layer feature, then clip to an expanded
             # bounding box to avoid tile-edge artefacts.
+            # Note: As of Oct 2021 we added support for buffer_cfg to
+            # tilequeue such that this extra buffer for water can actually be
+            # configured as a water layer buffer_cfg. But we leave as is for
+            # now.
             clip_box = bbox
             if layer_name == 'water':
                 pad_factor = 1.1

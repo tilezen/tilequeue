@@ -9,7 +9,6 @@ from shapely.wkb import loads
 from sys import getsizeof
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.log import make_coord_dict
-from tilequeue.tile import bounds_buffer
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
