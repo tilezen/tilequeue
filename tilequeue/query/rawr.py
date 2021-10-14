@@ -724,9 +724,11 @@ class RawrTile(object):
 
         return source_features.iteritems()
 
-    def __call__(self, zoom, unpadded_bounds):
+    def __call__(self, zoom, bounds):
+        """ The bounds is either an unpadded bounds if bounds_cfg is not set
+        or a padded bounds if bounds_cfg is set """
         read_rows = []
-        bbox = box(*unpadded_bounds)
+        bbox = box(*bounds)
 
         # check that the call is fetching data which is actually within the
         # bounds of the tile pyramid. we don't have data outside of that, so
@@ -737,18 +739,20 @@ class RawrTile(object):
         assert zoom >= self.tile_pyramid.z
         # assert bbox.within(self.tile_pyramid.bbox())
 
-        for source, features in self._lookup(zoom, unpadded_bounds):
+        for source, features in self._lookup(zoom, bounds):
             for (fid, shape, props, layer_min_zooms) in features:
                 read_row = self._parse_row(
-                    zoom, unpadded_bounds, bbox, source, fid, shape, props,
+                    zoom, bounds, bbox, source, fid, shape, props,
                     layer_min_zooms)
                 if read_row:
                     read_rows.append(read_row)
 
         return read_rows
 
-    def _parse_row(self, zoom, unpadded_bounds, bbox, source, fid, shape,
+    def _parse_row(self, zoom, bounds, bbox, source, fid, shape,
                    props, layer_min_zooms):
+        """ The bounds is either an unpadded bounds if bounds_cfg is not set
+            or a padded bounds if bounds_cfg is set """
         # reject any feature which doesn't intersect the given bounds
         if bbox.disjoint(shape):
             return None
@@ -830,7 +834,7 @@ class RawrTile(object):
             if layer_name == 'water':
                 pad_factor = 1.1
                 clip_box = calculate_padded_bounds(
-                    pad_factor, unpadded_bounds)
+                    pad_factor, bounds)
             # don't need to clip if geom is fully within the clipping box
             if box(*shape.bounds).within(clip_box):
                 clip_shape = shape
