@@ -13,7 +13,7 @@ from tilequeue.tile import bounds_buffer
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import normalize_geometry_type
-from tilequeue.transform import mercator_point_to_lnglat
+from tilequeue.transform import mercator_point_to_lnglat, calc_max_buffered_bounds
 from tilequeue.transform import transform_feature_layers_shape
 from tilequeue import utils
 from zope.dottedname.resolve import resolve
@@ -519,7 +519,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
     return all_formatted_tiles, extra_data
 
 
-def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
+def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoom):
     # TODO we might want to fold in the other processing into this
     # step at some point. This will prevent us from having to iterate
     # through all the features again.
@@ -580,14 +580,12 @@ def convert_source_data_to_feature_layers(rows, layer_data, bounds, zoom):
 
     feature_layers = []
     for layer_datum in layer_data:
+        create_query_bounds_pad_fn()
         layer_name = layer_datum['name']
         features = features_by_layer[layer_name]
-        # TODO padded bounds
-        padded_bounds = dict(
-            polygon=bounds,
-            line=bounds,
-            point=bounds,
-        )
+        query_bounds_pad_fn = layer_datum['query_bounds_pad_fn']
+
+        padded_bounds = query_bounds_pad_fn(unpadded_bounds, calc_meters_per_pixel_dim(zoom))
         feature_layer = dict(
             name=layer_name,
             features=features,
@@ -749,27 +747,25 @@ class Processor(object):
         self.cfg_tile_sizes = cfg_tile_sizes
         self.log_fn = None
 
-    def fetch(self):
-        unpadded_bounds = coord_to_mercator_bounds(self.coord)
+        self.unpadded_bounds = coord_to_mercator_bounds(self.coord)
+        meters_per_pixel_dim = calc_meters_per_pixel_dim(self.coord.zoom)
+        self.max_buffered_bounds = calc_max_buffered_bounds(self.unpadded_bounds, meters_per_pixel_dim, self.buffer_cfg)
 
+    def fetch(self):
         cut_coords_by_zoom = calculate_cut_coords_by_zoom(
             self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
         feature_layers_by_zoom = {}
 
-        meters_per_pixel_dim = calc_meters_per_pixel_dim(self.coord.zoom)
-        buffered_bounds = bounds_buffer(unpadded_bounds, meters_per_pixel_dim * 32)
-
         for nominal_zoom, _ in cut_coords_by_zoom.items():
-            source_rows = self.fetch_fn(nominal_zoom, buffered_bounds)
+            source_rows = self.fetch_fn(nominal_zoom, self.max_buffered_bounds)
             feature_layers = convert_source_data_to_feature_layers(
-                source_rows, self.layer_data, buffered_bounds, self.coord.zoom)
+                source_rows, self.layer_data, self.buffered_bounds, self.coord.zoom)
             feature_layers_by_zoom[nominal_zoom] = feature_layers
 
         self.cut_coords_by_zoom = cut_coords_by_zoom
         self.feature_layers_by_zoom = feature_layers_by_zoom
 
     def process_tiles(self):
-        unpadded_bounds = coord_to_mercator_bounds(self.coord)
 
         all_formatted_tiles = []
         all_extra_data = {}
@@ -786,7 +782,7 @@ class Processor(object):
             feature_layers = self.feature_layers_by_zoom[nominal_zoom]
             formatted_tiles, extra_data = process_coord(
                 self.coord, nominal_zoom, feature_layers,
-                self.post_process_data, self.formats, unpadded_bounds,
+                self.post_process_data, self.formats, self.unpadded_bounds,
                 cut_coords, self.buffer_cfg, self.output_calc_mapping,
                 log_fn=log_fn,
             )

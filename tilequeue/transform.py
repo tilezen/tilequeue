@@ -97,6 +97,31 @@ def calc_buffered_bounds(
     return bounds
 
 
+def calc_max_buffered_bounds(bounds, meters_per_pixel_dim, buffer_cfg):
+    """
+    :return: The bounds expanded by the maximum value in buffer_cfg, default = 0
+    """
+    max_buffer = 0
+
+    if buffer_cfg is None:
+        return bounds
+
+    for _, format_cfg in buffer_cfg:
+        layer_cfg = format_cfg.get('layer', {})
+        if layer_cfg is not None:
+            for _, value in layer_cfg:
+                assert isinstance(value, Number)
+                max_buffer = max(max_buffer, value)
+
+        geometry_cfg = format_cfg.get('geometry', {})
+        if geometry_cfg is not None:
+            for _, value in geometry_cfg:
+                assert isinstance(value, Number)
+                max_buffer = max(max_buffer, value)
+
+    return bounds_buffer(bounds, meters_per_pixel_dim * max_buffer)
+
+
 def _intersect_multipolygon(shape, tile_bounds, clip_bounds):
     """
     Return the parts of the MultiPolygon shape which overlap the tile_bounds,
