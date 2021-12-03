@@ -414,6 +414,33 @@ def process_coord_no_format(
     return processed_feature_layers, extra_data
 
 
+def remove_wrong_zoomed_feature_layers(
+        processed_feature_layers, remove_features_above_this_zoom):
+    pared_feature_layers = []
+    for feature_layer in processed_feature_layers:
+        features = feature_layer['features']
+
+        pared_features = []
+        for feature in features:
+            shape, props, feature_id = feature
+
+            if props['min_zoom'] > remove_features_above_this_zoom:
+                continue
+
+            pared_feature = shape, props, feature_id
+            pared_features.append(pared_feature)
+
+        pared_feature_layer = dict(
+            name=feature_layer['name'],
+            layer_datum=feature_layer['layer_datum'],
+            features=pared_features,
+            padded_bounds=feature_layer['padded_bounds']
+        )
+        pared_feature_layers.append(pared_feature_layer)
+
+    return pared_feature_layers
+
+
 def _format_feature_layers(
         processed_feature_layers, coord, nominal_zoom, formats,
         unpadded_bounds, scale, buffer_cfg):
@@ -425,13 +452,16 @@ def _format_feature_layers(
         mercator_point_to_lnglat(unpadded_bounds[0], unpadded_bounds[1]) +
         mercator_point_to_lnglat(unpadded_bounds[2], unpadded_bounds[3]))
 
+    if coord.zoom < nominal_zoom:
+        pared_feature_layers = remove_wrong_zoomed_feature_layers(processed_feature_layers, coord.zoom)
+
     # now, perform the format specific transformations
     # and format the tile itself
     formatted_tiles = []
     layer = 'all'
     for format in formats:
         formatted_tile = _create_formatted_tile(
-            processed_feature_layers, format, scale, unpadded_bounds,
+            pared_feature_layers, format, scale, unpadded_bounds,
             unpadded_bounds_lnglat, coord, nominal_zoom, layer,
             meters_per_pixel_dim, buffer_cfg)
         formatted_tiles.append(formatted_tile)
