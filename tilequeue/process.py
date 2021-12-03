@@ -415,7 +415,12 @@ def process_coord_no_format(
 
 
 def remove_wrong_zoomed_features(
-        processed_feature_layers, remove_features_above_this_zoom):
+        processed_feature_layers, coord_zoom, nominal_zoom):
+    # (travisg) this test is supposed to determine whether we're building the highest-zoom metatile but not building
+    # tiles for that zoom yet.  We may need a more nuanced test but also may not
+    if coord_zoom < nominal_zoom:
+        return processed_feature_layers
+
     pared_feature_layers = []
     for feature_layer in processed_feature_layers:
         features = feature_layer['features']
@@ -424,7 +429,7 @@ def remove_wrong_zoomed_features(
         for feature in features:
             shape, props, feature_id = feature
 
-            if props['min_zoom'] > remove_features_above_this_zoom:
+            if props['min_zoom'] > coord_zoom:
                 continue
 
             pared_feature = shape, props, feature_id
@@ -452,10 +457,7 @@ def _format_feature_layers(
         mercator_point_to_lnglat(unpadded_bounds[0], unpadded_bounds[1]) +
         mercator_point_to_lnglat(unpadded_bounds[2], unpadded_bounds[3]))
 
-    # (travisg) this test is supposed to determine whether we're building the highest-zoom metatile but not building
-    # tiles for that zoom yet.  We may need a more nuanced test but also may not.
-    if coord.zoom < nominal_zoom:
-        pared_feature_layers = remove_wrong_zoomed_features(processed_feature_layers, coord.zoom)
+    pared_feature_layers = remove_wrong_zoomed_features(processed_feature_layers, coord.zoom, nominal_zoom)
 
     # now, perform the format specific transformations
     # and format the tile itself
