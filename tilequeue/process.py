@@ -416,9 +416,17 @@ def process_coord_no_format(
 
 def remove_wrong_zoomed_features(
         processed_feature_layers, coord_zoom, nominal_zoom):
+    '''
+    If we're not building a coord at the nominal zoom, that means we definitely have a higher zoom tile we're
+    also going to build.  Therefore, there is no reason to leave features with a higher min zoom than the current coord
+    in the output layers.
+    :return: If coord_zoom < nominal zoom: layers with no objects with min_zooms > than coord zoom.  Otherwise return
+    processed_feature_layers unchanged.
+    '''
+
     # (travisg) this test is supposed to determine whether we're building the highest-zoom metatile but not building
     # tiles for that zoom yet.  We may need a more nuanced test but also may not
-    if coord_zoom < nominal_zoom:
+    if coord_zoom >= nominal_zoom:
         return processed_feature_layers
 
     pared_feature_layers = []
