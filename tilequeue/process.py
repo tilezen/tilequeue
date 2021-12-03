@@ -452,6 +452,8 @@ def _format_feature_layers(
         mercator_point_to_lnglat(unpadded_bounds[0], unpadded_bounds[1]) +
         mercator_point_to_lnglat(unpadded_bounds[2], unpadded_bounds[3]))
 
+    # (travisg) this test is supposed to determine whether we're building the highest-zoom metatile but not building
+    # tiles for that zoom yet.  We may need a more nuanced test but also may not.
     if coord.zoom < nominal_zoom:
         pared_feature_layers = remove_wrong_zoomed_feature_layers(processed_feature_layers, coord.zoom)
 
