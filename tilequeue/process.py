@@ -414,7 +414,7 @@ def process_coord_no_format(
     return processed_feature_layers, extra_data
 
 
-def remove_wrong_zoomed_feature_layers(
+def remove_wrong_zoomed_features(
         processed_feature_layers, remove_features_above_this_zoom):
     pared_feature_layers = []
     for feature_layer in processed_feature_layers:
@@ -455,7 +455,7 @@ def _format_feature_layers(
     # (travisg) this test is supposed to determine whether we're building the highest-zoom metatile but not building
     # tiles for that zoom yet.  We may need a more nuanced test but also may not.
     if coord.zoom < nominal_zoom:
-        pared_feature_layers = remove_wrong_zoomed_feature_layers(processed_feature_layers, coord.zoom)
+        pared_feature_layers = remove_wrong_zoomed_features(processed_feature_layers, coord.zoom)
 
     # now, perform the format specific transformations
     # and format the tile itself
