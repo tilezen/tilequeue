@@ -437,7 +437,7 @@ def remove_wrong_zoomed_features(
         for feature in features:
             shape, props, feature_id = feature
 
-            if props['min_zoom'] > coord_zoom:
+            if 'min_zoom' in props and props['min_zoom'] > coord_zoom:
                 continue
 
             pared_feature = shape, props, feature_id
