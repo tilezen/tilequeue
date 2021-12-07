@@ -1,5 +1,4 @@
-from message import MessageHandle  # noreorder   has to be first because of circular dependency  # noqa
-from file import OutputFileQueue
+from message import MessageHandle  # noreorder
 from memory import MemoryQueue
 from redis_queue import make_redis_queue
 from sqs import JobProgressException
