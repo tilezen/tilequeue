@@ -1,4 +1,5 @@
 from message import MessageHandle  # noreorder
+from file import OutputFileQueue
 from memory import MemoryQueue
 from redis_queue import make_redis_queue
 from sqs import JobProgressException
