@@ -1,3 +1,5 @@
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+
 # tilequeue
 
 A tile generator, used by itself for asyncronous tile generation or with [tileserver](https://github.com/tilezen/tileserver/) for serving tiles.
