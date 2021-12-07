@@ -1,15 +1,17 @@
-import boto3
+import re
 import sys
 import traceback
-import re
 from collections import defaultdict
 from datetime import datetime
 from itertools import islice
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import create_coord
 from time import time
+
+import boto3
 from botocore.credentials import RefreshableCredentials
 from botocore.session import get_session
+
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import create_coord
 
 
 def format_stacktrace_one_line(exc_info=None):
@@ -147,11 +149,11 @@ class AwsSessionHelper:
         session_credentials = RefreshableCredentials.create_from_metadata(
             metadata=credentials,
             refresh_using=self._refresh,
-            method="sts-assume-role"
+            method='sts-assume-role'
         )
         aws_session = get_session()
         aws_session._credentials = session_credentials
-        aws_session.set_config_variable("region", region)
+        aws_session.set_config_variable('region', region)
         self.aws_session = boto3.Session(botocore_session=aws_session)
 
     def get_client(self, service):
@@ -169,16 +171,16 @@ class AwsSessionHelper:
 
     def _refresh(self):
         params = {
-            "RoleArn": self.role_arn,
-            "RoleSessionName": self.session_name,
-            "DurationSeconds": self.session_duration_seconds,
+            'RoleArn': self.role_arn,
+            'RoleSessionName': self.session_name,
+            'DurationSeconds': self.session_duration_seconds,
         }
 
-        response = self.sts_client.assume_role(**params).get("Credentials")
+        response = self.sts_client.assume_role(**params).get('Credentials')
         credentials = {
-            "access_key": response.get("AccessKeyId"),
-            "secret_key": response.get("SecretAccessKey"),
-            "token": response.get("SessionToken"),
-            "expiry_time": response.get("Expiration").isoformat(),
+            'access_key': response.get('AccessKeyId'),
+            'secret_key': response.get('SecretAccessKey'),
+            'token': response.get('SessionToken'),
+            'expiry_time': response.get('Expiration').isoformat(),
         }
         return credentials

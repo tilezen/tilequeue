@@ -1,12 +1,12 @@
 # extracted from mapzen tilestache fork
+import logging
+import struct
 
 from OSciMap4 import TileData_v4_pb2
 from OSciMap4.GeomEncoder import GeomEncoder
-from OSciMap4.StaticVals import getValues
 from OSciMap4.StaticKeys import getKeys
+from OSciMap4.StaticVals import getValues
 from OSciMap4.TagRewrite import fixTag
-import logging
-import struct
 
 statickeys = getKeys()
 staticvals = getValues()
@@ -32,7 +32,7 @@ def encode(file, features, layer_name=''):
     tile.complete()
 
     data = tile.out.SerializeToString()
-    file.write(struct.pack(">I", len(data)))
+    file.write(struct.pack('>I', len(data)))
     file.write(data)
 
 
@@ -49,13 +49,14 @@ def merge(file, feature_layers):
     tile.complete()
 
     data = tile.out.SerializeToString()
-    file.write(struct.pack(">I", len(data)))
+    file.write(struct.pack('>I', len(data)))
     file.write(data)
 
 
 class VectorTile:
     """
     """
+
     def __init__(self, extents):
         self.geomencoder = GeomEncoder(extents)
 
@@ -74,7 +75,7 @@ class VectorTile:
 
     def complete(self):
         if self.num_tags == 0:
-            logging.info("empty tags")
+            logging.info('empty tags')
 
         self.out.num_tags = self.num_tags
 
@@ -111,7 +112,7 @@ class VectorTile:
             tag = str(k), str(v)
 
             # use unsigned int for layer. i.e. map to 0..10
-            if "layer" == tag[0]:
+            if 'layer' == tag[0]:
                 layer = self.getLayer(tag[1])
                 continue
 
@@ -173,7 +174,7 @@ class VectorTile:
         if layer is not None and layer != 5:
             feature.layer = layer
 
-        # logging.debug('tags %d, indices %d' %(len(tags),len(feature.indices)))  # noqa
+        # logging.debug('tags %d, indices %d' %(len(tags),len(feature.indices)))
 
     def getLayer(self, val):
         try:
@@ -181,7 +182,7 @@ class VectorTile:
             if layer != 0:
                 return layer
         except ValueError:
-            logging.debug("layer invalid %s" % val)
+            logging.debug('layer invalid %s' % val)
 
         return None
 

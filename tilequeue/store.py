@@ -1,21 +1,22 @@
 # define locations to store the rendered data
+import json
+import md5
+import os
+import random
+import threading
+import time
+from cStringIO import StringIO
+from urllib import urlencode
 
 import boto3
 from botocore.exceptions import ClientError
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
-import md5
 from ModestMaps.Core import Coordinate
-import os
-from tilequeue.metatile import metatiles_are_equal
+
 from tilequeue.format import zip_format
-import random
-import threading
-import time
-import json
-from cStringIO import StringIO
-from urllib import urlencode
+from tilequeue.metatile import metatiles_are_equal
 from tilequeue.utils import AwsSessionHelper
 
 
@@ -125,8 +126,8 @@ def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
 
                 except ExceptionType as e:
                     if logger:
-                        logger.warning("Failed. Backing off and retrying. "
-                                       "Error: %s" % str(e))
+                        logger.warning('Failed. Backing off and retrying. '
+                                       'Error: %s' % str(e))
 
                 sleep(interval)
                 interval *= factor
@@ -191,7 +192,7 @@ class S3(object):
                 # it's really useful for debugging if we know exactly what
                 # request is failing.
                 raise RuntimeError(
-                    "Error while trying to write %r to bucket %r: %s"
+                    'Error while trying to write %r to bucket %r: %s'
                     % (key_name, self.bucket_name, str(e)))
 
         write_to_s3()
@@ -258,7 +259,7 @@ class S3(object):
         # make sure that we deleted all the tiles - this seems like the
         # expected behaviour from the calling code.
         assert num_deleted == len(coords), \
-            "Failed to delete some coordinates from S3."
+            'Failed to delete some coordinates from S3.'
 
         return num_deleted
 

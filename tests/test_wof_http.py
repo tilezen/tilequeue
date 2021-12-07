@@ -60,7 +60,7 @@ class _WofErrorHandler(http.BaseHTTPRequestHandler):
             self.wof_ctx.request_counts[self.path] = request_count + 1
             self.send_response(self.wof_ctx.failure_code)
             self.end_headers()
-            self.wfile.write("")
+            self.wfile.write('')
 
         else:
             self.send_response(200)
@@ -95,15 +95,15 @@ class _SimpleLogger(object):
 
     def info(self, msg):
         if self.verbose:
-            print "INFO: %s" % msg
+            print 'INFO: %s' % msg
 
     def warn(self, msg):
         if self.verbose:
-            print "WARN: %s" % msg
+            print 'WARN: %s' % msg
 
     def error(self, msg):
         if self.verbose:
-            print "ERROR: %s" % msg
+            print 'ERROR: %s' % msg
 
 
 class TestWofHttp(unittest.TestCase):
@@ -112,27 +112,27 @@ class TestWofHttp(unittest.TestCase):
         context = _WofHandlerContext(num_failures, {
             '/meta/neighbourhoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
-                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
-                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
-                "source,superseded_by,supersedes\n"
+                'bbox,cessation,deprecated,file_hash,fullname,geom_hash,'
+                'geom_latitude,geom_longitude,id,inception,iso,lastmodified,'
+                'lbl_latitude,lbl_longitude,name,parent_id,path,placetype,'
+                'source,superseded_by,supersedes\n'
                 "\"0,0,0,0\",u,,00000000000000000000000000000000,,"
-                "00000000000000000000000000000000,0,0,1,u,,0,0,0,Null Island,"
-                "-1,1/1.geojson,neighbourhood,null,,\n"
+                '00000000000000000000000000000000,0,0,1,u,,0,0,0,Null Island,'
+                '-1,1/1.geojson,neighbourhood,null,,\n'
             ),
             '/meta/microhoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
-                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
-                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
-                "source,superseded_by,supersedes\n"
+                'bbox,cessation,deprecated,file_hash,fullname,geom_hash,'
+                'geom_latitude,geom_longitude,id,inception,iso,lastmodified,'
+                'lbl_latitude,lbl_longitude,name,parent_id,path,placetype,'
+                'source,superseded_by,supersedes\n'
             ),
             '/meta/macrohoods.csv': (
                 'text/plain; charset=utf-8',
-                "bbox,cessation,deprecated,file_hash,fullname,geom_hash,"
-                "geom_latitude,geom_longitude,id,inception,iso,lastmodified,"
-                "lbl_latitude,lbl_longitude,name,parent_id,path,placetype,"
-                "source,superseded_by,supersedes\n"
+                'bbox,cessation,deprecated,file_hash,fullname,geom_hash,'
+                'geom_latitude,geom_longitude,id,inception,iso,lastmodified,'
+                'lbl_latitude,lbl_longitude,name,parent_id,path,placetype,'
+                'source,superseded_by,supersedes\n'
             ),
             '/data/1/1.geojson': (
                 'application/json; charset=utf-8',

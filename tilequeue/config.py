@@ -1,7 +1,9 @@
+import os
+
+from yaml import load
+
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import metatile_zoom_from_size
-from yaml import load
-import os
 
 
 class Configuration(object):
@@ -222,7 +224,7 @@ class Configuration(object):
                 seed_metro_extract_zoom_start=self.seed_metro_extract_zoom_start,
                 seed_metro_extract_zoom_until=self.seed_metro_extract_zoom_until,
                 seed_metro_extract_cities=self.seed_metro_extract_cities,
-                seed_top_tiles_url=self.seed_top_tiles_url if self.seed_top_tiles_url is not None else 'None',  # noqa: E501
+                seed_top_tiles_url=self.seed_top_tiles_url if self.seed_top_tiles_url is not None else 'None',
                 seed_top_tiles_zoom_start=self.seed_top_tiles_zoom_start if self.seed_top_tiles_zoom_start is not None else 'None',  # noqa: E501
                 seed_top_tiles_zoom_until=self.seed_top_tiles_zoom_until if self.seed_top_tiles_zoom_until is not None else 'None',  # noqa: E501
                 toi_store_type=self.toi_store_type if self.toi_store_type is not None else 'None',
@@ -235,11 +237,11 @@ class Configuration(object):
                 seed_unique=self.seed_unique if hasattr(self, 'seed_unique') and self.seed_unique is not None else 'None',  # noqa: E501
                 intersect_expired_tiles_location=self.intersect_expired_tiles_location if hasattr(self, 'intersect_expired_tiles_location') and self.intersect_expired_tiles_location is not None else 'None',  # noqa: E501
                 intersect_zoom_until=self.intersect_zoom_until if hasattr(self, 'intersect_zoom_until') and self.intersect_zoom_until is not None else 'None',  # noqa: E501
-                logconfig=self.logconfig if hasattr(self, 'logconfig') and self.logconfig is not None else 'None',  # noqa: E501
-                redis_type=self.redis_type if hasattr(self, 'redis_type') and self.redis_type is not None else 'None',  # noqa: E501
-                redis_host=self.redis_host if hasattr(self, 'redis_host') and self.redis_host is not None else 'None',  # noqa: E501
-                redis_port=self.redis_port if hasattr(self, 'redis_port') and self.redis_port is not None else 'None',  # noqa: E501
-                redis_db=self.redis_db if hasattr(self, 'redis_db') and self.redis_db is not None else 'None',  # noqa: E501
+                logconfig=self.logconfig if hasattr(self, 'logconfig') and self.logconfig is not None else 'None',
+                redis_type=self.redis_type if hasattr(self, 'redis_type') and self.redis_type is not None else 'None',
+                redis_host=self.redis_host if hasattr(self, 'redis_host') and self.redis_host is not None else 'None',
+                redis_port=self.redis_port if hasattr(self, 'redis_port') and self.redis_port is not None else 'None',
+                redis_db=self.redis_db if hasattr(self, 'redis_db') and self.redis_db is not None else 'None',
                 redis_cache_set_key=self.redis_cache_set_key if hasattr(self, 'redis_cache_set_key') and self.redis_cache_set_key is not None else 'None',  # noqa: E501
                 statsd_host=self.statsd_host if hasattr(self, 'statsd_host') and self.statsd_host is not None else 'None',  # noqa: E501
                 statsd_port=self.statsd_port if hasattr(self, 'statsd_port') and self.statsd_port is not None else 'None',  # noqa: E501
@@ -248,18 +250,18 @@ class Configuration(object):
                 n_simultaneous_s3_storage=self.n_simultaneous_s3_storage if hasattr(self, 'n_simultaneous_s3_storage') and self.n_simultaneous_s3_storage is not None else 'None',  # noqa: E501
                 log_queue_sizes=self.log_queue_sizes if hasattr(self, 'log_queue_sizes') and self.log_queue_sizes is not None else 'None',  # noqa: E501
                 log_queue_sizes_interval_seconds=self.log_queue_sizes_interval_seconds if hasattr(self, 'log_queue_sizes_interval_seconds') and self.log_queue_sizes_interval_seconds is not None else 'None',  # noqa: E501
-                query_cfg=self.query_cfg if hasattr(self, 'query_cfg') and self.query_cfg is not None else 'None',  # noqa: E501
+                query_cfg=self.query_cfg if hasattr(self, 'query_cfg') and self.query_cfg is not None else 'None',
                 template_path=self.template_path if hasattr(self, 'template_path') and self.template_path is not None else 'None',  # noqa: E501
                 reload_templates=self.reload_templates if hasattr(self, 'reload_templates') and self.reload_templates is not None else 'None',  # noqa: E501
                 output_formats=self.output_formats if hasattr(self, 'output_formats') and self.output_formats is not None else 'None',  # noqa: E501
-                buffer_cfg=self.buffer_cfg if hasattr(self, 'buffer_cfg') and self.buffer_cfg is not None else 'None',  # noqa: E501
+                buffer_cfg=self.buffer_cfg if hasattr(self, 'buffer_cfg') and self.buffer_cfg is not None else 'None',
                 process_yaml_cfg=self.process_yaml_cfg if hasattr(self, 'process_yaml_cfg') and self.process_yaml_cfg is not None else 'None',  # noqa: E501
                 postgresql_conn_info=self.postgresql_conn_info if hasattr(self, 'postgresql_conn_info') and self.postgresql_conn_info is not None else 'None',  # noqa: E501
                 metatile_size=self.metatile_size if hasattr(self, 'metatile_size') and self.metatile_size is not None else 'None',  # noqa: E501
                 metatile_zoom=self.metatile_zoom if hasattr(self, 'metatile_zoom') and self.metatile_zoom is not None else 'None',  # noqa: E501
                 metatile_start_zoom=self.metatile_start_zoom if hasattr(self, 'metatile_start_zoom') and self.metatile_start_zoom is not None else 'None',  # noqa: E501
                 max_zoom_with_changes=self.max_zoom_with_changes if hasattr(self, 'max_zoom_with_changes') and self.max_zoom_with_changes is not None else 'None',  # noqa: E501
-                max_zoom=self.max_zoom if hasattr(self, 'max_zoom') and self.max_zoom is not None else 'None',  # noqa: E501
+                max_zoom=self.max_zoom if hasattr(self, 'max_zoom') and self.max_zoom is not None else 'None',
                 sql_queue_buffer_size=self.sql_queue_buffer_size if hasattr(self, 'sql_queue_buffer_size') and self.sql_queue_buffer_size is not None else 'None',  # noqa: E501
                 proc_queue_buffer_size=self.proc_queue_buffer_size if hasattr(self, 'proc_queue_buffer_size') and self.proc_queue_buffer_size is not None else 'None',  # noqa: E501
                 s3_queue_buffer_size=self.s3_queue_buffer_size if hasattr(self, 's3_queue_buffer_size') and self.s3_queue_buffer_size is not None else 'None',  # noqa: E501
@@ -438,7 +440,7 @@ def _make_yaml_key(s):
     this from the environment.
     """
 
-    return s.lower().replace("_", "-")
+    return s.lower().replace('_', '-')
 
 
 def make_config_from_argparse(config_file_handle, default_yml=None,

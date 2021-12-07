@@ -1,6 +1,8 @@
-import unittest
 import tempfile
-from tilequeue.tile import deserialize_coord, coord_marshall_int
+import unittest
+
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import deserialize_coord
 
 
 class TestToiSet(unittest.TestCase):

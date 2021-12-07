@@ -1,8 +1,9 @@
-import zipfile
 import cStringIO as StringIO
+import zipfile
 from collections import defaultdict
-from tilequeue.format import zip_format
 from time import gmtime
+
+from tilequeue.format import zip_format
 
 
 def make_multi_metatile(parent, tiles, date_time=None):
@@ -14,7 +15,7 @@ def make_multi_metatile(parent, tiles, date_time=None):
     """
 
     assert parent is not None, \
-        "Parent tile must be provided and not None to make a metatile."
+        'Parent tile must be provided and not None to make a metatile.'
 
     if len(tiles) == 0:
         return []
@@ -35,18 +36,18 @@ def make_multi_metatile(parent, tiles, date_time=None):
             # be a parent, its zoom should always be equal or smaller to that
             # of coord.
             delta_z = coord.zoom - parent.zoom
-            assert delta_z >= 0, "Coordinates must be descendents of parent"
+            assert delta_z >= 0, 'Coordinates must be descendents of parent'
 
             # change in row/col coordinates are relative to the upper left
             # coordinate at that zoom. both should be positive.
             delta_row = coord.row - (int(parent.row) << delta_z)
             delta_column = coord.column - (int(parent.column) << delta_z)
             assert delta_row >= 0, \
-                "Coordinates must be contained by their parent, but " + \
-                "row is not."
+                'Coordinates must be contained by their parent, but ' + \
+                'row is not.'
             assert delta_column >= 0, \
-                "Coordinates must be contained by their parent, but " + \
-                "column is not."
+                'Coordinates must be contained by their parent, but ' + \
+                'column is not.'
 
             tile_name = '%d/%d/%d.%s' % \
                 (delta_z, delta_column, delta_row, tile['format'].extension)

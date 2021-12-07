@@ -1,7 +1,8 @@
+import threading
 from collections import namedtuple
+
 from tilequeue.tile import deserialize_coord
 from tilequeue.tile import serialize_coord
-import threading
 
 
 class MessageHandle(object):
@@ -114,8 +115,8 @@ class MultipleMessagesPerCoordTracker(object):
     def track(self, queue_handle, coords, parent_tile=None):
         is_pyramid = len(coords) > 1
         if is_pyramid:
-            assert parent_tile is not None, "parent tile was not provided, " \
-                "but is required for tracking pyramids of tiles."
+            assert parent_tile is not None, 'parent tile was not provided, ' \
+                'but is required for tracking pyramids of tiles.'
 
         with self.lock:
             # rely on the queue handle token as the mapping key

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections import namedtuple
+
 from tilequeue.tile import coord_marshall_int
 
 
@@ -62,9 +63,9 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
         # we have been passed a TOI object to check it against.
         uses_toi = any(zri.in_toi is not None for zri in self.zoom_range_items)
         if uses_toi:
-            assert toi is not None, "If any zoom range item depends on " \
-                "whether a coordinate is in the TOI then a TOI object must " \
-                "be provided, but there is only None."
+            assert toi is not None, 'If any zoom range item depends on ' \
+                'whether a coordinate is in the TOI then a TOI object must ' \
+                'be provided, but there is only None.'
 
             # NOTE: this is a one-off operation, so for long-running processes,
             # we must either re-create the mapper object, or periodically
@@ -88,7 +89,7 @@ class ZoomRangeAndZoomGroupQueueMapper(object):
         for coord in coords:
             for i, zri in enumerate(self.zoom_range_items):
                 toi_match = zri.in_toi is None or \
-                            (coord in self.toi_set) == zri.in_toi
+                    (coord in self.toi_set) == zri.in_toi
                 if zri.start <= coord.zoom < zri.end and toi_match:
                     groups[i].append(coord)
                     break

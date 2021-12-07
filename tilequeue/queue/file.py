@@ -1,5 +1,6 @@
-from tilequeue.queue import MessageHandle
 import threading
+
+from tilequeue.queue import MessageHandle
 
 
 class OutputFileQueue(object):
