@@ -1,14 +1,16 @@
+from collections import defaultdict
+
 from shapely.geometry import box
+
 from tilequeue.process import lookup_source
 from tilequeue.process import Source
-from tilequeue.transform import calculate_padded_bounds
-from tilequeue.query.common import Metadata
-from tilequeue.query.common import Relation
 from tilequeue.query.common import layer_properties
-from tilequeue.query.common import shape_type_lookup
+from tilequeue.query.common import Metadata
 from tilequeue.query.common import mz_is_interesting_transit_relation
 from tilequeue.query.common import name_keys
-from collections import defaultdict
+from tilequeue.query.common import Relation
+from tilequeue.query.common import shape_type_lookup
+from tilequeue.transform import calculate_padded_bounds
 
 
 class OsmFixtureLookup(object):
@@ -68,12 +70,12 @@ class OsmFixtureLookup(object):
         self._transit_relations = transit_relations
 
     def relations_using_node(self, node_id):
-        "Returns a list of relation IDs which contain the node with that ID."
+        'Returns a list of relation IDs which contain the node with that ID.'
 
         return self._relations_using_node.get(node_id, [])
 
     def relations_using_way(self, way_id):
-        "Returns a list of relation IDs which contain the way with that ID."
+        'Returns a list of relation IDs which contain the way with that ID.'
 
         return self._relations_using_way.get(way_id, [])
 
@@ -86,12 +88,12 @@ class OsmFixtureLookup(object):
         return self._relations_using_rel.get(rel_id, [])
 
     def ways_using_node(self, node_id):
-        "Returns a list of way IDs which contain the node with that ID."
+        'Returns a list of way IDs which contain the node with that ID.'
 
         return self._ways_using_node.get(node_id, [])
 
     def relation(self, rel_id):
-        "Returns the Relation object with the given ID."
+        'Returns the Relation object with the given ID.'
 
         return self._relations[rel_id]
 
@@ -112,7 +114,7 @@ class OsmFixtureLookup(object):
         return self._nodes[node_id]
 
     def transit_relations(self, rel_id):
-        "Return transit relations containing the relation with the given ID."
+        'Return transit relations containing the relation with the given ID.'
 
         return self._transit_relations.get(rel_id, set())
 

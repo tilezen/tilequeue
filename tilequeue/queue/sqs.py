@@ -1,7 +1,8 @@
+import threading
 from datetime import datetime
+
 from tilequeue.queue import MessageHandle
 from tilequeue.utils import grouper
-import threading
 
 
 class VisibilityState(object):
@@ -101,7 +102,7 @@ class SqsQueue(object):
             if failed_messages:
                 # TODO maybe retry failed messages if not sender's fault? up to
                 # a certain maximum number of attempts?
-                # http://boto3.readthedocs.io/en/latest/reference/services/sqs.html#SQS.Client.send_message_batch # noqa
+                # http://boto3.readthedocs.io/en/latest/reference/services/sqs.html#SQS.Client.send_message_batch
                 raise Exception('Messages failed to send to sqs: %s' %
                                 len(failed_messages))
 
@@ -157,7 +158,7 @@ class SqsQueue(object):
                     visibility=dict(
                         last=visibility_state.last.isoformat(),
                         total=visibility_state.total,
-                        ))
+                    ))
                 raise JobProgressException(
                     'update visibility timeout', e, err_details)
 

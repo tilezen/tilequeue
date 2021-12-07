@@ -1,9 +1,14 @@
-from tilequeue.metatile import make_metatiles, extract_metatile
-from tilequeue.format import json_format, zip_format, topojson_format
-from ModestMaps.Core import Coordinate
-import zipfile
 import cStringIO as StringIO
 import unittest
+import zipfile
+
+from ModestMaps.Core import Coordinate
+
+from tilequeue.format import json_format
+from tilequeue.format import topojson_format
+from tilequeue.format import zip_format
+from tilequeue.metatile import extract_metatile
+from tilequeue.metatile import make_metatiles
 
 
 class TestMetatile(unittest.TestCase):

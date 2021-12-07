@@ -99,8 +99,8 @@ class TestNeighbourhoodSupersededBy(unittest.TestCase):
         )
         n = create_neighbourhood_from_json(json, meta)
         self.assertIsInstance(n, NeighbourhoodFailure)
-        self.assertEqual(n.wof_id, wof_id, "%s: %s" % (n.reason, n.message))
-        self.assertTrue(n.superseded, "%s: %s" % (n.reason, n.message))
+        self.assertEqual(n.wof_id, wof_id, '%s: %s' % (n.reason, n.message))
+        self.assertTrue(n.superseded, '%s: %s' % (n.reason, n.message))
 
     def test_neighbourhood_superseded_by(self):
         self._check_is_superseded(
@@ -300,12 +300,12 @@ class MinMaxZoomFloatTest(unittest.TestCase):
 class TestEscapeHStoreString(unittest.TestCase):
 
     def test_has_spaces(self):
-        test = "a b c"
+        test = 'a b c'
         expected = "\"a b c\""
         self.assertEqual(expected, escape_hstore_string(test))
 
     def test_has_commas(self):
-        test = "a,b"
+        test = 'a,b'
         expected = "\"a,b\""
         self.assertEqual(expected, escape_hstore_string(test))
 
@@ -315,7 +315,7 @@ class TestEscapeHStoreString(unittest.TestCase):
         self.assertEqual(expected, escape_hstore_string(test))
 
     def test_nothing_to_escape(self):
-        test = "normalstring"
+        test = 'normalstring'
         expected = test
         self.assertEqual(expected, escape_hstore_string(test))
 

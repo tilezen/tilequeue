@@ -1,5 +1,6 @@
-from ModestMaps.Core import Coordinate
 import unittest
+
+from ModestMaps.Core import Coordinate
 
 
 class TestProcess(unittest.TestCase):

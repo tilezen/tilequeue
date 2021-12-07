@@ -1,22 +1,25 @@
-from collections import namedtuple, defaultdict
+from collections import defaultdict
+from collections import namedtuple
+from math import floor
+
+from raw_tiles.tile import shape_tile_coverage
 from shapely.geometry import box
 from shapely.geometry import MultiLineString
 from shapely.geometry import MultiPolygon
 from shapely.geometry.polygon import orient
 from shapely.wkb import loads as wkb_loads
-from tilequeue.query.common import layer_properties
-from tilequeue.query.common import is_station_or_stop
-from tilequeue.query.common import is_station_or_line
+
 from tilequeue.query.common import deassoc
+from tilequeue.query.common import is_station_or_line
+from tilequeue.query.common import is_station_or_stop
+from tilequeue.query.common import layer_properties
 from tilequeue.query.common import mz_is_interesting_transit_relation
-from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import name_keys
-from tilequeue.query.common import wkb_shape_type
+from tilequeue.query.common import shape_type_lookup
 from tilequeue.query.common import ShapeType
+from tilequeue.query.common import wkb_shape_type
 from tilequeue.transform import calculate_padded_bounds
 from tilequeue.utils import CoordsByParent
-from raw_tiles.tile import shape_tile_coverage
-from math import floor
 
 
 class Relation(object):
@@ -124,7 +127,7 @@ class OsmRawrLookup(object):
             self.add_relation(*args)
 
         else:
-            raise Exception("Unknown row shape for OsmRawrLookup.add_row: %s" %
+            raise Exception('Unknown row shape for OsmRawrLookup.add_row: %s' %
                             (repr(map(type, args)),))
 
     def add_feature(self, fid, shape_wkb, props):
@@ -177,12 +180,12 @@ class OsmRawrLookup(object):
                 self._relations_using_rel[member_rel_id].append(rel_id)
 
     def relations_using_node(self, node_id):
-        "Returns a list of relation IDs which contain the node with that ID."
+        'Returns a list of relation IDs which contain the node with that ID.'
 
         return self._relations_using_node.get(node_id, [])
 
     def relations_using_way(self, way_id):
-        "Returns a list of relation IDs which contain the way with that ID."
+        'Returns a list of relation IDs which contain the way with that ID.'
 
         return self._relations_using_way.get(way_id, [])
 
@@ -195,12 +198,12 @@ class OsmRawrLookup(object):
         return self._relations_using_rel.get(rel_id, [])
 
     def ways_using_node(self, node_id):
-        "Returns a list of way IDs which contain the node with that ID."
+        'Returns a list of way IDs which contain the node with that ID.'
 
         return self._ways_using_node.get(node_id, [])
 
     def relation(self, rel_id):
-        "Returns the Relation object with the given ID."
+        'Returns the Relation object with the given ID.'
 
         return self.relations.get(rel_id)
 
@@ -221,7 +224,7 @@ class OsmRawrLookup(object):
         return self.nodes.get(node_id)
 
     def transit_relations(self, rel_id):
-        "Return transit relations containing the relation with the given ID."
+        'Return transit relations containing the relation with the given ID.'
 
         return set(self.relations_using_rel(rel_id))
 

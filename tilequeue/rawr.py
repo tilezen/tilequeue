@@ -1,13 +1,18 @@
-from botocore.exceptions import ClientError
+import zipfile
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
 from itertools import imap
+from time import gmtime
+from urllib import urlencode
+
+from botocore.exceptions import ClientError
 from ModestMaps.Core import Coordinate
 from msgpack import Unpacker
-from raw_tiles.tile import Tile
 from raw_tiles.source.table_reader import TableReader
+from raw_tiles.tile import Tile
+
 from tilequeue.command import explode_and_intersect
 from tilequeue.format import zip_format
 from tilequeue.queue.message import MessageHandle
@@ -18,9 +23,6 @@ from tilequeue.toi import load_set_from_gzipped_fp
 from tilequeue.utils import format_stacktrace_one_line
 from tilequeue.utils import grouper
 from tilequeue.utils import time_block
-from time import gmtime
-from urllib import urlencode
-import zipfile
 
 
 class SqsQueue(object):
@@ -81,8 +83,8 @@ class SqsQueue(object):
             # pretty verbose.
             if logger:
                 for msg in failed_messages:
-                    logger.warning("Failed to send message on try %d: Id=%r, "
-                                   "SenderFault=%r, Code=%r, Message=%r" %
+                    logger.warning('Failed to send message on try %d: Id=%r, '
+                                   'SenderFault=%r, Code=%r, Message=%r' %
                                    (try_counter, msg['Id'],
                                     msg.get('SenderFault'), msg.get('Code'),
                                     msg.get('Message')))
@@ -151,7 +153,7 @@ class RawrEnqueuer(object):
         # this will produce the intersected list of coordinates with the toi,
         # all the way to low zoom level tiles
         intersected_coords, intersect_metrics, timing = \
-                self.toi_intersector(coords)
+            self.toi_intersector(coords)
 
         low_zoom_coord_ints = set()
 
@@ -565,8 +567,8 @@ def make_rawr_enqueuer(
         rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
         stats_handler):
     return RawrEnqueuer(
-            rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
-            stats_handler)
+        rawr_queue, toi_intersector, msg_marshaller, group_by_zoom, logger,
+        stats_handler)
 
 
 class RawrS3Sink(object):

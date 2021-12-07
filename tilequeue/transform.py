@@ -1,14 +1,16 @@
+import math
 from numbers import Number
+
+import shapely.errors
 from shapely import geometry
 from shapely.ops import transform
 from shapely.wkb import dumps
+
 from tilequeue.format import json_format
 from tilequeue.format import topojson_format
 from tilequeue.format import vtm_format
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import normalize_geometry_type
-import math
-import shapely.errors
 
 
 half_circumference_meters = 20037508.342789244

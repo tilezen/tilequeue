@@ -1,9 +1,9 @@
+from tilequeue.process import Source
 from tilequeue.query.fixture import make_fixture_data_fetcher
 from tilequeue.query.pool import DBConnectionPool
 from tilequeue.query.postgres import make_db_data_fetcher
 from tilequeue.query.rawr import make_rawr_data_fetcher
 from tilequeue.query.split import make_split_data_fetcher
-from tilequeue.process import Source
 from tilequeue.store import make_s3_tile_key_generator
 from tilequeue.utils import AwsSessionHelper
 
