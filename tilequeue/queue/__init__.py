@@ -1,4 +1,4 @@
-from message import MessageHandle  # noreorder
+from message import MessageHandle  # noreorder   has to be first because of circular dependency  # noqa
 from file import OutputFileQueue
 from memory import MemoryQueue
 from redis_queue import make_redis_queue
