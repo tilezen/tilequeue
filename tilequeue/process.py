@@ -364,7 +364,8 @@ def process_coord_no_format(
             output_props = layer_output_calc(
                 shape, query_props, feature_id, meta)
 
-            assert output_props, 'No output calc rule matched'
+            assert output_props, "No output calc rule matched for feature with ID '%s', props '%s', meta '%s'" % \
+                                 (str(feature_id), str(query_props), str(meta))
 
             # a feature can belong to more than one layer
             # this check ensures that it only appears in the
