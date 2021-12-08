@@ -2199,7 +2199,7 @@ def tilequeue_meta_tile(cfg, args):
             processor = Processor(
                 coord, cfg.metatile_zoom, fetch, layer_data,
                 post_process_data, formats, cfg.buffer_cfg,
-                output_calc_mapping, cfg.tile_sizes,
+                output_calc_mapping, cfg.max_zoom, cfg.tile_sizes,
                 log_fn=log_fn, max_zoom_with_changes=cfg.max_zoom_with_changes)
 
             try:

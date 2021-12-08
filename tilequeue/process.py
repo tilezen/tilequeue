@@ -836,9 +836,9 @@ class Processor(object):
 
 
 def process(coord, metatile_zoom, fetch_fn, layer_data, post_process_data,
-            formats, buffer_cfg, output_calc_mapping, cfg_tile_sizes):
+            formats, buffer_cfg, output_calc_mapping, max_zoom, cfg_tile_sizes):
     p = Processor(coord, metatile_zoom, fetch_fn, layer_data,
                   post_process_data, formats, buffer_cfg, output_calc_mapping,
-                  cfg_tile_sizes)
+                  max_zoom, cfg_tile_sizes)
     p.fetch()
     return p.process_tiles()
