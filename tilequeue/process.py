@@ -776,7 +776,7 @@ def calculate_cut_coords_by_zoom(
 class Processor(object):
     def __init__(self, coord, metatile_zoom, fetch_fn, layer_data,
                  post_process_data, formats, buffer_cfg, output_calc_mapping,
-                 cfg_tile_sizes, log_fn=None, max_zoom_with_changes=16):
+                 max_zoom, cfg_tile_sizes, log_fn=None, max_zoom_with_changes=16):
         self.coord = coord
         self.metatile_zoom = metatile_zoom
         self.fetch_fn = fetch_fn
@@ -785,6 +785,7 @@ class Processor(object):
         self.formats = formats
         self.buffer_cfg = buffer_cfg
         self.output_calc_mapping = output_calc_mapping
+        self.max_zoom = max_zoom
         self.max_zoom_with_changes = max_zoom_with_changes
         self.cfg_tile_sizes = cfg_tile_sizes
         self.log_fn = None
