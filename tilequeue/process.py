@@ -421,9 +421,9 @@ def process_coord_no_format(
 def remove_wrong_zoomed_features(
         processed_feature_layers, cut_coord_zoom, nominal_zoom, max_zoom_with_changes):
     """
-    When we're building with nominal_zoom == max_zoom_with_changes, but we aren't a coord at nominal zoom,
-    we are leaving in features in the tile that we would never show just so they're available in the higher
-    zoom tile when we cut. This function removes the items with min_zooms >= (nominal_zoom + 1) in these cases.
+    When we're building with nominal_zoom == max_zoom_with_changes, but we aren't working on a coord at nominal zoom,
+    we are leaving features in the tile that we would never show just so they're available in the overzooms
+    beyond max_zoom_with_changes. This function removes the items with min_zooms >= (nominal_zoom + 1) in these cases.
     :return: if nominal_zoom == max_zoom_with_changes and cut_coord_zoom < nominal_zoom, unchanged, otherwise
     remove any features with min_zoom >= (nominal_zoom + 1)
     """
