@@ -1,5 +1,6 @@
-from ModestMaps.Core import Coordinate
 import csv
+
+from ModestMaps.Core import Coordinate
 
 
 def parse_top_tiles(fp, zoom_start, zoom_until):

@@ -1,7 +1,8 @@
-from itertools import chain
-from ModestMaps.Core import Coordinate
 import math
+from itertools import chain
+
 import pyproj
+from ModestMaps.Core import Coordinate
 
 
 merc_proj = pyproj.Proj(init='epsg:3857')
@@ -385,7 +386,7 @@ def metatile_zoom_from_size(metatile_size):
     if metatile_size is not None:
         metatile_zoom = int(math.log(metatile_size, 2))
         assert (1 << metatile_zoom) == metatile_size, \
-            "Metatile size must be a power of two."
+            'Metatile size must be a power of two.'
 
     return metatile_zoom
 

@@ -1,11 +1,30 @@
+#!/usr/bin/env python2
 from __future__ import absolute_import
+
+import argparse
+import datetime
+import logging.config
+import multiprocessing
+import operator
+import os.path
+import Queue
+import signal
+import sys
+import threading
+import time
+import traceback
 from collections import defaultdict
 from collections import namedtuple
 from contextlib import closing
 from itertools import chain
-from ModestMaps.Core import Coordinate
 from multiprocessing.pool import ThreadPool
 from random import randrange
+from urllib2 import urlopen
+
+import yaml
+from ModestMaps.Core import Coordinate
+from zope.dottedname.resolve import resolve
+
 from tilequeue.config import create_query_bounds_pad_fn
 from tilequeue.config import make_config_from_argparse
 from tilequeue.format import lookup_format_by_extension
@@ -35,33 +54,16 @@ from tilequeue.tile import zoom_mask
 from tilequeue.toi import load_set_from_fp
 from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
+from tilequeue.utils import AwsSessionHelper
 from tilequeue.utils import grouper
 from tilequeue.utils import parse_log_file
 from tilequeue.utils import time_block
-from tilequeue.utils import AwsSessionHelper
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
 from tilequeue.worker import S3Storage
 from tilequeue.worker import TileQueueReader
 from tilequeue.worker import TileQueueWriter
-from urllib2 import urlopen
-from zope.dottedname.resolve import resolve
-import argparse
-import datetime
-import logging
-import logging.config
-import multiprocessing
-import operator
-import os
-import os.path
-import Queue
-import signal
-import sys
-import threading
-import time
-import traceback
-import yaml
 
 
 def create_coords_generator_from_tiles_file(fp, logger=None):
@@ -258,7 +260,7 @@ def make_tile_queue(queue_yaml_cfg, all_cfg, redis_client=None):
         result = []
         for queue_item_cfg in queue_yaml_cfg:
             tile_queue, name = make_tile_queue(
-                    queue_item_cfg, all_cfg, redis_client)
+                queue_item_cfg, all_cfg, redis_client)
             result.append((tile_queue, name))
         return result
     else:
@@ -406,7 +408,7 @@ def _make_store(cfg,
                 s3_role_session_duration_s=None,
                 logger=None):
     store_cfg = cfg.yml.get('store')
-    assert store_cfg, "Store was not configured, but is necessary."
+    assert store_cfg, 'Store was not configured, but is necessary.'
     if logger is None:
         logger = make_logger(cfg, 'process')
     store = make_store(store_cfg,
@@ -497,7 +499,7 @@ def _parse_postprocess_resources(post_process_item, cfg_path):
         except Exception:
             raise Exception('Unable to init resource %r with function %r due '
                             'to %s' % (resource_name, init_fn_name,
-                                       "".join(traceback.format_exception(
+                                       ''.join(traceback.format_exception(
                                            *sys.exc_info()))))
 
         if resource_type == 'file':
@@ -1168,8 +1170,8 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
             if not max_timestamp or timestamp > max_timestamp:
                 coord = coord_unmarshall_int(coord_int)
                 cursor.execute(
-                    "INSERT into tile_traffic_v4 "
-                    "(date, z, x, y, tilesize, service, host) VALUES "
+                    'INSERT into tile_traffic_v4 '
+                    '(date, z, x, y, tilesize, service, host) VALUES '
                     "('%s', %d, %d, %d, %d, '%s', '%s')"
                     % (timestamp, coord.zoom, coord.column, coord.row, 512,
                        'vector-tiles', host))
@@ -1214,12 +1216,12 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     tile_history_cfg = prune_cfg.get('tile-history', {})
     db_conn_info = tile_history_cfg.get('database-uri')
-    assert db_conn_info, ("A postgres-compatible connection URI must "
-                          "be present in the config yaml")
+    assert db_conn_info, ('A postgres-compatible connection URI must '
+                          'be present in the config yaml')
 
     redshift_days_to_query = tile_history_cfg.get('days')
-    assert redshift_days_to_query, ("Number of days to query "
-                                    "redshift is not specified")
+    assert redshift_days_to_query, ('Number of days to query '
+                                    'redshift is not specified')
 
     redshift_zoom_cutoff = int(tile_history_cfg.get('max-zoom', '16'))
 
@@ -1251,8 +1253,8 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 group by z, x, y, tilesize
                 order by z, x, y, tilesize
                 """.format(
-                    days=redshift_days_to_query,
-                    max_zoom=redshift_zoom_cutoff
+                days=redshift_days_to_query,
+                max_zoom=redshift_zoom_cutoff
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
@@ -1324,7 +1326,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
         if 'bbox' in info:
             bounds = map(float, info['bbox'].split(','))
             for coord in tile_generator_for_single_bounds(
-                            bounds, info['min_zoom'], info['max_zoom']):
+                    bounds, info['min_zoom'], info['max_zoom']):
                 coord_int = coord_marshall_int(coord)
                 immortal_tiles.add(coord_int)
         elif 'tiles' in info:
@@ -1509,11 +1511,11 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     n_toi = len(toi_set)
     logger.info('Fetching tiles of interest ... done')
 
-    toi_filename = "toi.txt"
+    toi_filename = 'toi.txt'
 
     logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
 
-    with open(toi_filename, "w") as f:
+    with open(toi_filename, 'w') as f:
         save_set_to_fp(toi_set, f)
 
     logger.info(
@@ -1530,7 +1532,7 @@ def tilequeue_load_tiles_of_interest(cfg, peripherals):
     """
     logger = make_logger(cfg, 'load_tiles_of_interest')
 
-    toi_filename = "toi.txt"
+    toi_filename = 'toi.txt'
     logger.info('Loading tiles of interest from %s ... ', toi_filename)
 
     with open(toi_filename, 'r') as f:
@@ -1627,7 +1629,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
         # now we think we probably have a valid coordinate. go look up
         # whether it exists in various places.
 
-        logger.info("=== %s ===", coord_str)
+        logger.info('=== %s ===', coord_str)
         coord_int = coord_marshall_int(coord)
 
         if peripherals.inflight_mgr:
@@ -1866,9 +1868,9 @@ def tilequeue_rawr_process(cfg, peripherals):
     rawr_gen, conn_ctx = _tilequeue_rawr_setup(cfg)
 
     rawr_pipeline = RawrTileGenerationPipeline(
-            rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
-            peripherals.queue_writer, stats_handler,
-            rawr_proc_logger, conn_ctx)
+        rawr_queue, msg_marshaller, group_by_zoom, rawr_gen,
+        peripherals.queue_writer, stats_handler,
+        rawr_proc_logger, conn_ctx)
     rawr_pipeline()
 
 
@@ -2253,7 +2255,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
     store = _make_store(cfg,
                         s3_role_arn=args.s3_role_arn,
-                        s3_role_session_duration_s=args.s3_role_session_duration_s,  # noqa
+                        s3_role_session_duration_s=args.s3_role_session_duration_s,
                         logger=logger)
     batch_yaml = cfg.yml.get('batch')
     assert batch_yaml, 'Missing batch config'
@@ -2305,7 +2307,7 @@ def tilequeue_meta_tile_low_zoom(cfg, args):
 
     for coord in coords:
         coord_start_ms = int(time.time() * 1000)
-        meta_low_zoom_logger._log("start processing coord",
+        meta_low_zoom_logger._log('start processing coord',
                                   parent=parent,
                                   coord=coord)
         if check_metatile_exists:
@@ -2401,7 +2403,7 @@ def tilequeue_main(argv_args=None):
         toi_helper = make_toi_helper(cfg)
 
         tile_queue_result = make_tile_queue(
-                cfg.queue_cfg, cfg.yml, redis_client)
+            cfg.queue_cfg, cfg.yml, redis_client)
         tile_queue_name_map = {}
         if isinstance(tile_queue_result, tuple):
             tile_queue, queue_name = tile_queue_result
@@ -2415,7 +2417,7 @@ def tilequeue_main(argv_args=None):
         queue_mapper_yaml = cfg.yml.get('queue-mapping')
         assert queue_mapper_yaml, 'Missing queue-mapping configuration'
         queue_mapper = make_queue_mapper(
-                queue_mapper_yaml, tile_queue_name_map, toi_helper)
+            queue_mapper_yaml, tile_queue_name_map, toi_helper)
 
         msg_marshall_yaml = cfg.yml.get('message-marshall')
         assert msg_marshall_yaml, 'Missing message-marshall config'
@@ -2466,7 +2468,7 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('coords', nargs='*',
                            help='Tile coordinates as "z/x/y".')
     subparser.set_defaults(
-            func=_make_peripherals_with_args_command(tilequeue_tile_status))
+        func=_make_peripherals_with_args_command(tilequeue_tile_status))
 
     subparser = subparsers.add_parser('tile')
     subparser.add_argument('--config', required=True,
@@ -2474,7 +2476,7 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('coord',
                            help='Tile coordinate as "z/x/y".')
     subparser.set_defaults(
-            func=_make_peripherals_with_args_command(tilequeue_process_tile))
+        func=_make_peripherals_with_args_command(tilequeue_process_tile))
 
     subparser = subparsers.add_parser('enqueue-tiles-of-interest-pyramids')
     subparser.add_argument('--config', required=True,
@@ -2484,8 +2486,8 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--zoom-stop', type=int, required=False,
                            default=None, help='Zoom stop, exclusive')
     subparser.set_defaults(
-            func=_make_peripherals_with_args_command(
-                tilequeue_enqueue_full_pyramid_from_toi))
+        func=_make_peripherals_with_args_command(
+            tilequeue_enqueue_full_pyramid_from_toi))
 
     subparser = subparsers.add_parser('enqueue-random-pyramids')
     subparser.add_argument('--config', required=True,
@@ -2498,8 +2500,8 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('n-samples', type=int,
                            help='Number of total samples')
     subparser.set_defaults(
-            func=_make_peripherals_with_args_command(
-                tilequeue_enqueue_random_pyramids))
+        func=_make_peripherals_with_args_command(
+            tilequeue_enqueue_random_pyramids))
 
     subparser = subparsers.add_parser('rawr-enqueue')
     subparser.add_argument('--config', required=True,
@@ -2525,7 +2527,7 @@ def tilequeue_main(argv_args=None):
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. '
-                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
     subparser.add_argument('--store_name', required=False,
                            help='optional string of a list of tile store '
                                 'names e.g. `["my-meta-tiles-us-east-1"]`')
@@ -2541,7 +2543,7 @@ def tilequeue_main(argv_args=None):
                                 'e.g. `false`')
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
-                                'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')  # noqa
+                                'e.g. `arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2558,26 +2560,26 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--run_id', required=False,
                            help='optional run_id used for logging')
     subparser.add_argument('--postgresql_hosts', required=False,
-                           help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')  # noqa
+                           help='optional string of a list of db hosts e.g. `["aws.rds.url", "localhost"]`')
     subparser.add_argument('--postgresql_dbnames', required=False,
-                           help='optional string of a list of db names e.g. `["gis"]`')  # noqa
+                           help='optional string of a list of db names e.g. `["gis"]`')
     subparser.add_argument('--postgresql_user', required=False,
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. `VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
     subparser.add_argument('--store_name', required=False,
-                           help='optional string of a list of tile store names e.g. `["my-meta-tiles-us-east-1"]`')  # noqa
+                           help='optional string of a list of tile store names e.g. `["my-meta-tiles-us-east-1"]`')
     subparser.add_argument('--rawr_store_name', required=False,
                            help='optional string of rawr tile store '
                                 'names e.g. `"my-rawr-tiles-us-east-1"`')
     subparser.add_argument('--store_date_prefix', required=False,
-                           help='optional string of store bucket date prefix e.g. `20210426`')  # noqa
+                           help='optional string of store bucket date prefix e.g. `20210426`')
     subparser.add_argument('--batch_check_metafile_exists', required=False,
                            help='optional string of a boolean indicating whether to check metafile exists or not e.g. `false`')  # noqa
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
                                 'e.g. '
-                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')   # noqa
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2603,7 +2605,7 @@ def tilequeue_main(argv_args=None):
                            help='optional string of db user e.g. `gisuser`')
     subparser.add_argument('--postgresql_password', required=False,
                            help='optional string of db password e.g. '
-                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')  # noqa
+                                '`VHcDuAS0SYx2tlgTvtbuCXwlvO4pAtiGCuScJFjq7wersdfqwer`')
     subparser.add_argument('--store_name', required=False,
                            help='optional string of a list of tile store '
                                 'names e.g. `["my-meta-tiles-us-east-1"]`')
@@ -2622,7 +2624,7 @@ def tilequeue_main(argv_args=None):
     subparser.add_argument('--s3_role_arn', required=False,
                            help='optional string of the S3 access role ARN'
                                 'e.g. '
-                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')  # noqa
+                                '`arn:aws:iam::1234:role/DataAccess-tilebuild`')
     subparser.add_argument('--s3_role_session_duration_s', required=False,
                            type=int,
                            help='optional integer which indicates the number '
@@ -2656,11 +2658,11 @@ def tilequeue_main(argv_args=None):
     with open(args.config) as fh:
         cfg = make_config_from_argparse(fh,
                                         postgresql_hosts=args.postgresql_hosts,
-                                        postgresql_dbnames=args.postgresql_dbnames,  # noqa
+                                        postgresql_dbnames=args.postgresql_dbnames,
                                         postgresql_user=args.postgresql_user,
-                                        postgresql_password=args.postgresql_password,  # noqa
+                                        postgresql_password=args.postgresql_password,
                                         rawr_store_name=args.rawr_store_name,
                                         store_name=args.store_name,
-                                        store_date_prefix=args.store_date_prefix,  # noqa
-                                        batch_check_metafile_exists=args.batch_check_metafile_exists)  # noqa
+                                        store_date_prefix=args.store_date_prefix,
+                                        batch_check_metafile_exists=args.batch_check_metafile_exists)
     args.func(cfg, args)

@@ -1,9 +1,10 @@
 from math import ceil
 from math import log
-import ujson as json
+
 import shapely.geometry
 import shapely.ops
 import shapely.wkb
+import ujson as json
 
 precisions = [int(ceil(log(1 << zoom + 8+2) / log(10)) - 2)
               for zoom in range(17)]

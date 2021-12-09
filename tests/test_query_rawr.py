@@ -44,7 +44,7 @@ class RawrTestCase(unittest.TestCase):
 
         layers = {layer_name: LayerInfo(min_zoom_fn, props_fn)}
         storage = ConstantStorage(tables)
-        indexes_cfg = [dict(type="osm")]
+        indexes_cfg = [dict(type='osm')]
         return make_rawr_data_fetcher(
             min_z, max_z, storage, layers, indexes_cfg,
             label_placement_layers=label_placement_layers)
@@ -239,7 +239,7 @@ class TestQueryRawr(RawrTestCase):
             way_off = len(nodes) if nodes else 0
             rel_off = way_off + (len(ways) if ways else 0)
             parts = (nodes or []) + (ways or []) + (rels or [])
-            members = [""] * len(parts)
+            members = [''] * len(parts)
             tags = ['type', 'site']
             return (id, way_off, rel_off, parts, members, tags)
 
@@ -483,7 +483,7 @@ class TestNameHandling(RawrTestCase):
             layers[name] = LayerInfo(min_zoom_fn, props_fn)
         storage = ConstantStorage(tables)
         fetch = make_rawr_data_fetcher(
-            top_zoom, max_zoom, storage, layers, [dict(type="osm")])
+            top_zoom, max_zoom, storage, layers, [dict(type='osm')])
 
         for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))
@@ -776,7 +776,7 @@ class TestBoundaries(RawrTestCase):
         }
         storage = ConstantStorage(tables)
         fetch = make_rawr_data_fetcher(
-            top_zoom, max_zoom, storage, layers, [dict(type="osm")])
+            top_zoom, max_zoom, storage, layers, [dict(type='osm')])
 
         for fetcher, _ in fetch.fetch_tiles(_wrap(top_tile)):
             read_rows = fetcher(tile.zoom, coord_to_mercator_bounds(tile))

@@ -1,9 +1,11 @@
-from enum import Enum
-from tilequeue.utils import format_stacktrace_one_line
 import json
 import logging
 import sys
 import time
+
+from enum import Enum
+
+from tilequeue.utils import format_stacktrace_one_line
 
 
 def int_if_exact(x):
@@ -344,6 +346,7 @@ class JsonMetaTileLogger(object):
     pyramid: the top level pyramid coordinate, z10
     coord:   metatile coordinate being generated: z10+
     """
+
     def __init__(self, logger, run_id):
         self.logger = logger
         self.run_id = run_id
@@ -425,6 +428,7 @@ class JsonMetaTileLowZoomLogger(object):
     coord:  metatile coordinate being generated: [z0-z9]
             same as parent unless [z8,z9]
     """
+
     def __init__(self, logger, run_id):
         self.logger = logger
         self.run_id = run_id

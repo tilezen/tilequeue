@@ -1,5 +1,5 @@
-from tilequeue.format.geojson import encode_multiple_layers as json_encode_multiple_layers  # noqa
-from tilequeue.format.geojson import encode_single_layer as json_encode_single_layer  # noqa
+from tilequeue.format.geojson import encode_multiple_layers as json_encode_multiple_layers
+from tilequeue.format.geojson import encode_single_layer as json_encode_single_layer
 from tilequeue.format.mvt import encode as mvt_encode
 from tilequeue.format.topojson import encode as topojson_encode
 from tilequeue.format.vtm import merge as vtm_encode
@@ -7,7 +7,7 @@ try:
     from coanacatl import encode as coanacatl_encode
 except ImportError:
     def coanacatl_encode(feature_layers, bounds_merc, extents):
-        raise RuntimeError("Could not find coanacatl library.")
+        raise RuntimeError('Could not find coanacatl library.')
 
 
 class OutputFormat(object):

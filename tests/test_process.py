@@ -1,7 +1,7 @@
-from ModestMaps.Core import Coordinate
 import unittest
 
 from tilequeue.process import remove_wrong_zoomed_features
+from ModestMaps.Core import Coordinate
 
 
 class TestProcess(unittest.TestCase):

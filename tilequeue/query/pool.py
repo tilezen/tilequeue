@@ -1,10 +1,12 @@
+import random
+import threading
 from itertools import cycle
 from itertools import islice
-from psycopg2.extras import register_hstore, register_json
+
 import psycopg2
-import threading
 import ujson
-import random
+from psycopg2.extras import register_hstore
+from psycopg2.extras import register_json
 
 
 class ConnectionsContextManager(object):

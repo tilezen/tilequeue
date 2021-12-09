@@ -1,26 +1,29 @@
 from __future__ import absolute_import
+
+import csv
+import json
+import os.path
+import Queue
+import threading
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
 from datetime import datetime
-from edtf import parse_edtf
 from operator import attrgetter
-from psycopg2.extras import register_hstore
-from shapely import geos
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import coord_unmarshall_int
-from tilequeue.tile import mercator_point_to_coord
-from tilequeue.tile import reproject_lnglat_to_mercator
-import csv
-import json
-import os.path
+
 import psycopg2
-import Queue
 import requests
 import shapely.geometry
 import shapely.ops
 import shapely.wkb
-import threading
+from edtf import parse_edtf
+from psycopg2.extras import register_hstore
+from shapely import geos
+
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import mercator_point_to_coord
+from tilequeue.tile import reproject_lnglat_to_mercator
 
 
 DATABASE_SRID = 3857
@@ -662,7 +665,7 @@ def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
             for k, v in n.l10n_names.items():
                 k = escape_hstore_string(k)
                 v = escape_hstore_string(v)
-                hstore_items.append("%s=>%s" % (k, v))
+                hstore_items.append('%s=>%s' % (k, v))
             hstore_items_str = ','.join(hstore_items)
             buf.write('%s' % hstore_items_str)
         else:

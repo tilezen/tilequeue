@@ -1,5 +1,5 @@
-from mapbox_vector_tile.encoder import on_invalid_geometry_make_valid
 from mapbox_vector_tile import encode as mvt_encode
+from mapbox_vector_tile.encoder import on_invalid_geometry_make_valid
 
 
 def encode(fp, feature_layers, bounds_merc, extents=4096):
