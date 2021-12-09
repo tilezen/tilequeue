@@ -420,10 +420,11 @@ def remove_wrong_zoomed_features(
     '''
     When we're building with nominal_zoom == max_zoom_with_changes, but we aren't a coord at nominal zoom,
     we are leaving in features in the tile that we would never show just so they're available in the higher
-    zoom tile when we cut. This function removes the items with min_zooms > coord_zoom in these cases.
+    zoom tile when we cut. This function removes the items with min_zooms > nominal_zoom in these cases.
     :return: if nominal_zoom == max_zoom_with_changes and cut_coord_zoom < nominal_zoom, unchanged, otherwise
-    remove any features with min_zoom > coord_zoom
+    remove any features with min_zoom > nominal_zoom
     '''
+
 
     needs_feature_removal = nominal_zoom == max_zoom_with_changes and cut_coord_zoom < nominal_zoom
 
@@ -439,7 +440,7 @@ def remove_wrong_zoomed_features(
         for feature in features:
             shape, props, feature_id = feature
 
-            if 'min_zoom' in props and props['min_zoom'] > cut_coord_zoom:
+            if 'min_zoom' in props and props['min_zoom'] > nominal_zoom:
                 continue
 
             pared_feature = shape, props, feature_id
