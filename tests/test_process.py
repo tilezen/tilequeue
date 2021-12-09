@@ -1,6 +1,8 @@
 from ModestMaps.Core import Coordinate
 import unittest
 
+from tilequeue.process import remove_wrong_zoomed_features
+
 
 class TestProcess(unittest.TestCase):
 
@@ -511,6 +513,51 @@ class TestCalculateCutCoords(unittest.TestCase):
             _c(2, 3, 2),
             _c(2, 3, 3),
         ]), set(cut_coords[3]))
+
+
+class TestRemoveWrongZoomedFeatures(unittest.TestCase):
+    def get_test_layers(self):
+        return [dict(
+            name="things",
+            layer_datum="I am a datum",
+            features=[
+                (None, dict(name="big thing", min_zoom=10), 123),
+                (None, dict(name="small thing", min_zoom=16), 234),
+                (None, dict(name="tiny thing", min_zoom=18), 345),
+                (None, dict(name="wow so tiny thing", min_zoom=19), 456)
+            ],
+            padded_bounds="I am padded bounds"
+        ), dict(
+            name="items",
+            layer_datum="Yet another datum",
+            features=[
+                (None, dict(name="big item", min_zoom=13), 123),
+                (None, dict(name="small item", min_zoom=15), 234),
+                (None, dict(name="tiny item", min_zoom=16.999), 345),
+                (None, dict(name="tiniest item", min_zoom=17), 456)
+            ],
+            padded_bounds="Yet another instance of padded bounds"
+        )]
+
+    def test_nominal_zoom_under_max_untouched(self):
+        expected = self.get_test_layers()
+
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), 14, 15, 16))
+
+    def test_coord_zoom_at_max_zoom_untouched(self):
+        expected = self.get_test_layers()
+
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), 16, 16, 16))
+
+    def test_higher_min_zoom_features_removed_when(self):
+        expected = self.get_test_layers()
+
+        # remove the last two items from the things layer
+        expected[0]['features']=expected[0]['features'][0:2]
+        # remove the last item from the items layer
+        expected[1]['features']=expected[1]['features'][0:3]
+
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), 15, 16, 16))
 
 
 def _only_zoom(ctx, zoom):
