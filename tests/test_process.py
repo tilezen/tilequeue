@@ -1,7 +1,8 @@
 import unittest
 
-from tilequeue.process import remove_wrong_zoomed_features
 from ModestMaps.Core import Coordinate
+
+from tilequeue.process import remove_wrong_zoomed_features
 
 
 class TestProcess(unittest.TestCase):
@@ -522,25 +523,25 @@ class TestRemoveWrongZoomedFeatures(unittest.TestCase):
 
     def get_test_layers(self):
         return [dict(
-            name="things",
-            layer_datum="I am a datum",
+            name='things',
+            layer_datum='I am a datum',
             features=[
-                (None, dict(name="big thing", min_zoom=self.nzoom - 6), 123),
-                (None, dict(name="small thing", min_zoom=self.nzoom), 234),
-                (None, dict(name="tiny thing", min_zoom=self.nzoom + 2), 345),
-                (None, dict(name="wow so tiny thing", min_zoom=self.nzoom + 3), 456)
+                (None, dict(name='big thing', min_zoom=self.nzoom - 6), 123),
+                (None, dict(name='small thing', min_zoom=self.nzoom), 234),
+                (None, dict(name='tiny thing', min_zoom=self.nzoom + 2), 345),
+                (None, dict(name='wow so tiny thing', min_zoom=self.nzoom + 3), 456)
             ],
-            padded_bounds="I am padded bounds"
+            padded_bounds='I am padded bounds'
         ), dict(
-            name="items",
-            layer_datum="Yet another datum",
+            name='items',
+            layer_datum='Yet another datum',
             features=[
-                (None, dict(name="big item", min_zoom=self.nzoom - 3), 123),
-                (None, dict(name="small item", min_zoom=self.nzoom - 1), 234),
-                (None, dict(name="tiny item", min_zoom=self.nzoom + 0.999), 345),
-                (None, dict(name="tiniest item", min_zoom=self.nzoom + 1), 456)
+                (None, dict(name='big item', min_zoom=self.nzoom - 3), 123),
+                (None, dict(name='small item', min_zoom=self.nzoom - 1), 234),
+                (None, dict(name='tiny item', min_zoom=self.nzoom + 0.999), 345),
+                (None, dict(name='tiniest item', min_zoom=self.nzoom + 1), 456)
             ],
-            padded_bounds="Yet another instance of padded bounds"
+            padded_bounds='Yet another instance of padded bounds'
         )]
 
     def test_nominal_zoom_under_max_untouched(self):
