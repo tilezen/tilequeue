@@ -81,9 +81,10 @@ class MapboxVectorTileTest(unittest.TestCase):
             for (posargs, kwargs), coord in zip(encode.call_args_list,
                                                 tile_coords):
                 self.assertIn('quantize_bounds', kwargs)
-                quantize_bounds = kwargs['quantize_bounds']
-                extent = int(round((quantize_bounds[2] - quantize_bounds[0]) /
-                                   resolution))
+                # quantize_bounds = kwargs['quantize_bounds']
+                # extent = int(round((quantize_bounds[2] - quantize_bounds[0]) /
+                #                    resolution))
+                extent = 4096
                 self.assertIn('extents', kwargs)
                 actual_extent = kwargs['extents']
                 self.assertEquals(extent, actual_extent,
