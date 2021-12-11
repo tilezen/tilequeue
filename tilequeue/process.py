@@ -367,7 +367,8 @@ def process_coord_no_format(
             output_props = layer_output_calc(
                 shape, query_props, feature_id, meta)
 
-            assert output_props, 'No output calc rule matched'
+            assert output_props, "No output calc rule matched for feature with ID '%s', props '%s', meta '%s'" % \
+                                 (str(feature_id), str(query_props), str(meta))
 
             # a feature can belong to more than one layer
             # this check ensures that it only appears in the
@@ -417,8 +418,50 @@ def process_coord_no_format(
     return processed_feature_layers, extra_data
 
 
+def remove_wrong_zoomed_features(
+        processed_feature_layers, cut_coord_zoom, nominal_zoom, max_zoom_with_changes):
+    """
+    When we're building with nominal_zoom == max_zoom_with_changes, but we aren't working on a coord at nominal zoom,
+    we are leaving features in the tile that we would never show just so they're available in the overzooms
+    beyond max_zoom_with_changes. This function removes the items with min_zooms >= (nominal_zoom + 1) in these cases.
+    :return: if nominal_zoom == max_zoom_with_changes and cut_coord_zoom < nominal_zoom, unchanged, otherwise
+    remove any features with min_zoom >= (nominal_zoom + 1)
+    """
+
+    needs_feature_removal = nominal_zoom == max_zoom_with_changes and cut_coord_zoom < nominal_zoom
+
+    # skip if we don't need to remove anything
+    if not needs_feature_removal:
+        return processed_feature_layers
+
+    pared_feature_layers = []
+    for feature_layer in processed_feature_layers:
+        features = feature_layer['features']
+
+        pared_features = []
+        for feature in features:
+            shape, props, feature_id = feature
+
+            # leave out features with min_zoom more than a full zoom above nominal_zoom
+            if 'min_zoom' in props and props['min_zoom'] >= (nominal_zoom + 1):
+                continue
+
+            pared_feature = shape, props, feature_id
+            pared_features.append(pared_feature)
+
+        pared_feature_layer = dict(
+            name=feature_layer['name'],
+            layer_datum=feature_layer['layer_datum'],
+            features=pared_features,
+            padded_bounds=feature_layer['padded_bounds']
+        )
+        pared_feature_layers.append(pared_feature_layer)
+
+    return pared_feature_layers
+
+
 def _format_feature_layers(
-        processed_feature_layers, coord, nominal_zoom, formats,
+        processed_feature_layers, coord, nominal_zoom, max_zoom_with_changes, formats,
         unpadded_bounds, scale, buffer_cfg):
 
     meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
@@ -428,13 +471,16 @@ def _format_feature_layers(
         mercator_point_to_lnglat(unpadded_bounds[0], unpadded_bounds[1]) +
         mercator_point_to_lnglat(unpadded_bounds[2], unpadded_bounds[3]))
 
+    pared_feature_layers = remove_wrong_zoomed_features(processed_feature_layers, coord.zoom, nominal_zoom,
+                                                        max_zoom_with_changes)
+
     # now, perform the format specific transformations
     # and format the tile itself
     formatted_tiles = []
     layer = 'all'
     for format in formats:
         formatted_tile = _create_formatted_tile(
-            processed_feature_layers, format, scale, unpadded_bounds,
+            pared_feature_layers, format, scale, unpadded_bounds,
             unpadded_bounds_lnglat, coord, nominal_zoom, layer,
             meters_per_pixel_dim, buffer_cfg)
         formatted_tiles.append(formatted_tile)
@@ -443,7 +489,7 @@ def _format_feature_layers(
 
 
 def _cut_child_tiles(
-        feature_layers, cut_coord, nominal_zoom, formats, scale, buffer_cfg):
+        feature_layers, cut_coord, nominal_zoom, max_zoom_with_changes, formats, scale, buffer_cfg):
 
     unpadded_cut_bounds = coord_to_mercator_bounds(cut_coord)
     meters_per_pixel_dim = calc_meters_per_pixel_dim(nominal_zoom)
@@ -452,7 +498,7 @@ def _cut_child_tiles(
         feature_layers, unpadded_cut_bounds, meters_per_pixel_dim, buffer_cfg)
 
     return _format_feature_layers(
-        cut_feature_layers, cut_coord, nominal_zoom, formats,
+        cut_feature_layers, cut_coord, nominal_zoom, max_zoom_with_changes, formats,
         unpadded_cut_bounds, scale, buffer_cfg)
 
 
@@ -467,7 +513,7 @@ def _calculate_scale(scale, coord, nominal_zoom):
 
 
 def format_coord(
-        coord, nominal_zoom, processed_feature_layers, formats,
+        coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale):
 
     formatted_tiles = []
@@ -477,12 +523,12 @@ def format_coord(
         if cut_coord == coord:
             # no need for cutting if this is the original tile.
             tiles = _format_feature_layers(
-                processed_feature_layers, coord, nominal_zoom, formats,
+                processed_feature_layers, coord, nominal_zoom, max_zoom_with_changes, formats,
                 unpadded_bounds, cut_scale, buffer_cfg)
 
         else:
             tiles = _cut_child_tiles(
-                processed_feature_layers, cut_coord, nominal_zoom, formats,
+                processed_feature_layers, cut_coord, nominal_zoom, max_zoom_with_changes, formats,
                 _calculate_scale(scale, cut_coord, nominal_zoom), buffer_cfg)
 
         formatted_tiles.extend(tiles)
@@ -509,13 +555,13 @@ def format_coord(
 # the output.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  output_calc_spec, scale=4096, log_fn=None):
+                  output_calc_spec, scale=4096, log_fn=None, max_zoom_with_changes=16):
     processed_feature_layers, extra_data = process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_spec, log_fn=log_fn)
 
     all_formatted_tiles, extra_data = format_coord(
-        coord, nominal_zoom, processed_feature_layers, formats,
+        coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
     return all_formatted_tiles, extra_data
@@ -735,7 +781,7 @@ def calculate_cut_coords_by_zoom(
 class Processor(object):
     def __init__(self, coord, metatile_zoom, fetch_fn, layer_data,
                  post_process_data, formats, buffer_cfg, output_calc_mapping,
-                 max_zoom, cfg_tile_sizes, log_fn=None):
+                 max_zoom, cfg_tile_sizes, log_fn=None, max_zoom_with_changes=16):
         self.coord = coord
         self.metatile_zoom = metatile_zoom
         self.fetch_fn = fetch_fn
@@ -745,6 +791,7 @@ class Processor(object):
         self.buffer_cfg = buffer_cfg
         self.output_calc_mapping = output_calc_mapping
         self.max_zoom = max_zoom
+        self.max_zoom_with_changes = max_zoom_with_changes
         self.cfg_tile_sizes = cfg_tile_sizes
         self.log_fn = None
 
@@ -785,7 +832,7 @@ class Processor(object):
                 self.coord, nominal_zoom, feature_layers,
                 self.post_process_data, self.formats, self.unpadded_bounds,
                 cut_coords, self.buffer_cfg, self.output_calc_mapping,
-                log_fn=log_fn,
+                log_fn=log_fn, max_zoom_with_changes=self.max_zoom_with_changes,
             )
             all_formatted_tiles.extend(formatted_tiles)
             all_extra_data.update(extra_data)
@@ -794,8 +841,7 @@ class Processor(object):
 
 
 def process(coord, metatile_zoom, fetch_fn, layer_data, post_process_data,
-            formats, buffer_cfg, output_calc_mapping, max_zoom,
-            cfg_tile_sizes):
+            formats, buffer_cfg, output_calc_mapping, max_zoom, cfg_tile_sizes):
     p = Processor(coord, metatile_zoom, fetch_fn, layer_data,
                   post_process_data, formats, buffer_cfg, output_calc_mapping,
                   max_zoom, cfg_tile_sizes)

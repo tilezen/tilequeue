@@ -2,6 +2,8 @@ import unittest
 
 from ModestMaps.Core import Coordinate
 
+from tilequeue.process import remove_wrong_zoomed_features
+
 
 class TestProcess(unittest.TestCase):
 
@@ -512,6 +514,63 @@ class TestCalculateCutCoords(unittest.TestCase):
             _c(2, 3, 2),
             _c(2, 3, 3),
         ]), set(cut_coords[3]))
+
+
+class TestRemoveWrongZoomedFeatures(unittest.TestCase):
+    def setUp(self):
+        self.nzoom = 16  # nominal zoom is 16.  It's a variable to demonstrate the actual value doesn't matter
+
+
+    def get_test_layers(self):
+        return [dict(
+            name='things',
+            layer_datum='I am a datum',
+            features=[
+                (None, dict(name='big thing', min_zoom=self.nzoom - 6), 123),
+                (None, dict(name='small thing', min_zoom=self.nzoom), 234),
+                (None, dict(name='tiny thing', min_zoom=self.nzoom + 2), 345),
+                (None, dict(name='wow so tiny thing', min_zoom=self.nzoom + 3), 456)
+            ],
+            padded_bounds='I am padded bounds'
+        ), dict(
+            name='items',
+            layer_datum='Yet another datum',
+            features=[
+                (None, dict(name='big item', min_zoom=self.nzoom - 3), 123),
+                (None, dict(name='small item', min_zoom=self.nzoom - 1), 234),
+                (None, dict(name='tiny item', min_zoom=self.nzoom + 0.999), 345),
+                (None, dict(name='tiniest item', min_zoom=self.nzoom + 1), 456)
+            ],
+            padded_bounds='Yet another instance of padded bounds'
+        )]
+
+    def test_nominal_zoom_under_max_untouched(self):
+        expected = self.get_test_layers()
+
+        # here coord zoom is not at the nominal zoom, but it doesn't matter because nominal zoom is less
+        # than max zoom with changes.  Therefore, it should come out the same
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), self.nzoom - 2, self.nzoom - 1,
+                                                                self.nzoom))
+
+    def test_coord_zoom_at_max_zoom_untouched(self):
+        expected = self.get_test_layers()
+
+        # here nominal zoom is equal to max_zoom_with_changes, but the coord_zoom is too, so no changes here
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), self.nzoom, self.nzoom,
+                                                                self.nzoom))
+
+    def test_higher_min_zoom_features_removed_when_below_nominal_zoom(self):
+        expected = self.get_test_layers()
+
+        # remove the last two items from the things layer (whose min_zoom levels are 17 or greater)
+        expected[0]['features'] = expected[0]['features'][0:2]
+        # remove the last item from the items layer (whose min_zoom level is 17 or greater)
+        expected[1]['features'] = expected[1]['features'][0:3]
+
+        # here, coord zoom is less than nominal zoom AND nominal zoom is equal to max_zoom_with_changes.  We should
+        # remove the features with min_zoom above (nominal_zoom + 1)
+        self.assertEqual(expected, remove_wrong_zoomed_features(self.get_test_layers(), self.nzoom - 1, self.nzoom,
+                                                                self.nzoom))
 
 
 def _only_zoom(ctx, zoom):
