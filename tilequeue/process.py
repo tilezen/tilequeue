@@ -518,18 +518,19 @@ def format_coord(
 
     formatted_tiles = []
     for cut_coord in cut_coords:
-        cut_scale = _calculate_scale(scale, coord, nominal_zoom)
-
+        # we hardcoded the extent to be 4096 in
+        # https://github.com/tilezen/tilequeue/pull/404
+        # before, the scale is calculated by
+        # _calculate_scale(scale, coord, nominal_zoom)
         if cut_coord == coord:
-            # no need for cutting if this is the original tile.
             tiles = _format_feature_layers(
-                processed_feature_layers, coord, nominal_zoom, max_zoom_with_changes, formats,
-                unpadded_bounds, cut_scale, buffer_cfg)
-
+                processed_feature_layers, cut_coord, nominal_zoom,
+                max_zoom_with_changes, formats, unpadded_bounds, scale,
+                buffer_cfg)
         else:
             tiles = _cut_child_tiles(
-                processed_feature_layers, cut_coord, nominal_zoom, max_zoom_with_changes, formats,
-                _calculate_scale(scale, cut_coord, nominal_zoom), buffer_cfg)
+                processed_feature_layers, cut_coord, nominal_zoom,
+                max_zoom_with_changes, formats, scale, buffer_cfg)
 
         formatted_tiles.extend(tiles)
 
