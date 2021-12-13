@@ -529,8 +529,8 @@ def format_coord(
                 buffer_cfg)
         else:
             tiles = _cut_child_tiles(
-                processed_feature_layers, cut_coord, nominal_zoom, formats,
-                unpadded_bounds, scale, buffer_cfg)
+                processed_feature_layers, cut_coord, nominal_zoom,
+                max_zoom_with_changes, formats, scale, buffer_cfg)
 
         formatted_tiles.extend(tiles)
 
