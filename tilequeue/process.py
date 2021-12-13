@@ -518,6 +518,10 @@ def format_coord(
 
     formatted_tiles = []
     for cut_coord in cut_coords:
+        # we hardcoded the extent to be 4096 in
+        # https://github.com/tilezen/tilequeue/pull/404
+        # before, the scale is calculated by
+        # _calculate_scale(scale, coord, nominal_zoom)
         if cut_coord == coord:
             # we hardcoded the extent to be 4096 in
             # https://github.com/tilezen/tilequeue/pull/404

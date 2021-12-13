@@ -81,6 +81,9 @@ class MapboxVectorTileTest(unittest.TestCase):
             for (posargs, kwargs), coord in zip(encode.call_args_list,
                                                 tile_coords):
                 self.assertIn('quantize_bounds', kwargs)
+                # We hardcoded the extent to be 4096 in
+                # https://github.com/tilezen/tilequeue/pull/404
+                # thus the extent calculation is thus commented out
                 # quantize_bounds = kwargs['quantize_bounds']
                 # extent = int(round((quantize_bounds[2] - quantize_bounds[0]) /
                 #                    resolution))
