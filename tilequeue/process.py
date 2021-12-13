@@ -524,12 +524,12 @@ def format_coord(
         # _calculate_scale(scale, coord, nominal_zoom)
         if cut_coord == coord:
             tiles = _format_feature_layers(
-                processed_feature_layers, coord, nominal_zoom,
+                processed_feature_layers, cut_coord, nominal_zoom,
                 max_zoom_with_changes, formats, unpadded_bounds, scale,
                 buffer_cfg)
         else:
             tiles = _cut_child_tiles(
-                processed_feature_layers, coord, nominal_zoom, formats,
+                processed_feature_layers, cut_coord, nominal_zoom, formats,
                 unpadded_bounds, scale, buffer_cfg)
 
         formatted_tiles.extend(tiles)
