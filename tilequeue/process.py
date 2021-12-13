@@ -523,10 +523,6 @@ def format_coord(
         # before, the scale is calculated by
         # _calculate_scale(scale, coord, nominal_zoom)
         if cut_coord == coord:
-            # we hardcoded the extent to be 4096 in
-            # https://github.com/tilezen/tilequeue/pull/404
-            # before, the scale is calculated by
-            # _calculate_scale(scale, coord, nominal_zoom)
             tiles = _format_feature_layers(
                 processed_feature_layers, coord, nominal_zoom,
                 max_zoom_with_changes, formats, unpadded_bounds, scale,
