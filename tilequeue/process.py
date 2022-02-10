@@ -809,6 +809,7 @@ class Processor(object):
         self.max_padded_bounds = calc_max_padded_bounds(self.unpadded_bounds, meters_per_pixel_dim, self.buffer_cfg)
 
     def fetch(self):
+        # metatile_zoom: 3, cfg_tile_sizes: [512], max_zoom: 13
         cut_coords_by_zoom = calculate_cut_coords_by_zoom(
             self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
         feature_layers_by_zoom = {}
