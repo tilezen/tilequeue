@@ -764,11 +764,18 @@ def calculate_cut_coords_by_zoom(
     zoom.
     """
 
+    print('peitidebug_tq_coord', coord)
+    print('peitidebug_tq_metatilezoom', metatile_zoom)
+    print('peitidebug_tq_cfg_tile_sizes', cfg_tile_sizes)
+    print('peitidebug_tq_max_zoom', max_zoom)
+
     tile_sizes_by_zoom = calculate_sizes_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
-
+    print('peitidebug_tq_tile_sizes_by_zoom', tile_sizes_by_zoom)
     cut_coords_by_zoom = {}
     for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
+        print('peitidebug_tq_nominal_zoom', nominal_zoom)
+        print('peitidebug_tq_tile_sizes', tile_sizes)
         cut_coords = []
         for tile_size in tile_sizes:
             cut_coords.extend(metatile_children_with_size(
@@ -776,6 +783,7 @@ def calculate_cut_coords_by_zoom(
 
         cut_coords_by_zoom[nominal_zoom] = cut_coords
 
+    print('peitidebug_tq_cut_coords_by_zoom', cut_coords_by_zoom)
     return cut_coords_by_zoom
 
 
