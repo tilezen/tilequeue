@@ -333,7 +333,7 @@ def process_coord_no_format(
             props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
 
-            label = row.get('__label__', None)
+            label = row.get('__label__')
             if label:
                 # TODO probably formalize as part of the feature
                 props['mz_label_placement'] = label
