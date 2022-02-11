@@ -98,8 +98,6 @@ def _postprocess_data(
             log=_log_fn,
         )
 
-        # print('peitidebug_tq_postprocess_data nominal_zoom: {}'.format(nominal_zoom))
-
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
         if layer is not None:
@@ -289,9 +287,6 @@ def process_coord_no_format(
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         layer_name = layer_datum['name']
-
-        # if layer_name != 'buildings':
-        #     continue
 
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
@@ -562,8 +557,7 @@ def format_coord(
 # the output.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  output_calc_spec, scale=4096, log_fn=None,
-                  max_zoom_with_changes=16):
+                  output_calc_spec, scale=4096, log_fn=None, max_zoom_with_changes=16):
     processed_feature_layers, extra_data = process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_spec, log_fn=log_fn)
@@ -809,19 +803,10 @@ def calculate_cut_coords_by_zoom(
     Note that max_zoom should be the maximum coordinate zoom, not nominal
     zoom.
     """
-
-    # print('peitidebug_tq_coord', coord)
-    # print('peitidebug_tq_metatilezoom', metatile_zoom)
-    # print('peitidebug_tq_cfg_tile_sizes', cfg_tile_sizes)
-    # print('peitidebug_tq_max_zoom', max_zoom)
-
     tile_sizes_by_zoom = calculate_sizes_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
-    # print('peitidebug_tq_tile_sizes_by_zoom', tile_sizes_by_zoom)
     cut_coords_by_zoom = {}
     for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
-        # print('peitidebug_tq_nominal_zoom', nominal_zoom)
-        # print('peitidebug_tq_tile_sizes', tile_sizes)
         cut_coords = []
         for tile_size in tile_sizes:
             cut_coords.extend(metatile_children_with_size(
@@ -829,7 +814,6 @@ def calculate_cut_coords_by_zoom(
 
         cut_coords_by_zoom[nominal_zoom] = cut_coords
 
-    # print('peitidebug_tq_cut_coords_by_zoom', cut_coords_by_zoom)
     return cut_coords_by_zoom
 
 
@@ -855,7 +839,6 @@ class Processor(object):
         self.max_padded_bounds = calc_max_padded_bounds(self.unpadded_bounds, meters_per_pixel_dim, self.buffer_cfg)
 
     def fetch(self):
-        # metatile_zoom: 3, cfg_tile_sizes: [512], max_zoom: 13
         cut_coords_by_zoom = calculate_cut_coords_by_zoom(
             self.coord, self.metatile_zoom, self.cfg_tile_sizes, self.max_zoom)
         feature_layers_by_zoom = {}

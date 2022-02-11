@@ -258,25 +258,18 @@ class TestCalculateCutZooms(unittest.TestCase):
     def test_mid_zoom(self):
         from tilequeue.process import calculate_sizes_by_zoom
         from tilequeue.tile import metatile_zoom_from_size
-        from tilequeue.process import calculate_cut_coords_by_zoom
 
         tile_sizes = [512]
         metatile_size = 8
         metatile_zoom = metatile_zoom_from_size(metatile_size)
         max_zoom = 16 - metatile_zoom
-        print('max_zoom: {}, metatile_zoom: {}, max_zoom: {}'.format(max_zoom, metatile_zoom, max_zoom))
-        print(
-            'metatile_coord_zoom,nominal_zoom,sizes_by_zoom,'
-            'cut_coords_map_keys,cut_coords_map')
 
-        for zoom in range(0, 17):
+        for zoom in range(1, max_zoom - metatile_zoom):
             coord = Coordinate(zoom=zoom, row=0, column=0)
             sizes_by_zoom = calculate_sizes_by_zoom(
                 coord, metatile_zoom, tile_sizes, max_zoom)
             nominal_zoom = zoom + metatile_zoom
-            cut_coords_map = calculate_cut_coords_by_zoom(coord, metatile_zoom, tile_sizes, max_zoom)
-            print('{},{},"{}","{}","{}"'.format(zoom, nominal_zoom, sizes_by_zoom, cut_coords_map.keys(), cut_coords_map))
-            #self.assertEqual({nominal_zoom: tile_sizes}, sizes_by_zoom)
+            self.assertEqual({nominal_zoom: tile_sizes}, sizes_by_zoom)
 
     def test_zoom_zero(self):
         from tilequeue.process import calculate_sizes_by_zoom
