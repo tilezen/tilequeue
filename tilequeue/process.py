@@ -287,7 +287,6 @@ def process_coord_no_format(
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         layer_name = layer_datum['name']
-
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
 
@@ -563,8 +562,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         output_calc_spec, log_fn=log_fn)
 
     all_formatted_tiles, extra_data = format_coord(
-        coord, nominal_zoom, max_zoom_with_changes,
-        processed_feature_layers, formats,
+        coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
     # Because cut coord zoom 15 and 16 shares a common nominal_zoom 16,
@@ -803,8 +801,10 @@ def calculate_cut_coords_by_zoom(
     Note that max_zoom should be the maximum coordinate zoom, not nominal
     zoom.
     """
+
     tile_sizes_by_zoom = calculate_sizes_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
+
     cut_coords_by_zoom = {}
     for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
         cut_coords = []
