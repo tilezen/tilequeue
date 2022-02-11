@@ -310,7 +310,7 @@ def process_coord_no_format(
         features = []
         features_size = 0
         for row in feature_layer['features']:
-            wkb = row.pop('__geometry__')
+            wkb = row.get('__geometry__')
             shape = loads(wkb)
 
             if shape.is_empty:
@@ -334,11 +334,11 @@ def process_coord_no_format(
             if not shape_padded_bounds.intersects(shape):
                 continue
 
-            feature_id = row.pop('__id__')
+            feature_id = row.get('__id__')
             props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
 
-            label = row.pop('__label__', None)
+            label = row.get('__label__', None)
             if label:
                 # TODO probably formalize as part of the feature
                 props['mz_label_placement'] = label
@@ -350,7 +350,7 @@ def process_coord_no_format(
             # expecting utf-8
             row = utils.encode_utf8(row)
 
-            query_props = row.pop('__properties__')
+            query_props = row.get('__properties__')
             feature_size += len('__properties__') + _sizeof(query_props)
 
             # TODO:
@@ -584,7 +584,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
     if nominal_zoom == 16:
         # first bump nominal_zoom to 17 and pass that to make it follow
         # end_zoom in queries.yaml if the end_zoom is 17
-        processed_feature_layers_nz17, extra_data_cc16 = \
+        processed_feature_layers_nz17, extra_data_nz17 = \
             process_coord_no_format(feature_layers, 17,
                                     unpadded_bounds, post_process_data,
                                     output_calc_spec, log_fn=log_fn)
@@ -594,7 +594,7 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         # format_coord because we want to make sure the downstream call
         # calc_meters_per_pixel_dim(nominal_zoom) still use the value 16 to
         # keep the behavior as original
-        all_formatted_tiles_special, extra_data_cc16 = format_coord(
+        all_formatted_tiles_special, extra_data_special = format_coord(
             coord, 16, max_zoom_with_changes,
             processed_feature_layers_nz17, formats,
             unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
