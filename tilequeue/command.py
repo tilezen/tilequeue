@@ -2187,8 +2187,8 @@ def tilequeue_meta_tile(cfg, args):
         for fetch, coord_datum in fetched_coord_data:
             coord_start_ms = int(time.time() * 1000)
             coord = coord_datum['coord']
-            if coord.zoom != 13 and coord.row != 2866 and coord.column != 1316:
-                continue
+            # if coord.zoom != 13 and coord.row != 2866 and coord.column != 1316:
+            #     continue
             if check_metatile_exists:
                 existing_data = store.read_tile(coord, zip_format)
                 if existing_data is not None:

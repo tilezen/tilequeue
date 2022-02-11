@@ -290,8 +290,8 @@ def process_coord_no_format(
         layer_datum = feature_layer['layer_datum']
         layer_name = layer_datum['name']
 
-        if layer_name != 'buildings':
-            continue
+        # if layer_name != 'buildings':
+        #     continue
 
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
