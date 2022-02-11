@@ -98,6 +98,8 @@ def _postprocess_data(
             log=_log_fn,
         )
 
+        print('peitidebug_tq_postprocess_data nominal_zoom: {}'.format(nominal_zoom))
+
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
         if layer is not None:
@@ -287,6 +289,10 @@ def process_coord_no_format(
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         layer_name = layer_datum['name']
+
+        if layer_name != 'buildings':
+            continue
+
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
 
