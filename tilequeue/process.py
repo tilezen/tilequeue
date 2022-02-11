@@ -562,16 +562,31 @@ def format_coord(
 # the output.
 def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
                   formats, unpadded_bounds, cut_coords, buffer_cfg,
-                  output_calc_spec, scale=4096, log_fn=None, max_zoom_with_changes=16):
+                  output_calc_spec, scale=4096, log_fn=None,
+                  max_zoom_with_changes=16):
     processed_feature_layers, extra_data = process_coord_no_format(
         feature_layers, nominal_zoom, unpadded_bounds, post_process_data,
         output_calc_spec, log_fn=log_fn)
 
     all_formatted_tiles, extra_data = format_coord(
-        coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
+        coord, nominal_zoom, max_zoom_with_changes,
+        processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
-    return all_formatted_tiles, extra_data
+    assert max_zoom_with_changes == 16
+
+    if nominal_zoom == max_zoom_with_changes:
+        processed_feature_layers_nz16, extra_data_nz16 = \
+            process_coord_no_format(feature_layers, 17,
+                                    unpadded_bounds, post_process_data,
+                                    output_calc_spec, log_fn=log_fn)
+
+        all_formatted_tiles_nz16, extra_data_nz16 = format_coord(
+            coord, 16, max_zoom_with_changes,
+            processed_feature_layers_nz16, formats,
+            unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
+
+    return all_formatted_tiles, extra_data  # extra_data is not used by callers
 
 
 def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoom):
