@@ -98,7 +98,7 @@ def _postprocess_data(
             log=_log_fn,
         )
 
-        print('peitidebug_tq_postprocess_data nominal_zoom: {}'.format(nominal_zoom))
+        # print('peitidebug_tq_postprocess_data nominal_zoom: {}'.format(nominal_zoom))
 
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
@@ -573,18 +573,43 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
+    # Because cut coord zoom 15 and 16 shares a common nominal_zoom 16,
+    # the special logic below is a necessary hack to make the
+    # current highest cut_coord zoom 16 follow the end_zoom:17 config in
+    # the post_process of queries.yaml in vector-datasource.
+    # If our highest supported zoom is not 16, the system might be
+    # broken, so we assert 16 here. Plus, we hardcoded 16 elsewhere too:
+    # https://github.com/tilezen/tilequeue/blob/43a4d4d1b101a4410660c23f1d41222e85aaa3ba/tilequeue/process.py#L382
     assert max_zoom_with_changes == 16
-
-    if nominal_zoom == max_zoom_with_changes:
-        processed_feature_layers_nz16, extra_data_nz16 = \
+    if nominal_zoom == 16:
+        # first bump nominal_zoom to 17 and pass that to make it follow
+        # end_zoom in queries.yaml if the end_zoom is 17
+        processed_feature_layers_nz17, extra_data_cc16 = \
             process_coord_no_format(feature_layers, 17,
                                     unpadded_bounds, post_process_data,
                                     output_calc_spec, log_fn=log_fn)
 
-        all_formatted_tiles_nz16, extra_data_nz16 = format_coord(
+        # then use the processed_feature_layers_nz17 that have
+        # post_processors ran with nominal 17. But we still pass 16 to
+        # format_coord because we want to make sure the downstream call
+        # calc_meters_per_pixel_dim(nominal_zoom) still use the value 16 to
+        # keep the behavior as original
+        all_formatted_tiles_special, extra_data_cc16 = format_coord(
             coord, 16, max_zoom_with_changes,
-            processed_feature_layers_nz16, formats,
+            processed_feature_layers_nz17, formats,
             unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
+
+        # then extract the cut coord zoom 15 tiles from the earlier formatted
+        # tiles that haven't used the hacked bumped nominal zoom 17
+        all_formatted_tiles_cut_coord_z15_z16 = \
+            [ft for ft in all_formatted_tiles if ft.get('coord').zoom == 15]
+
+        # then concatenate the result with cut coord zoom 16 tiles from the
+        # formated tiles that processed with hacked bumped nominal zoom 17
+        # as the final result
+        all_formatted_tiles_cut_coord_z15_z16.extend(
+            [ft for ft in all_formatted_tiles_special if ft.get('coord').zoom == 16])
+        all_formatted_tiles = all_formatted_tiles_cut_coord_z15_z16
 
     return all_formatted_tiles, extra_data  # extra_data is not used by callers
 
@@ -785,18 +810,18 @@ def calculate_cut_coords_by_zoom(
     zoom.
     """
 
-    print('peitidebug_tq_coord', coord)
-    print('peitidebug_tq_metatilezoom', metatile_zoom)
-    print('peitidebug_tq_cfg_tile_sizes', cfg_tile_sizes)
-    print('peitidebug_tq_max_zoom', max_zoom)
+    # print('peitidebug_tq_coord', coord)
+    # print('peitidebug_tq_metatilezoom', metatile_zoom)
+    # print('peitidebug_tq_cfg_tile_sizes', cfg_tile_sizes)
+    # print('peitidebug_tq_max_zoom', max_zoom)
 
     tile_sizes_by_zoom = calculate_sizes_by_zoom(
         coord, metatile_zoom, cfg_tile_sizes, max_zoom)
-    print('peitidebug_tq_tile_sizes_by_zoom', tile_sizes_by_zoom)
+    # print('peitidebug_tq_tile_sizes_by_zoom', tile_sizes_by_zoom)
     cut_coords_by_zoom = {}
     for nominal_zoom, tile_sizes in tile_sizes_by_zoom.iteritems():
-        print('peitidebug_tq_nominal_zoom', nominal_zoom)
-        print('peitidebug_tq_tile_sizes', tile_sizes)
+        # print('peitidebug_tq_nominal_zoom', nominal_zoom)
+        # print('peitidebug_tq_tile_sizes', tile_sizes)
         cut_coords = []
         for tile_size in tile_sizes:
             cut_coords.extend(metatile_children_with_size(
@@ -804,7 +829,7 @@ def calculate_cut_coords_by_zoom(
 
         cut_coords_by_zoom[nominal_zoom] = cut_coords
 
-    print('peitidebug_tq_cut_coords_by_zoom', cut_coords_by_zoom)
+    # print('peitidebug_tq_cut_coords_by_zoom', cut_coords_by_zoom)
     return cut_coords_by_zoom
 
 
