@@ -310,7 +310,7 @@ def process_coord_no_format(
         features = []
         features_size = 0
         for row in feature_layer['features']:
-            wkb = row.get('__geometry__')
+            wkb = row['__geometry__']
             shape = loads(wkb)
 
             if shape.is_empty:
@@ -334,7 +334,7 @@ def process_coord_no_format(
             if not shape_padded_bounds.intersects(shape):
                 continue
 
-            feature_id = row.get('__id__')
+            feature_id = row['__id__']
             props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
 
@@ -350,7 +350,7 @@ def process_coord_no_format(
             # expecting utf-8
             row = utils.encode_utf8(row)
 
-            query_props = row.get('__properties__')
+            query_props = row['__properties__']
             feature_size += len('__properties__') + _sizeof(query_props)
 
             # TODO:
@@ -602,13 +602,13 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         # then extract the cut coord zoom 15 tiles from the earlier formatted
         # tiles that haven't used the hacked bumped nominal zoom 17
         all_formatted_tiles_cut_coord_z15_z16 = \
-            [ft for ft in all_formatted_tiles if ft.get('coord').zoom == 15]
+            [ft for ft in all_formatted_tiles if ft['coord'].zoom == 15]
 
         # then concatenate the result with cut coord zoom 16 tiles from the
         # formated tiles that processed with hacked bumped nominal zoom 17
         # as the final result
         all_formatted_tiles_cut_coord_z15_z16.extend(
-            [ft for ft in all_formatted_tiles_special if ft.get('coord').zoom == 16])
+            [ft for ft in all_formatted_tiles_special if ft['coord'].zoom == 16])
         all_formatted_tiles = all_formatted_tiles_cut_coord_z15_z16
 
     return all_formatted_tiles, extra_data  # extra_data is not used by callers
