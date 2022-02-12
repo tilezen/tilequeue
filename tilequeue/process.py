@@ -304,7 +304,7 @@ def process_coord_no_format(
         features = []
         features_size = 0
         for row in feature_layer['features']:
-            wkb = row.pop('__geometry__')
+            wkb = row['__geometry__']
             shape = loads(wkb)
 
             if shape.is_empty:
@@ -328,11 +328,11 @@ def process_coord_no_format(
             if not shape_padded_bounds.intersects(shape):
                 continue
 
-            feature_id = row.pop('__id__')
+            feature_id = row['__id__']
             props = {}
             feature_size = getsizeof(feature_id) + len(wkb)
 
-            label = row.pop('__label__', None)
+            label = row.get('__label__')
             if label:
                 # TODO probably formalize as part of the feature
                 props['mz_label_placement'] = label
@@ -344,7 +344,7 @@ def process_coord_no_format(
             # expecting utf-8
             row = utils.encode_utf8(row)
 
-            query_props = row.pop('__properties__')
+            query_props = row['__properties__']
             feature_size += len('__properties__') + _sizeof(query_props)
 
             # TODO:
@@ -565,7 +565,45 @@ def process_coord(coord, nominal_zoom, feature_layers, post_process_data,
         coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
 
-    return all_formatted_tiles, extra_data
+    # Because cut coord zoom 15 and 16 shares a common nominal_zoom 16,
+    # the special logic below is a necessary hack to make the
+    # current highest cut_coord zoom 16 follow the end_zoom:17 config in
+    # the post_process of queries.yaml in vector-datasource.
+    # If our highest supported zoom is not 16, the system might be
+    # broken, so we assert 16 here. Plus, we hardcoded 16 elsewhere too:
+    # https://github.com/tilezen/tilequeue/blob/43a4d4d1b101a4410660c23f1d41222e85aaa3ba/tilequeue/process.py#L382
+    assert max_zoom_with_changes == 16
+    if nominal_zoom == 16:
+        # first bump nominal_zoom to 17 and pass that to make it follow
+        # end_zoom in queries.yaml if the end_zoom is 17
+        processed_feature_layers_nz17, extra_data_nz17 = \
+            process_coord_no_format(feature_layers, 17,
+                                    unpadded_bounds, post_process_data,
+                                    output_calc_spec, log_fn=log_fn)
+
+        # then use the processed_feature_layers_nz17 that have
+        # post_processors ran with nominal 17. But we still pass 16 to
+        # format_coord because we want to make sure the downstream call
+        # calc_meters_per_pixel_dim(nominal_zoom) still use the value 16 to
+        # keep the behavior as original
+        all_formatted_tiles_special, extra_data_special = format_coord(
+            coord, 16, max_zoom_with_changes,
+            processed_feature_layers_nz17, formats,
+            unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale)
+
+        # then extract the cut coord zoom 15 tiles from the earlier formatted
+        # tiles that haven't used the hacked bumped nominal zoom 17
+        all_formatted_tiles_cut_coord_z15_z16 = \
+            [ft for ft in all_formatted_tiles if ft['coord'].zoom == 15]
+
+        # then concatenate the result with cut coord zoom 16 tiles from the
+        # formated tiles that processed with hacked bumped nominal zoom 17
+        # as the final result
+        all_formatted_tiles_cut_coord_z15_z16.extend(
+            [ft for ft in all_formatted_tiles_special if ft['coord'].zoom == 16])
+        all_formatted_tiles = all_formatted_tiles_cut_coord_z15_z16
+
+    return all_formatted_tiles, extra_data  # extra_data is not used by callers
 
 
 def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoom):
