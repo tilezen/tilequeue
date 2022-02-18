@@ -341,6 +341,7 @@ earth_equatorial_circumference_meters = 40041472.01586051
 
 
 def calc_meters_per_pixel_dim(zoom):
+    """ Assuming each tile has 256 pixel, return how many meters per pixel """
     meters_in_dimension = (earth_equatorial_circumference_meters /
                            (2 ** (zoom + 8)))
     return meters_in_dimension
