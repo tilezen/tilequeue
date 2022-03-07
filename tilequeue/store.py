@@ -36,6 +36,9 @@ class KeyFormatType(Enum):
     # prefix comes before hash
     prefix_hash = 2
 
+    # hash omitted
+    simple = 3
+
 
 def int_if_exact(x):
     try:
@@ -71,6 +74,8 @@ class S3TileKeyGenerator(object):
                 key_format = '%(hash)s/%(prefix)s/%(path)s'
             elif key_format_type == KeyFormatType.prefix_hash:
                 key_format = '%(prefix)s/%(hash)s/%(path)s'
+            elif key_format_type == KeyFormatType.simple:
+                key_format = '%(prefix)s/%(path)s'
             else:
                 raise ValueError('unknown key_format_type: %r' %
                                  key_format_type)
@@ -585,6 +590,8 @@ def make_s3_tile_key_generator(yml_cfg):
         key_format_type = KeyFormatType.hash_prefix
     elif key_format_type_str == 'prefix-hash':
         key_format_type = KeyFormatType.prefix_hash
+    elif key_format_type_str == 'no-hash':
+        key_format_type = KeyFormatType.simple
     else:
         raise ValueError('unknown s3 key-format: %r' % key_format_type_str)
     return S3TileKeyGenerator(key_format_type=key_format_type)
