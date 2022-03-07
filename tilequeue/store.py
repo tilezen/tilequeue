@@ -69,17 +69,18 @@ class S3TileKeyGenerator(object):
     def __init__(self, key_format_type=None, key_format=None):
         if key_format is not None and key_format_type is not None:
             raise ValueError('key_format and key_format_type both set')
-        if key_format_type is not None:
-            if key_format_type == KeyFormatType.hash_prefix:
-                key_format = '%(hash)s/%(prefix)s/%(path)s'
-            elif key_format_type == KeyFormatType.prefix_hash:
-                key_format = '%(prefix)s/%(hash)s/%(path)s'
-            elif key_format_type == KeyFormatType.simple:
-                key_format = '%(prefix)s/%(path)s'
-            else:
-                raise ValueError('unknown key_format_type: %r' %
-                                 key_format_type)
-        self.key_format = key_format
+        # if key_format_type is not None:
+        #     if key_format_type == KeyFormatType.hash_prefix:
+        #         key_format = '%(hash)s/%(prefix)s/%(path)s'
+        #     elif key_format_type == KeyFormatType.prefix_hash:
+        #         key_format = '%(prefix)s/%(hash)s/%(path)s'
+        #     elif key_format_type == KeyFormatType.simple:
+        #         key_format = '%(prefix)s/%(path)s'
+        #     else:
+        #         raise ValueError('unknown key_format_type: %r' %
+        #                          key_format_type)
+
+        self.key_format = '%(prefix)s/%(path)s'
 
     def __call__(self, prefix, coord, extension):
         path_to_hash = '%d/%d/%d.%s' % (
