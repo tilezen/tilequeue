@@ -117,7 +117,7 @@ class OsmRawrLookup(object):
         # so we accept either as the type for that position in the function.
         num = (int, long)
 
-        if _match_type(args, (num, (str, bytes), dict)):
+        if _match_type(args, (num, (str, bytes), (dict, type(None)))):
             self.add_feature(*args)
 
         elif _match_type(args, (num, list, list)):
