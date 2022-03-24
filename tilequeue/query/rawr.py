@@ -446,6 +446,9 @@ class _SimpleLayersIndex(object):
         self.end_zoom = end_zoom
 
     def add_row(self, fid, shape_wkb, props):
+        if props is None:
+            props = {}
+
         shape = _LazyShape(shape_wkb)
         shape_type = wkb_shape_type(shape_wkb)
 
@@ -478,6 +481,9 @@ class _LayersIndex(object):
         self.wikidata = wikidata
 
     def add_row(self, fid, shape_wkb, props):
+        if props is None:
+            props = {}
+
         # extend props with wikidata, if there's a wikidata ID
         wd_id = props.get('wikidata')
         if wd_id:
