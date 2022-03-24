@@ -134,6 +134,9 @@ class OsmRawrLookup(object):
         if fid < 0:
             return
 
+        if props is None:
+            props = {}
+
         shape_type = wkb_shape_type(shape_wkb)
         if is_station_or_stop(fid, None, props) and \
            shape_type == ShapeType.point:
