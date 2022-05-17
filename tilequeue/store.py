@@ -80,7 +80,7 @@ class S3TileKeyGenerator(object):
                 raise ValueError('unknown key_format_type: %r' %
                                  key_format_type)
 
-        self.key_format = '%(prefix)s/%(path)s'
+        self.key_format = key_format
 
     def __call__(self, prefix, coord, extension):
         path_to_hash = '%d/%d/%d.%s' % (
