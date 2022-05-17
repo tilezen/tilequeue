@@ -69,16 +69,16 @@ class S3TileKeyGenerator(object):
     def __init__(self, key_format_type=None, key_format=None):
         if key_format is not None and key_format_type is not None:
             raise ValueError('key_format and key_format_type both set')
-        # if key_format_type is not None:
-        #     if key_format_type == KeyFormatType.hash_prefix:
-        #         key_format = '%(hash)s/%(prefix)s/%(path)s'
-        #     elif key_format_type == KeyFormatType.prefix_hash:
-        #         key_format = '%(prefix)s/%(hash)s/%(path)s'
-        #     elif key_format_type == KeyFormatType.simple:
-        #         key_format = '%(prefix)s/%(path)s'
-        #     else:
-        #         raise ValueError('unknown key_format_type: %r' %
-        #                          key_format_type)
+        if key_format_type is not None:
+            if key_format_type == KeyFormatType.hash_prefix:
+                key_format = '%(hash)s/%(prefix)s/%(path)s'
+            elif key_format_type == KeyFormatType.prefix_hash:
+                key_format = '%(prefix)s/%(hash)s/%(path)s'
+            elif key_format_type == KeyFormatType.simple:
+                key_format = '%(prefix)s/%(path)s'
+            else:
+                raise ValueError('unknown key_format_type: %r' %
+                                 key_format_type)
 
         self.key_format = '%(prefix)s/%(path)s'
 
@@ -591,7 +591,7 @@ def make_s3_tile_key_generator(yml_cfg):
         key_format_type = KeyFormatType.hash_prefix
     elif key_format_type_str == 'prefix-hash':
         key_format_type = KeyFormatType.prefix_hash
-    elif key_format_type_str == 'no-hash':
+    elif key_format_type_str == 'simple':
         key_format_type = KeyFormatType.simple
     else:
         raise ValueError('unknown s3 key-format: %r' % key_format_type_str)
