@@ -79,8 +79,6 @@ Context = namedtuple('Context', [
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
-
-
 def _postprocess_data(
         feature_layers, post_process_data, nominal_zoom, unpadded_bounds,
         log_fn=None):
@@ -95,7 +93,6 @@ def _postprocess_data(
             if log_fn:
                 log_fn(dict(fn_name=step['fn_name'], msg=data))
 
-        # create a context
         ctx = Context(
             feature_layers=feature_layers,
             nominal_zoom=nominal_zoom,
@@ -105,7 +102,6 @@ def _postprocess_data(
             log=_log_fn,
         )
 
-        # apply the actual function
         layer = fn(ctx)
         feature_layers = ctx.feature_layers
         if layer is not None:
@@ -120,7 +116,6 @@ def _postprocess_data(
             # append it.
             if layer is not None:
                 feature_layers.append(layer)
-
     return feature_layers
 
 
