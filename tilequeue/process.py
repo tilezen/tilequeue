@@ -544,7 +544,6 @@ def _load_inline_layer(layer_path):
             return features
         gc = GeometryCollection([shape(feature['geometry']) for feature in fc['features']])
 
-
     # add the features geometries with their properties (values must be strings) in tuples
     for geom, feat in itertools.izip(gc.geoms, fc['features']):
         properties = {k: str(v) if type(v) is not bool else str(v).lower() for k, v in
