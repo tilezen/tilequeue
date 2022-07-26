@@ -544,6 +544,7 @@ def parse_layer_data(query_cfg, buffer_cfg, cfg_path):
             query_bounds_pad_fn=create_query_bounds_pad_fn(
                 buffer_cfg, layer_name),
             tolerance=float(layer_config.get('tolerance', 1.0)),
+            layer_path=layer_config.get('layer_path'),
         )
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
