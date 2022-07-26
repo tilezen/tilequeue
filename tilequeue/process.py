@@ -522,10 +522,10 @@ def _calculate_scale(scale, coord, nominal_zoom):
 
 
 def _load_inline_layer(layer_path):
-    # we can optionally load geojson layers from file all we need is a file path per layer name. we expect the coords to
-    # already be in mercator projection and we only fill out the minimal structure of the feature tuple, ie there's no ID,
-    # most of the datum stuff is missing. we are mostly worried about the shape and properties and we skip any layers
-    # that are configured but cannot be loaded for whatever reason
+    # we can optionally load geojson layers from file all we need is a file path. we expect the coordinates to already
+    # be in mercator projection and we only fill out the minimal structure of the feature tuple, ie there's no ID. if
+    # the path is given and the file exists, we expect to be able to load the layer's features. so if the json is
+    # malformed or shapely can't make sense of the geom then we'll raise
     features = []
 
     # has to exist and has to be geojson for now
@@ -534,14 +534,12 @@ def _load_inline_layer(layer_path):
 
     # load the geojson into a shapely geometry collection
     with open(layer_path) as fh:
-        try:
-            fc = json.load(fh)
-            # skip if this isnt pseudo mercator
-            if fc['crs']['properties']['name'] != 'urn:ogc:def:crs:EPSG::3857':
-                return features
-            gc = GeometryCollection([shape(feature['geometry']) for feature in fc['features']])
-        except:
+        fc = json.load(fh)
+        # skip if this isnt pseudo mercator
+        if fc['crs']['properties']['name'] != 'urn:ogc:def:crs:EPSG::3857':
             return features
+        gc = GeometryCollection([shape(feature['geometry']) for feature in fc['features']])
+
 
     # add the features geometries with their properties (values must be strings) in tuples
     for geom, feat in itertools.izip(gc.geoms, fc['features']):
