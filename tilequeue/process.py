@@ -9,7 +9,9 @@ from cStringIO import StringIO
 from sys import getsizeof
 
 from shapely import geometry
-from shapely.geometry import MultiPolygon, shape, GeometryCollection
+from shapely.geometry import GeometryCollection
+from shapely.geometry import MultiPolygon
+from shapely.geometry import shape
 from shapely.wkb import loads
 from zope.dottedname.resolve import resolve
 
@@ -77,6 +79,8 @@ Context = namedtuple('Context', [
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
+
+
 def _postprocess_data(
         feature_layers, post_process_data, nominal_zoom, unpadded_bounds,
         log_fn=None):
