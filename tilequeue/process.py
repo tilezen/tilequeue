@@ -294,7 +294,7 @@ def process_coord_no_format(
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
         # inline layers are expected to be pre-processed
-        layer_path = layer_datum.get('layer_path')
+        layer_path = layer_datum.get('pre_processed_layer_path')
         if layer_path is not None:
             processed_feature_layers.append(feature_layer)
             continue
@@ -532,8 +532,8 @@ def _load_inline_layer(layer_path):
     # malformed or shapely can't make sense of the geom then we'll raise
     features = []
 
-    # has to exist and has to be geojson for now
-    if not os.path.isfile(layer_path) or not layer_path.endswith('.geojson'):
+    # has to exist
+    if not os.path.isfile(layer_path):
         return features
 
     # load the geojson into a shapely geometry collection
@@ -541,15 +541,13 @@ def _load_inline_layer(layer_path):
         fc = json.load(fh)
         # skip if this isnt pseudo mercator
         if fc['crs']['properties']['name'] != 'urn:ogc:def:crs:EPSG::3857':
-            return features
+            raise Exception('Pre-processed layers must be in pseudo mercator projection')
         gc = GeometryCollection([shape(feature['geometry']) for feature in fc['features']])
 
-
-    # add the features geometries with their properties (values must be strings) in tuples
+    # add the features geometries with their properties in tuples
     for geom, feat in itertools.izip(gc.geoms, fc['features']):
-        properties = {k: str(v) if type(v) is not bool else str(v).lower() for k, v in
-                      feat['properties'].iteritems()}
-        features.append((geom, properties, None))
+        props = feat['properties']
+        features.append((geom, props, props.get('id')))
 
     return features
 
@@ -710,7 +708,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoo
     # inline layers contain a path to their features inline in their datum
     for layer_datum in layer_data:
         layer_name = layer_datum['name']
-        layer_path = layer_datum.get('layer_path')
+        layer_path = layer_datum.get('pre_processed_layer_path')
         if layer_path is not None:
             features_by_layer[layer_name].extend(_load_inline_layer(layer_path))
 

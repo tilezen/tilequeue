@@ -544,7 +544,7 @@ def parse_layer_data(query_cfg, buffer_cfg, cfg_path):
             query_bounds_pad_fn=create_query_bounds_pad_fn(
                 buffer_cfg, layer_name),
             tolerance=float(layer_config.get('tolerance', 1.0)),
-            layer_path=layer_config.get('layer_path'),
+            pre_processed_layer_path=layer_config.get('pre_processed_layer_path'),
         )
         layer_data.append(layer_datum)
         if layer_name in all_layer_names:
@@ -2177,7 +2177,6 @@ def tilequeue_meta_tile(cfg, args):
         # each coord here is the unit of work now
         pyramid_coords = [job_coord]
         pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
-        pyramid_coords = [Coordinate(zoom=13, column=2411, row=3080)] # TODO: testing hack remove
         coord_data = [dict(coord=x) for x in pyramid_coords]
 
         try:
