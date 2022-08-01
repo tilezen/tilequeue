@@ -1,12 +1,17 @@
 from __future__ import division
 
+import itertools
+import json
+import os.path
 from collections import defaultdict
 from collections import namedtuple
 from cStringIO import StringIO
 from sys import getsizeof
 
 from shapely import geometry
+from shapely.geometry import GeometryCollection
 from shapely.geometry import MultiPolygon
+from shapely.geometry import shape
 from shapely.wkb import loads
 from zope.dottedname.resolve import resolve
 
@@ -69,12 +74,13 @@ Context = namedtuple('Context', [
     'log',
 ])
 
-
 # post-process all the layers simultaneously, which allows new
 # layers to be created from processing existing ones (e.g: for
 # computed centroids) or modifying layers based on the contents
 # of other layers (e.g: projecting attributes, deleting hidden
 # features, etc...)
+
+
 def _postprocess_data(
         feature_layers, post_process_data, nominal_zoom, unpadded_bounds,
         log_fn=None):
@@ -112,7 +118,6 @@ def _postprocess_data(
             # append it.
             if layer is not None:
                 feature_layers.append(layer)
-
     return feature_layers
 
 
@@ -146,7 +151,6 @@ def _cut_coord(
             padded_bounds=padded_bounds,
         )
         cut_feature_layers.append(cut_feature_layer)
-
     return cut_feature_layers
 
 
@@ -286,6 +290,12 @@ def process_coord_no_format(
     # filter, and then transform each layer as necessary
     for feature_layer in feature_layers:
         layer_datum = feature_layer['layer_datum']
+        # inline layers are expected to be pre-processed
+        layer_path = layer_datum.get('pre_processed_layer_path')
+        if layer_path is not None:
+            processed_feature_layers.append(feature_layer)
+            continue
+
         layer_name = layer_datum['name']
         geometry_types = layer_datum['geometry_types']
         padded_bounds = feature_layer['padded_bounds']
@@ -512,6 +522,33 @@ def _calculate_scale(scale, coord, nominal_zoom):
         return scale
 
 
+def _load_inline_layer(layer_path):
+    # we can optionally load geojson layers from file all we need is a file path. we expect the coordinates to already
+    # be in mercator projection and we only fill out the minimal structure of the feature tuple, ie there's no ID. if
+    # the path is given and the file exists, we expect to be able to load the layer's features. so if the json is
+    # malformed or shapely can't make sense of the geom then we'll raise
+    features = []
+
+    # has to exist
+    if not os.path.isfile(layer_path):
+        return features
+
+    # load the geojson into a shapely geometry collection
+    with open(layer_path) as fh:
+        fc = json.load(fh)
+        # skip if this isnt pseudo mercator
+        if fc['crs']['properties']['name'] != 'urn:ogc:def:crs:EPSG::3857':
+            raise Exception('Pre-processed layers must be in pseudo mercator projection')
+        gc = GeometryCollection([shape(feature['geometry']) for feature in fc['features']])
+
+    # add the features geometries with their properties in tuples
+    for geom, feat in itertools.izip(gc.geoms, fc['features']):
+        props = feat['properties']
+        features.append((geom, props, props.get('id')))
+
+    return features
+
+
 def format_coord(
         coord, nominal_zoom, max_zoom_with_changes, processed_feature_layers, formats,
         unpadded_bounds, cut_coords, buffer_cfg, extra_data, scale):
@@ -645,7 +682,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoo
         # expecting downstream in the process_coord function
         for layer_datum in layer_data:
             layer_name = layer_datum['name']
-            layer_props = row_props_by_layer[layer_name]
+            layer_props = row_props_by_layer.get(layer_name)
             if layer_props is not None:
                 props = common_props.copy()
                 props.update(layer_props)
@@ -664,6 +701,13 @@ def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoo
                     query_props['__label__'] = label_geometry
 
                 features_by_layer[layer_name].append(query_props)
+
+    # inline layers contain a path to their features inline in their datum
+    for layer_datum in layer_data:
+        layer_name = layer_datum['name']
+        layer_path = layer_datum.get('pre_processed_layer_path')
+        if layer_path is not None:
+            features_by_layer[layer_name].extend(_load_inline_layer(layer_path))
 
     feature_layers = []
     for layer_datum in layer_data:
