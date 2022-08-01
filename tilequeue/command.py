@@ -2177,8 +2177,9 @@ def tilequeue_meta_tile(cfg, args):
         # each coord here is the unit of work now
         pyramid_coords = [job_coord]
         pyramid_coords.extend(coord_children_range(job_coord, zoom_stop))
-        # for brevity of testing it is sometimes convenient to reduce to a single child coord
-        # pyramid_coords = [Coordinate(zoom=13, column=2411, row=3080)]
+        # for brevity of testing it is sometimes convenient to reduce to a single child coord that covers your test area
+        # this makes it so that only that metatile is built rather than the whole tile pyramid which can save 20-50min
+        # pyramid_coords = [Coordinate(zoom=13, column=2411, row=3080)] # this example covers liberty island at max zoom
         coord_data = [dict(coord=x) for x in pyramid_coords]
 
         try:
