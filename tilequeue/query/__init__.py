@@ -179,6 +179,9 @@ def _make_layer_info(layer_data, process_yaml_cfg):
     functions = _parse_yaml_functions(process_yaml_cfg)
 
     for layer_datum in layer_data:
+        # preprocessed layers are not from the database and not found in the rawr tile
+        if layer_datum.get('pre_processed_layer_path') is not None:
+            continue
         name = layer_datum['name']
         min_zoom_fn, props_fn = functions[name]
         shape_types = ShapeType.parse_set(layer_datum['geometry_types'])
