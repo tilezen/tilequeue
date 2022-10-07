@@ -25,7 +25,7 @@ Shapely==1.6.2.post1
 six==1.11.0
 statsd==3.2.1
 StreetNames==0.1.5
-ujson==1.35
+ujson==5.4.0
 Werkzeug==0.12.2
 wsgiref==0.1.2
 zope.dottedname==4.2
