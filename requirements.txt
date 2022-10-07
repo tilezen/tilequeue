@@ -1,6 +1,8 @@
 appdirs==1.4.3
 argparse==1.4.0
 boto==2.48.0
+boto3==1.15.18
+botocore==1.18.18
 edtf==2.6.0
 enum34==1.1.6
 future==0.16.0
