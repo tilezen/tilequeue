@@ -17,7 +17,7 @@ pyclipper==1.0.6
 pycountry==17.9.23
 pyproj==2.1.0
 python-dateutil==2.6.1
-PyYAML==4.2b4
+PyYAML==5.4
 git+https://github.com/tilezen/raw_tiles@master#egg=raw_tiles
 redis==2.10.6
 requests==2.25.1
