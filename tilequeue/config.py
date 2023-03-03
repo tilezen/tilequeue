@@ -2,11 +2,9 @@ import os
 
 from yaml import load
 
+from tilequeue.constants import MAX_TILE_ZOOM
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import metatile_zoom_from_size
-from tilequeue.constants import MAX_TILE_ZOOM
-from yaml import load
-import os
 
 
 class Configuration(object):
