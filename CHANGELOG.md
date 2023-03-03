@@ -5,11 +5,11 @@ v2.5.0
 ------
 
 * Add option to prefix just with date of build (instead of complicated hash), now that S3 is more performant. [PR #409](https://github.com/tilezen/tilequeue/pull/409)
-* Add special handling when processing cut coord z16 "max zoom" tiles to better coordinate with queries.yaml in vector-datasource and overzooming. [PR #407](https://github.com/tilezen/tilequeue/pull/407)
-* Add support for preprocessed inline geojson layers. Paired with [vector-datasource/2095](https://github.com/tilezen/vector-datasource/pull/2095). [PR #414](https://github.com/tilezen/tilequeue/pull/414)
+* Add special handling when processing cut coord zoom 16 "max zoom" tiles to better coordinate with queries.yaml in vector-datasource and overzooming for feature filtering. [PR #407](https://github.com/tilezen/tilequeue/pull/407)
 * Trim overzoom features from tiles where they're not needed (related to "max zoom" and overzooming, especially for address points in buildings layer and some kinds in the pois layer). [PR #402](https://github.com/tilezen/tilequeue/pull/402)
-* Set the MVT resolution (extent) to 4096 pixels instead of 8192 in most circumstances. [PR #404](https://github.com/tilezen/tilequeue/pull/404)
-* [docs] Clarify that meters per pixel assumes a 256 pixel nominal extent. [PR #408](https://github.com/tilezen/tilequeue/pull/408)
+* Add support for preprocessed inline geojson layers, paired with [vector-datasource/2095](https://github.com/tilezen/vector-datasource/pull/2095). [PR #414](https://github.com/tilezen/tilequeue/pull/414)
+* Set the MVT resolution (extent) to 4096 pixels instead of 8192 in most circumstances to save file size. [PR #404](https://github.com/tilezen/tilequeue/pull/404)
+* Clarify with inline docs that "meters per pixel" assumes a 256-pixel nominal extent. [PR #408](https://github.com/tilezen/tilequeue/pull/408)
 * Add linters for YAML, JSON, and Python to the repo. [PR #403](https://github.com/tilezen/tilequeue/pull/403)
 * Update requirements.txt to pin boto3 and botocore to make it easier to assume an S3 role. [PR #416](https://github.com/tilezen/tilequeue/pull/416)
 
