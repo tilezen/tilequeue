@@ -1,20 +1,23 @@
 # define locations to store the rendered data
+import json
+import md5
+import os
+import random
+import threading
+import time
+from cStringIO import StringIO
+from urllib import urlencode
 
 import boto3
 from botocore.exceptions import ClientError
 from builtins import range
 from enum import Enum
 from future.utils import raise_from
-import md5
 from ModestMaps.Core import Coordinate
-import os
-from tilequeue.metatile import metatiles_are_equal
+
 from tilequeue.format import zip_format
-import random
-import threading
-import time
-from cStringIO import StringIO
-from urllib import urlencode
+from tilequeue.metatile import metatiles_are_equal
+from tilequeue.utils import AwsSessionHelper
 
 
 def calc_hash(s):
@@ -33,6 +36,28 @@ class KeyFormatType(Enum):
     # prefix comes before hash
     prefix_hash = 2
 
+    # just prefix, no hash
+    prefix = 3
+
+
+def int_if_exact(x):
+    try:
+        i = int(x)
+        return i if i == x else x
+    except ValueError:
+        # shouldn't practically happen, but prefer to just log the original
+        # instead of explode
+        return x
+
+
+def make_coord_dict(coord):
+    """helper function to make a dict from a coordinate for logging"""
+    return dict(
+        z=int_if_exact(coord.zoom),
+        x=int_if_exact(coord.column),
+        y=int_if_exact(coord.row),
+    )
+
 
 class S3TileKeyGenerator(object):
     """
@@ -49,9 +74,12 @@ class S3TileKeyGenerator(object):
                 key_format = '%(hash)s/%(prefix)s/%(path)s'
             elif key_format_type == KeyFormatType.prefix_hash:
                 key_format = '%(prefix)s/%(hash)s/%(path)s'
+            elif key_format_type == KeyFormatType.prefix:
+                key_format = '%(prefix)s/%(path)s'
             else:
                 raise ValueError('unknown key_format_type: %r' %
                                  key_format_type)
+
         self.key_format = key_format
 
     def __call__(self, prefix, coord, extension):
@@ -104,8 +132,8 @@ def _backoff_and_retry(ExceptionType, num_tries=5, retry_factor=2,
 
                 except ExceptionType as e:
                     if logger:
-                        logger.warning("Failed. Backing off and retrying. "
-                                       "Error: %s" % str(e))
+                        logger.warning('Failed. Backing off and retrying. '
+                                       'Error: %s' % str(e))
 
                 sleep(interval)
                 interval *= factor
@@ -142,6 +170,16 @@ class S3(object):
         if self.reduced_redundancy:
             storage_class = 'REDUCED_REDUNDANCY'
 
+        if self.logger:
+            log_json_obj = dict(
+                msg='try writing tile to S3',
+                tile_coord=make_coord_dict(coord),
+                tile_s3_bucket=self.bucket_name,
+                tile_s3_key_name=key_name,
+            )
+            json_str = json.dumps(log_json_obj)
+            self.logger.debug(json_str)
+
         @_backoff_and_retry(Exception, logger=self.logger)
         def write_to_s3():
             put_obj_props = dict(
@@ -160,10 +198,20 @@ class S3(object):
                 # it's really useful for debugging if we know exactly what
                 # request is failing.
                 raise RuntimeError(
-                    "Error while trying to write %r to bucket %r: %s"
+                    'Error while trying to write %r to bucket %r: %s'
                     % (key_name, self.bucket_name, str(e)))
 
         write_to_s3()
+
+        if self.logger:
+            log_json_obj = dict(
+                msg='successfully written tile to S3',
+                tile_coord=make_coord_dict(coord),
+                tile_s3_bucket=self.bucket_name,
+                tile_s3_key_name=key_name,
+            )
+            json_str = json.dumps(log_json_obj)
+            self.logger.debug(json_str)
 
     def read_tile(self, coord, format):
         key_name = self.tile_key_gen(
@@ -217,7 +265,7 @@ class S3(object):
         # make sure that we deleted all the tiles - this seems like the
         # expected behaviour from the calling code.
         assert num_deleted == len(coords), \
-            "Failed to delete some coordinates from S3."
+            'Failed to delete some coordinates from S3.'
 
         return num_deleted
 
@@ -475,10 +523,23 @@ def _make_s3_store(cfg_name, constructor):
 
 
 def make_s3_store(cfg_name, tile_key_gen,
+                  s3_role_arn=None,
+                  s3_role_session_duration_s=None,
                   reduced_redundancy=False, date_prefix='',
                   delete_retry_interval=60, logger=None,
                   object_acl='public-read', tags=None):
-    s3 = boto3.client('s3')
+    if s3_role_arn:
+        # use provided role to access S3
+        assert s3_role_session_duration_s, \
+            's3_role_session_duration_s is either None or 0'
+        aws_helper = AwsSessionHelper('tilequeue_dataaccess',
+                                      s3_role_arn,
+                                      'us-east-1',
+                                      s3_role_session_duration_s)
+        s3 = aws_helper.get_client('s3')
+    else:
+        # use the credentials created from default config chain to access S3
+        s3 = boto3.client('s3')
 
     # extract out the construction of the bucket, so that it can be abstracted
     # from the the logic of interpreting the configuration file.
@@ -530,12 +591,21 @@ def make_s3_tile_key_generator(yml_cfg):
         key_format_type = KeyFormatType.hash_prefix
     elif key_format_type_str == 'prefix-hash':
         key_format_type = KeyFormatType.prefix_hash
+    elif key_format_type_str == 'prefix':
+        key_format_type = KeyFormatType.prefix
     else:
         raise ValueError('unknown s3 key-format: %r' % key_format_type_str)
     return S3TileKeyGenerator(key_format_type=key_format_type)
 
 
-def make_store(yml, credentials={}, logger=None):
+def make_store(yml,
+               s3_role_arn=None,
+               s3_role_session_duration_s=None,
+               logger=None):
+    """ Make a store object.
+    If the type is S3, optionally a s3_role_arn and s3_role_session_duration_s
+    can be provided to explicitly specify which role(and how long)
+    to assume to access the S3 """
     store_type = yml.get('type')
 
     if store_type == 'directory':
@@ -554,6 +624,8 @@ def make_store(yml, credentials={}, logger=None):
 
         return make_s3_store(
             bucket, tile_key_gen,
+            s3_role_arn=s3_role_arn,
+            s3_role_session_duration_s=s3_role_session_duration_s,
             reduced_redundancy=reduced_redundancy,
             date_prefix=date_prefix,
             delete_retry_interval=delete_retry_interval, logger=logger,

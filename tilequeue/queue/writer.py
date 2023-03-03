@@ -1,6 +1,4 @@
 # coordinates all the pieces required to enqueue coordinates
-
-
 from collections import defaultdict
 
 

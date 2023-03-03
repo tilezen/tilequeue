@@ -1,8 +1,10 @@
-from collections import namedtuple
 from collections import defaultdict
+from collections import namedtuple
 from itertools import izip
-from tilequeue.process import Source
+
 from enum import Enum
+
+from tilequeue.process import Source
 
 
 def namedtuple_with_defaults(name, props, defaults):
@@ -57,7 +59,7 @@ def wkb_shape_type(wkb):
     elif typ == 3 or typ == 6:
         return ShapeType.polygon
     else:
-        assert False, "WKB shape type %d not understood." % (typ,)
+        assert False, 'WKB shape type %d not understood.' % (typ,)
 
 
 def deassoc(x):
@@ -182,7 +184,7 @@ def mz_transit_route_name(tags):
 
 
 def is_station_or_stop(fid, shape, props):
-    "Returns true if the given (point) feature is a station or stop."
+    'Returns true if the given (point) feature is a station or stop.'
     return (
         props.get('railway') in ('station', 'stop', 'tram_stop') or
         props.get('public_transport') in ('stop', 'stop_position', 'tram_stop')

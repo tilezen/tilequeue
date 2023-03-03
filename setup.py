@@ -1,5 +1,7 @@
 import os.path
-from setuptools import setup, find_packages
+
+from setuptools import find_packages
+from setuptools import setup
 
 version_path = os.path.join(os.path.dirname(__file__), 'VERSION')
 with open(version_path) as fh:
@@ -7,8 +9,8 @@ with open(version_path) as fh:
 
 setup(name='tilequeue',
       version=version,
-      description="Queue operations to manage the processes surrounding tile "
-                  "rendering.",
+      description='Queue operations to manage the processes surrounding tile '
+                  'rendering.',
       long_description=open('README.md').read(),
       classifiers=[
           # strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers

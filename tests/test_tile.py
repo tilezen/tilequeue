@@ -1,8 +1,9 @@
+import unittest
 from itertools import groupby
 from math import pow
-from ModestMaps.Core import Coordinate
 from operator import attrgetter
-import unittest
+
+from ModestMaps.Core import Coordinate
 
 
 class TestSeedTiles(unittest.TestCase):
@@ -57,7 +58,7 @@ class TestCoordToBounds(unittest.TestCase):
             exp = exp_bounds[i]
             act = bounds[i]
             self.assertAlmostEqual(
-                exp, act, msg="Expected %r but got %r at index %d" %
+                exp, act, msg='Expected %r but got %r at index %d' %
                 (exp, act, i))
 
 
@@ -243,7 +244,7 @@ class TestMetatileZoom(unittest.TestCase):
     def test_zoom_from_str(self):
         from tilequeue.tile import metatile_zoom_from_str as func
         self.assertEqual(0, func(None))
-        self.assertEqual(0, func(""))
-        self.assertEqual(0, func("256"))
-        self.assertEqual(1, func("512"))
-        self.assertEqual(2, func("1024"))
+        self.assertEqual(0, func(''))
+        self.assertEqual(0, func('256'))
+        self.assertEqual(1, func('512'))
+        self.assertEqual(2, func('1024'))

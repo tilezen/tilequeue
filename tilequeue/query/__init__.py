@@ -1,10 +1,11 @@
+from tilequeue.process import Source
 from tilequeue.query.fixture import make_fixture_data_fetcher
 from tilequeue.query.pool import DBConnectionPool
 from tilequeue.query.postgres import make_db_data_fetcher
 from tilequeue.query.rawr import make_rawr_data_fetcher
 from tilequeue.query.split import make_split_data_fetcher
-from tilequeue.process import Source
 from tilequeue.store import make_s3_tile_key_generator
+from tilequeue.utils import AwsSessionHelper
 
 
 __all__ = [
@@ -15,14 +16,20 @@ __all__ = [
 ]
 
 
-def make_data_fetcher(cfg, layer_data, query_cfg, io_pool):
+def make_data_fetcher(cfg, layer_data, query_cfg, io_pool,
+                      s3_role_arn=None,
+                      s3_role_session_duration_s=None):
+    """ Make data fetcher from RAWR store and PostgreSQL database.
+        When s3_role_arn and s3_role_session_duration_s are available
+        the RAWR store will use the s3_role_arn to access the RAWR S3 bucket
+    """
     db_fetcher = make_db_data_fetcher(
         cfg.postgresql_conn_info, cfg.template_path, cfg.reload_templates,
         query_cfg, io_pool)
 
     if cfg.yml.get('use-rawr-tiles'):
         rawr_fetcher = _make_rawr_fetcher(
-            cfg, layer_data, query_cfg, io_pool)
+            cfg, layer_data, s3_role_arn, s3_role_session_duration_s)
 
         group_by_zoom = cfg.yml.get('rawr').get('group-zoom')
         assert group_by_zoom is not None, 'Missing group-zoom rawr config'
@@ -54,7 +61,14 @@ class _NullRawrStorage(object):
         return _tables
 
 
-def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
+def _make_rawr_fetcher(cfg, layer_data,
+                       s3_role_arn=None,
+                       s3_role_session_duration_s=None):
+    """
+        When s3_role_arn and s3_role_session_duration_s are available
+        the RAWR store will use the s3_role_arn to access the RAWR S3
+        bucket
+    """
     rawr_yaml = cfg.yml.get('rawr')
     assert rawr_yaml is not None, 'Missing rawr configuration in yaml'
 
@@ -107,7 +121,18 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
 
         import boto3
         from tilequeue.rawr import RawrS3Source
-        s3_client = boto3.client('s3', region_name=region)
+        if s3_role_arn:
+            # use provided role to access S3
+            assert s3_role_session_duration_s, \
+                's3_role_session_duration_s is either None or 0'
+            aws_helper = AwsSessionHelper('tilequeue_dataaccess',
+                                          s3_role_arn,
+                                          region,
+                                          s3_role_session_duration_s)
+            s3_client = aws_helper.get_client('s3')
+        else:
+            s3_client = boto3.client('s3', region_name=region)
+
         tile_key_gen = make_s3_tile_key_generator(rawr_source_s3_yaml)
         storage = RawrS3Source(
             s3_client, bucket, prefix, extension, table_sources, tile_key_gen,
@@ -129,8 +154,7 @@ def _make_rawr_fetcher(cfg, layer_data, query_cfg, io_pool):
         from tilequeue.rawr import RawrStoreSource
 
         store_cfg = rawr_source_yaml.get('store')
-        store = make_store(store_cfg,
-                           credentials=cfg.subtree('aws credentials'))
+        store = make_store(store_cfg)
         storage = RawrStoreSource(store, table_sources)
 
     else:
@@ -155,6 +179,9 @@ def _make_layer_info(layer_data, process_yaml_cfg):
     functions = _parse_yaml_functions(process_yaml_cfg)
 
     for layer_datum in layer_data:
+        # preprocessed layers are not from the database and not found in the rawr tile
+        if layer_datum.get('pre_processed_layer_path') is not None:
+            continue
         name = layer_datum['name']
         min_zoom_fn, props_fn = functions[name]
         shape_types = ShapeType.parse_set(layer_datum['geometry_types'])

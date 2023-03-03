@@ -1,10 +1,9 @@
-from tilequeue.tile import (
-    coord_marshall_int,
-    coord_unmarshall_int,
-    deserialize_coord,
-    serialize_coord,
-)
 import gzip
+
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import deserialize_coord
+from tilequeue.tile import serialize_coord
 
 
 def save_set_to_fp(the_set, fp):

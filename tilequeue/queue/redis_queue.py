@@ -1,6 +1,7 @@
+import time
+
 from tilequeue.queue import MessageHandle
 from tilequeue.utils import grouper
-import time
 
 
 class RedisQueue(object):

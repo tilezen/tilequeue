@@ -1,6 +1,11 @@
+import Queue
+import signal
+import sys
+import time
 from collections import namedtuple
 from itertools import izip
 from operator import attrgetter
+
 from tilequeue.log import LogCategory
 from tilequeue.log import LogLevel
 from tilequeue.log import MsgType
@@ -16,10 +21,6 @@ from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import convert_seconds_to_millis
 from tilequeue.utils import format_stacktrace_one_line
-import Queue
-import signal
-import sys
-import time
 
 
 # long enough to not fight with other threads, but not long enough
@@ -132,7 +133,7 @@ def _ack_coord_handle(
             tile_queue.job_progress(queue_handle.handle)
         except Exception as e:
             stacktrace = format_stacktrace_one_line()
-            err_details = {"queue_handle": queue_handle.handle}
+            err_details = {'queue_handle': queue_handle.handle}
             if isinstance(e, JobProgressException):
                 err_details = e.err_details
             tile_proc_logger.error_job_progress(
@@ -260,7 +261,7 @@ class TileQueueReader(object):
                 # the _reject_coord method will have marked the job as done.
                 if all_coords_data:
                     coord_input_spec = all_coords_data, parent_tile
-                    msg = "group of %d tiles below %s" \
+                    msg = 'group of %d tiles below %s' \
                           % (len(all_coords_data),
                              serialize_coord(parent_tile))
                     if self.output(msg, coord_input_spec):
@@ -296,8 +297,8 @@ class TileQueueReader(object):
         parent = reduce(common_parent, coords)
         if self.group_by_zoom is not None:
             if parent.zoom < self.group_by_zoom:
-                assert len(coords) == 1, "Expect either a single tile or a " \
-                    "pyramid at or below group zoom."
+                assert len(coords) == 1, 'Expect either a single tile or a ' \
+                    'pyramid at or below group zoom.'
             else:
                 parent = parent.zoomTo(self.group_by_zoom).container()
         return parent

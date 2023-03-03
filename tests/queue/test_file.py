@@ -1,10 +1,10 @@
 '''
 Unit tests for `tilequeue.queue.file`.
 '''
+import StringIO
+import unittest
 
 from ModestMaps.Core import Coordinate
-import unittest
-import StringIO
 
 
 class TestQueue(unittest.TestCase):
