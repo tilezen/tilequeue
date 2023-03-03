@@ -2159,7 +2159,7 @@ def tilequeue_meta_tile(cfg, args):
         'Unexpected zoom: %s, zoom should be between %d and %d' % \
         (coord_str, queue_zoom, group_by_zoom)
 
-    # NOTE: max_zoom looks to be inclusive
+    # NOTE: max_zoom looks to be inclusive but zoom_stop is exclusive so pay attention the confusing names here
     zoom_stop = cfg.max_zoom
     assert zoom_stop > group_by_zoom
     formats = lookup_formats(cfg.output_formats)

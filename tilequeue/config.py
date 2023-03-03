@@ -2,6 +2,7 @@ import os
 
 from yaml import load
 
+from tilequeue.constants import MAX_TILE_ZOOM
 from tilequeue.tile import bounds_buffer
 from tilequeue.tile import metatile_zoom_from_size
 
@@ -337,7 +338,7 @@ def default_yml_config():
                 'expired-location': None,
                 'parent-zoom-until': None,
             },
-            'max-zoom-with-changes': 16,
+            'max-zoom-with-changes': MAX_TILE_ZOOM,
         },
         'toi-store': {
             'type': None,

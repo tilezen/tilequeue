@@ -17,6 +17,7 @@ from zope.dottedname.resolve import resolve
 
 from tilequeue import utils
 from tilequeue.config import create_query_bounds_pad_fn
+from tilequeue.constants import MAX_TILE_ZOOM
 from tilequeue.log import make_coord_dict
 from tilequeue.tile import calc_meters_per_pixel_dim
 from tilequeue.tile import coord_to_mercator_bounds
@@ -389,8 +390,7 @@ def process_coord_no_format(
             assert min_zoom is not None, \
                 'Missing min_zoom in layer %s' % layer_name
 
-            # TODO would be better if 16 wasn't hard coded here
-            if nominal_zoom < 16 and min_zoom >= nominal_zoom + 1:
+            if nominal_zoom < MAX_TILE_ZOOM and min_zoom >= nominal_zoom + 1:
                 continue
 
             for k, v in output_props.items():

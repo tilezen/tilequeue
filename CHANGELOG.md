@@ -9,6 +9,7 @@ v2.5.0
 * Add trimming of overzoom features from tiles where they're not needed (related to "max zoom" and overzooming, especially to drop address points in buildings layer and some kinds in the pois layer). [PR #402](https://github.com/tilezen/tilequeue/pull/402)
 * Add support for preprocessed inline geojson layers, paired with [vector-datasource/2095](https://github.com/tilezen/vector-datasource/pull/2095). [PR #414](https://github.com/tilezen/tilequeue/pull/414)
 * Set the MVT resolution (extent) to 4096 pixels instead of 8192 in most circumstances to save file size. [PR #404](https://github.com/tilezen/tilequeue/pull/404)
+* Move default "max zoom" of 16 to a constants module. [PR #389](https://github.com/tilezen/tilequeue/pull/389)
 * Clarify with inline docs that "meters per pixel" assumes a 256-pixel nominal extent. [PR #408](https://github.com/tilezen/tilequeue/pull/408)
 * Add linters for YAML, JSON, and Python to the repo. [PR #403](https://github.com/tilezen/tilequeue/pull/403)
 * Update requirements.txt to pin boto3 and botocore to make it easier to assume an S3 role. [PR #416](https://github.com/tilezen/tilequeue/pull/416)
@@ -23,7 +24,6 @@ v2.4.1-final
 * Add string representation for config and config override. [PR #390](https://github.com/tilezen/tilequeue/pull/390)
 * Add comma as character to put in quotes to smooth import of Who's On First neighbourhoods. [PR #400](https://github.com/tilezen/tilequeue/pull/400)
 * Add more logging for performance tuning. [PR #390](https://github.com/tilezen/tilequeue/pull/392) and others.
-
 
 v2.4.0
 ------
