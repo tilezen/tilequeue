@@ -25,8 +25,6 @@ v2.4.1-final
 * Add comma as character to put in quotes to smooth import of Who's On First neighbourhoods. [PR #400](https://github.com/tilezen/tilequeue/pull/400)
 * Add more logging for performance tuning. [PR #390](https://github.com/tilezen/tilequeue/pull/392) and others.
 
->>>>>>> master
-
 v2.4.0
 ------
 
