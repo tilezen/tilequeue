@@ -268,6 +268,8 @@ def lookup_source(source):
         result = Source('wof', source)
     elif source == 'tilezen.org':
         result = Source('shp', source)
+    elif source == 'viewfinderpanoramas.org':
+        result = Source('vfp', source)
 
     return result
 
@@ -676,6 +678,7 @@ def convert_source_data_to_feature_layers(rows, layer_data, unpadded_bounds, zoo
             transit=row.pop('__transit_properties__', None),
             water=row.pop('__water_properties__', None),
             admin_areas=row.pop('__admin_areas_properties__', None),
+            contours=row.pop('__contours_properties__', None),
         )
 
         # TODO at first pass, simulate the structure that we're
