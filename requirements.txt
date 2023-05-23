@@ -20,7 +20,7 @@ python-dateutil==2.6.1
 PyYAML==4.2b4
 git+https://github.com/tilezen/raw_tiles@master#egg=raw_tiles
 redis==2.10.6
-requests==2.25.1
+requests==2.31.0
 Shapely==1.6.2.post1
 six==1.11.0
 statsd==3.2.1
