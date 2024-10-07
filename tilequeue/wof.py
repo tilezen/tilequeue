@@ -1,26 +1,29 @@
 from __future__ import absolute_import
+
+import csv
+import json
+import os.path
+import Queue
+import threading
 from collections import namedtuple
 from contextlib import closing
 from cStringIO import StringIO
 from datetime import datetime
-from edtf import parse_edtf
 from operator import attrgetter
-from psycopg2.extras import register_hstore
-from shapely import geos
-from tilequeue.tile import coord_marshall_int
-from tilequeue.tile import coord_unmarshall_int
-from tilequeue.tile import mercator_point_to_coord
-from tilequeue.tile import reproject_lnglat_to_mercator
-import csv
-import json
-import os.path
+
 import psycopg2
-import Queue
 import requests
 import shapely.geometry
 import shapely.ops
 import shapely.wkb
-import threading
+from edtf import parse_edtf
+from psycopg2.extras import register_hstore
+from shapely import geos
+
+from tilequeue.tile import coord_marshall_int
+from tilequeue.tile import coord_unmarshall_int
+from tilequeue.tile import mercator_point_to_coord
+from tilequeue.tile import reproject_lnglat_to_mercator
 
 
 DATABASE_SRID = 3857
@@ -600,22 +603,24 @@ def create_neighbourhood_file_object(neighbourhoods, curdate=None):
     return buf
 
 
+def escape_string(s):
+    return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
+
+
+def escape_hstore_string(s):
+    s = escape_string(s)
+    if ' ' in s or ',' in s:
+        s = s.replace('"', '\\\\"')
+        s = '"%s"' % s
+    return s
+
+
 def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
     if curdate is None:
         curdate = datetime.now().date()
 
     # tell shapely to include the srid when generating WKBs
     geos.WKBWriter.defaults['include_srid'] = True
-
-    def escape_string(s):
-        return s.encode('utf-8').replace('\t', ' ').replace('\n', ' ')
-
-    def escape_hstore_string(s):
-        s = escape_string(s)
-        if ' ' in s:
-            s = s.replace('"', '\\\\"')
-            s = '"%s"' % s
-        return s
 
     def write_nullable_int(buf, x):
         if x is None:
@@ -660,7 +665,7 @@ def write_neighbourhood_data_to_file(buf, neighbourhoods, curdate=None):
             for k, v in n.l10n_names.items():
                 k = escape_hstore_string(k)
                 v = escape_hstore_string(v)
-                hstore_items.append("%s=>%s" % (k, v))
+                hstore_items.append('%s=>%s' % (k, v))
             hstore_items_str = ','.join(hstore_items)
             buf.write('%s' % hstore_items_str)
         else:

@@ -1,7 +1,6 @@
-'''
+"""
 Tests for `tilequeue.store`.
-'''
-
+"""
 import unittest
 
 
@@ -171,7 +170,7 @@ class _LoggingStore(object):
 
     def read_tile(self, coord, format):
         self.log(self.name, 'read_tile', coord, format)
-        return ""
+        return ''
 
     def delete_tiles(self, coords, format):
         self.log(self.name, 'delete_tiles', coords, format)
@@ -192,18 +191,18 @@ class MultiStoreTest(unittest.TestCase):
         coord = Coordinate(zoom=0, column=0, row=0)
 
         log = _LogicalLog()
-        s0 = _LoggingStore("s0", log)
-        s1 = _LoggingStore("s1", log)
+        s0 = _LoggingStore('s0', log)
+        s1 = _LoggingStore('s1', log)
         m = MultiStore([s0, s1])
 
-        m.write_tile("foo", coord, json_format)
+        m.write_tile('foo', coord, json_format)
 
         # multi store should write to both stores.
         self.assertEqual(
             log.items,
             [
-                (0, "s0", "write_tile", "foo", coord, json_format),
-                (1, "s1", "write_tile", "foo", coord, json_format),
+                (0, 's0', 'write_tile', 'foo', coord, json_format),
+                (1, 's1', 'write_tile', 'foo', coord, json_format),
             ])
 
     def test_multi_read(self):
@@ -214,8 +213,8 @@ class MultiStoreTest(unittest.TestCase):
         coord = Coordinate(zoom=0, column=0, row=0)
 
         log = _LogicalLog()
-        s0 = _LoggingStore("s0", log)
-        s1 = _LoggingStore("s1", log)
+        s0 = _LoggingStore('s0', log)
+        s1 = _LoggingStore('s1', log)
         m = MultiStore([s0, s1])
 
         m.read_tile(coord, json_format)
@@ -224,7 +223,7 @@ class MultiStoreTest(unittest.TestCase):
         self.assertEqual(
             log.items,
             [
-                (0, "s1", "read_tile", coord, json_format),
+                (0, 's1', 'read_tile', coord, json_format),
             ])
 
     def test_multi_cfg_list(self):

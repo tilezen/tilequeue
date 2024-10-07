@@ -1,9 +1,9 @@
-import boto
 from cStringIO import StringIO
-from tilequeue.toi import (
-    load_set_from_gzipped_fp,
-    save_set_to_gzipped_fp,
-)
+
+import boto
+
+from tilequeue.toi import load_set_from_gzipped_fp
+from tilequeue.toi import save_set_to_gzipped_fp
 
 
 class S3TilesOfInterestSet(object):
